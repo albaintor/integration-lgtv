@@ -1,35 +1,41 @@
-# Sony AVR integration for Remote Two
+# LG TV integration for Remote Two
 
-Using [python-songpal](https://github.com/rytilahti/python-songpal)
+Using [AioWebOSTV](https://github.com/home-assistant-libs/aiowebostv)
 and [uc-integration-api](https://github.com/aitatoi/integration-python-library)
 
-The driver discovers Sony AVRs on the network. A media player entity is exposed to the core.
+The driver discovers LG TVs on the network. A media player entity is exposed to the core.
 
 Supported attributes:
-
 - State (on, off, playing, paused, unknown)
 - Title
-- Album
-- Artist
 - Artwork
 - Source
 
-Supported commands:
 
+Supported commands:
 - Turn on
 - Turn off
+- Direction pad and enter
+- Back
 - Next
 - Previous
 - Volume up
 - Volume down
-- Pause (unfortunately resume to play is not supported by the library...)
-- Source select
+- Pause / Play
+- Input select
+- Channels Up/Down
+- Menus (home, context, settings)
+- Colored buttons
+- Digit numbers
+- Subtitle/audio language switching
 
 ## Usage
 
 ### Setup
 
 - Requires Python 3.11
+- Under a virtual environment : the driver has to be run in host mode and not bridge mode, otherwise the turn on function won't work (a magic packet has to be sent through network and it won't reach it under bridge mode)
+- Enable always on on your LG TV to be able to power on lan
 - Install required libraries:  
   (using a [virtual environment](https://docs.python.org/3/library/venv.html) is highly recommended)
 
