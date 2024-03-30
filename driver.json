@@ -1,0 +1,48 @@
+{
+  "driver_id": "uc_lgtv_driver",
+  "version": "0.0.1",
+  "min_core_api": "0.20.0",
+  "name": {
+    "en": "LG TV"
+  },
+  "icon": "uc:integration",
+  "description": {
+    "en": "Control your LG TVs with Remote Two.",
+    "de": "Steuere LG TVs mit Remote Two.",
+    "fr": "Contrôler LG TVs avec Remote Two."
+  },
+  "port": 8092,
+  "developer": {
+    "name": "Unfolded Circle ApS",
+    "email": "hello@unfoldedcircle.com",
+    "url": "https://www.unfoldedcircle.com"
+  },
+  "home_page": "https://www.unfoldedcircle.com",
+  "setup_data_schema": {
+    "title": {
+      "en": "Integration setup",
+      "de": "Integrationssetup",
+      "fr": "Configuration de l'intégration"
+    },
+    "settings": [
+      {
+        "id": "info",
+        "label": {
+          "en": "Setup process",
+          "de": "Setup Fortschritt",
+          "fr": "Progrès de la configuration"
+        },
+        "field": {
+          "label": {
+            "value": {
+              "en": "The integration will discover your LG TVs on your network.",
+              "de": "Diese Integration wird LG TVs im Netzwerk finden.",
+              "fr": "Cette intégration trouvera des TV LG Sony dans le réseau."
+            }
+          }
+        }
+      }
+    ]
+  },
+  "release_date": "2024-04-01"
+}
