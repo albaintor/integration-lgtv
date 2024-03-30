@@ -6,6 +6,7 @@ Setup flow for LG TV integration.
 """
 
 import asyncio
+import json
 import logging
 from enum import IntEnum
 

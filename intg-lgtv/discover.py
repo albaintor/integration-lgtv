@@ -9,6 +9,8 @@ import asyncio
 import logging
 import re
 import socket
+import sys
+
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
@@ -64,6 +66,18 @@ def ssdp_request(ssdp_st: str, ssdp_mx: float = SSDP_MX) -> bytes:
         ]
     ).encode("utf-8")
 
+def get_best_family(*address):
+    """Backport of private `http.server._get_best_family`."""
+    family = socket.AF_INET if sys.platform == "win32" else 0
+
+    infos = socket.getaddrinfo(
+        *address,
+        family=family,
+        type=socket.SOCK_STREAM,
+        flags=socket.AI_PASSIVE,
+    )
+    family, type, proto, canonname, sockaddr = next(iter(infos))
+    return family, sockaddr
 
 def get_local_ips() -> List[str]:
     """Get IPs of local network adapters."""
@@ -91,9 +105,12 @@ async def async_identify_lg_devices() -> List[Dict]:
         except httpx.HTTPError:
             continue
         else:
-            device = evaluate_scpd_xml(url, res.text)
-            if device is not None:
-                devices.append(device)
+            try:
+                device = evaluate_scpd_xml(url, res.text)
+                if device is not None:
+                    devices.append(device)
+            except Exception as ex:
+                _LOGGER.error("Error while discovering %s", ex)
 
     return devices
 
@@ -105,14 +122,14 @@ async def async_send_ssdp_broadcast() -> Set[str]:
     Returns a set of SCPD XML resource urls for all discovered devices.
     """
     # Send up to three different broadcast messages
-    ips = get_local_ips()
+    # ips = get_local_ips()
     # Prepare output of responding devices
     urls = set()
 
     tasks = []
-    for ip_addr in ips:
-        tasks.append(async_send_ssdp_broadcast_ip(ip_addr))
-
+    # for ip_addr in ips:
+    #     tasks.append(async_send_ssdp_broadcast_ip(ip_addr))
+    tasks.append(async_send_ssdp_broadcast_ip(""))
     results = await asyncio.gather(*tasks)
 
     for result in results:
@@ -133,7 +150,7 @@ async def async_send_ssdp_broadcast_ip(ip_addr: str) -> Set[str]:
 
         # Prepare socket
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-        sock.bind((ip_addr, 0))
+        # sock.bind((ip_addr, 0))
 
         # Get asyncio loop
         loop = asyncio.get_event_loop()
