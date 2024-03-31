@@ -272,14 +272,15 @@ class LGDevice:
                 await self._update_system()
             await self.async_activate_websocket()
             self._attr_available = True
-            if self._tv.is_on:
-                self.events.emit(Events.CONNECTED, self.id)
         except WEBOSTV_EXCEPTIONS as ex:
+
             self._attr_available = False
             if not self._connect_task:
                 _LOG.warning("Unable to update, LG TV probably off: %s, running connect task", ex)
                 self._connect_task = asyncio.create_task(self._connect_loop())
         finally:
+            # Always emit connected event even if the device is unreachable (off)
+            self.events.emit(Events.CONNECTED, self.id)
             self._connecting = False
 
     async def reconnect(self):

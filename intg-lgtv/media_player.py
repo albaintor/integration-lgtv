@@ -27,7 +27,7 @@ class LGTVMediaPlayer(MediaPlayer):
         entity_id = create_entity_id(config_device.id, EntityTypes.MEDIA_PLAYER)
         features = LG_FEATURES
         attributes = {
-            Attributes.STATE: States.UNAVAILABLE,
+            Attributes.STATE: States.OFF,
             Attributes.VOLUME: 0,
             Attributes.MUTED: False,
             Attributes.SOURCE: "",
