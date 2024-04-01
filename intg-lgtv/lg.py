@@ -105,7 +105,6 @@ class LGDevice:
             self._update_states()
             if not client.power_state:
                 self._attr_state = States.OFF
-                self.events.emit(Events.DISCONNECTED, self.id)
 
             # _LOG.debug("State changed:")
             # _LOG.debug(f"System info: {client.system_info}")
@@ -304,7 +303,6 @@ class LGDevice:
             await self._tv.disconnect()
             if self._connect_task:
                 self._connect_task.cancel()
-            self.events.emit(Events.DISCONNECTED, self.id)
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("Unable to update: %s", ex)
             self._attr_available = False
@@ -326,7 +324,7 @@ class LGDevice:
         """Set device availability and emit CONNECTED / DISCONNECTED event on change."""
         if self._attr_available != value:
             self._attr_available = value
-            self.events.emit(Events.CONNECTED if value else Events.DISCONNECTED, self.id)
+            # self.events.emit(Events.CONNECTED if value else Events.DISCONNECTED, self.id)
 
     @property
     def host(self) -> str:
