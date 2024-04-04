@@ -102,7 +102,7 @@ class LGDevice:
 
         async def _on_state_changed(client):
             """State changed callback."""
-            self._update_states()
+            await self._update_states()
             if not client.power_state:
                 self._attr_state = States.OFF
 
@@ -161,14 +161,33 @@ class LGDevice:
             self._active_source = active_source
             updated_data[MediaAttr.SOURCE] = self._active_source
 
+    def is_on(self):
+        """Return true if TV is powered on."""
+        state = self._power_state.get("state")
+        if state == "Unknown":
+            # fallback to current app id for some older webos versions
+            # which don't support explicit power state
+            if self._current_app_id in [None, ""]:
+                return False
+            return True
+        if state in [None, "Power Off", "Suspend", "Active Standby"]:
+            return False
+        return True
 
-    def _update_states(self) -> None:
+    async def _update_states(self) -> None:
         """Update entity state attributes."""
         updated_data = {}
         self._update_sources(updated_data)
 
+        # Bug on LG library where power_state not updated, force it
+        try:
+            self._tv._power_state = await self._tv.get_power_state()
+            is_on = self._tv.is_on
+        except Exception:
+            is_on = False
+
         state = (
-            States.ON if self._tv.is_on else States.OFF
+            States.ON if is_on else States.OFF
         )
         if state != self.state:
             self._attr_state = state
@@ -266,7 +285,7 @@ class LGDevice:
                 host=self._device_config.address,
                 client_key=self._device_config.key)
             await self._tv.connect()
-            self._update_states()
+            await self._update_states()
             if not self._mac_address:
                 await self._update_system()
             await self.async_activate_websocket()
