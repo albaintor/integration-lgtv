@@ -11,7 +11,7 @@ from typing import Any
 import lg
 from config import LGConfigDevice, create_entity_id
 from ucapi import EntityTypes, MediaPlayer, StatusCodes
-from ucapi.media_player import Attributes, Commands, DeviceClasses, Features, States, MediaType
+from ucapi.media_player import Attributes, Commands, DeviceClasses, Features, States, MediaType, Options
 from const import LG_FEATURES
 
 _LOG = logging.getLogger(__name__)
@@ -36,18 +36,47 @@ class LGTVMediaPlayer(MediaPlayer):
             Attributes.MEDIA_TITLE: device.media_title if device.media_title else "",
             Attributes.MEDIA_TYPE: device.media_type
         }
+
         # # use sound mode support & name from configuration: receiver might not yet be connected
         # if device.support_sound_mode:
         #     features.append(Features.SELECT_SOUND_MODE)
         #     attributes[Attributes.SOUND_MODE] = ""
         #     attributes[Attributes.SOUND_MODE_LIST] = []
-
+        options = {
+            Options.SIMPLE_COMMANDS: [
+                "ASTERISK",
+                "3D_MODE",
+                "AD",  # Audio Description toggle
+                "AMAZON",
+                "ASPECT_RATIO",  # Quick Settings Menu - Aspect Ratio
+                "CC",  # Closed Captions
+                "DASH",  # Live TV
+                "EXIT",
+                "GUIDE",
+                "INPUT_HUB",  # Home Dashboard
+                "LIST",  # Live TV
+                "LIVE_ZOOM",  # Live Zoom
+                "MAGNIFIER_ZOOM",  # Focus Zoom
+                "MYAPPS",  # Home Dashboard
+                "NETFLIX",
+                "PAUSE"
+                "PLAY",
+                "POWER",  # Power button
+                "PROGRAM",  # TV Guide
+                "RECENT",  # Home Dashboard - Recent Apps
+                "SAP",  # Multi Audio Setting
+                "SCREEN_REMOTE",  # Screen Remote
+                "TELETEXT",
+                "TEXTOPTION"
+            ]
+        }
         super().__init__(
             entity_id,
             config_device.name,
             features,
             attributes,
             device_class=DeviceClasses.RECEIVER,
+            options=options
         )
 
     async def command(self, cmd_id: str, params: dict[str, Any] | None = None) -> StatusCodes:
@@ -158,9 +187,14 @@ class LGTVMediaPlayer(MediaPlayer):
             res = await self._device.button("DASH")
         elif cmd_id == Commands.MY_RECORDINGS:
             res = await self._device.button("LIST")
+        elif cmd_id == Commands.FAST_FORWARD:
+            res = await self._device.button("FASTFORWARD")
+        elif cmd_id == Commands.REWIND:
+            res = await self._device.button("REWIND")
+        elif cmd_id in self.options[Options.SIMPLE_COMMANDS]:
+            res = await self._device.button(cmd_id)
         else:
             return StatusCodes.NOT_IMPLEMENTED
-
         return res
 
     def filter_changed_attributes(self, update: dict[str, Any]) -> dict[str, Any]:
