@@ -135,12 +135,16 @@ class LGDevice:
             if app["id"] == self._tv.current_app_id:
                 active_source = app["title"]
                 self._sources[app["title"]] = app
+            else:
+                self._sources[app["title"]] = app
 
         for source in self._tv.inputs.values():
             if source["appId"] == LIVE_TV_APP_ID:
                 found_live_tv = True
             if source["appId"] == self._tv.current_app_id:
                 active_source = source["label"]
+                self._sources[source["label"]] = source
+            else:
                 self._sources[source["label"]] = source
 
         # empty list, TV may be off, keep previous list
@@ -153,30 +157,31 @@ class LGDevice:
             if self._tv.current_app_id == LIVE_TV_APP_ID:
                 active_source = app["title"]
                 self._sources["Live TV"] = app
+            else:
+                self._sources["Live TV"] = app
 
-        if not current_source_list or (self._sources and list(self._sources.keys()).sort() != list(current_source_list).sort()):
-            updated_data[MediaAttr.SOURCE_LIST] = sorted(current_source_list)
+        if not current_source_list and self._sources:#or (self._sources and list(self._sources.keys()).sort() != list(current_source_list).sort()):
+            _LOG.debug("Source list %s", self._sources)
+            updated_data[MediaAttr.SOURCE_LIST] = sorted(self._sources)
 
         if active_source != self._active_source:
+            _LOG.debug("Active source %s", active_source)
             self._active_source = active_source
             updated_data[MediaAttr.SOURCE] = self._active_source
-
-    def is_on(self):
-        """Return true if TV is powered on."""
-        state = self._power_state.get("state")
-        if state == "Unknown":
-            # fallback to current app id for some older webos versions
-            # which don't support explicit power state
-            if self._current_app_id in [None, ""]:
-                return False
-            return True
-        if state in [None, "Power Off", "Suspend", "Active Standby"]:
-            return False
-        return True
 
     async def _update_states(self) -> None:
         """Update entity state attributes."""
         updated_data = {}
+        if not self._sources:
+            try:
+                sources = await self._tv.get_inputs()
+                _LOG.info("Empty sources, retrieve them %s", sources)
+                await self._tv.set_inputs_state(sources)
+                await self._tv.set_apps_state(await self._tv.get_apps())
+                await self._tv.set_current_app_state(await self._tv.get_current_app())
+            except Exception:
+                pass
+
         self._update_sources(updated_data)
 
         # Bug on LG library where power_state not updated, force it
@@ -185,6 +190,8 @@ class LGDevice:
             is_on = self._tv.is_on
         except Exception:
             is_on = False
+
+
 
         state = (
             States.ON if is_on else States.OFF
@@ -356,6 +363,10 @@ class LGDevice:
         return self._attr_state
 
     @property
+    def supported_features(self) -> list[Features]:
+        return self._supported_features
+
+    @property
     def source_list(self) -> list[str]:
         """Return a list of available input sources."""
         return sorted(self._sources)
@@ -384,6 +395,10 @@ class LGDevice:
     def media_title(self) -> str:
         """Title of current playing media."""
         return self._media_title
+
+    @property
+    def media_type(self) -> MediaType:
+        return self._media_type
 
     async def power_on(self) -> ucapi.StatusCodes:
         """Send power-on command to LG TV"""
@@ -528,13 +543,15 @@ class LGDevice:
         _LOG.debug("LG TV set input: %s", source)
         # switch to work.
         try:
-            await self.power_on()
-            for out in self._sources.values():
-                if out.title == source:
-                    await out.activate()
-                    return ucapi.StatusCodes.OK
-            _LOG.error("LG TV unable to find output: %s", source)
-            return ucapi.StatusCodes.BAD_REQUEST
+            if (source_dict := self._sources.get(source)) is None:
+                _LOG.warning(
+                    "Source %s not found for %s", source, self._sources)
+                return ucapi.StatusCodes.BAD_REQUEST
+            if source_dict.get("title"):
+                await self._tv.launch_app(source_dict["id"])
+            elif source_dict.get("label"):
+                await self._tv.set_input(source_dict["id"])
+            return ucapi.StatusCodes.OK
         except WebOsTvCommandError:
             await self.reconnect()
         except WEBOSTV_EXCEPTIONS as ex:

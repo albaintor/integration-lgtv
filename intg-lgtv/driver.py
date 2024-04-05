@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-This module implements a Remote Two integration driver for Sony AVR receivers.
+This module implements a Remote Two integration driver for LG TV receivers.
 
 :copyright: (c) 2023 by Unfolded Circle ApS.
 :license: Mozilla Public License Version 2.0, see LICENSE for more details.
@@ -30,23 +30,6 @@ api = ucapi.IntegrationAPI(_LOOP)
 _configured_lgtvs: dict[str, lg.LGDevice] = {}
 _R2_IN_STANDBY = False
 
-
-# async def receiver_status_poller(interval: float = 10.0) -> None:
-#     """Receiver data poller."""
-#     while True:
-#         await asyncio.sleep(interval)
-#         if _R2_IN_STANDBY:
-#             continue
-#         try:
-#             for receiver in _configured_avrs.values():
-#                 if not receiver.active:
-#                     continue
-#                 # TODO #20  run in parallel, join, adjust interval duration based on execution time for next update
-#                 await receiver.async_update_receiver_data()
-#         except (KeyError, ValueError):  # TODO check parallel access / modification while iterating a dict
-#             pass
-
-
 @api.listens_to(ucapi.Events.CONNECT)
 async def on_r2_connect_cmd() -> None:
     """Connect all configured TVs when the Remote Two sends the connect command."""
@@ -75,7 +58,7 @@ async def on_r2_enter_standby() -> None:
     """
     Enter standby notification from Remote Two.
 
-    Disconnect every Sony AVR instances.
+    Disconnect every LG TV instances.
     """
     global _R2_IN_STANDBY
 
@@ -90,7 +73,7 @@ async def on_r2_exit_standby() -> None:
     """
     Exit standby notification from Remote Two.
 
-    Connect all Sony AVR instances.
+    Connect all LG TV instances.
     """
     global _R2_IN_STANDBY
 
@@ -128,8 +111,9 @@ async def on_subscribe_entities(entity_ids: list[str]) -> None:
         device = config.devices.get(device_id)
         if device:
             _configure_new_device(device, connect=True)
+            _LOOP.create_task(device.connect())
         else:
-            _LOG.error("Failed to subscribe entity %s: no AVR configuration found", entity_id)
+            _LOG.error("Failed to subscribe entity %s: no LG TV configuration found", entity_id)
 
 
 @api.listens_to(ucapi.Events.UNSUBSCRIBE_ENTITIES)
@@ -143,7 +127,7 @@ async def on_unsubscribe_entities(entity_ids: list[str]) -> None:
         if device_id in _configured_lgtvs:
             # TODO #21 this doesn't work once we have more than one entity per device!
             # --- START HACK ---
-            # Since an AVR instance only provides exactly one media-player, it's save to disconnect if the entity is
+            # Since a device instance only provides exactly one media-player, it's save to disconnect if the entity is
             # unsubscribed. This should be changed to a more generic logic, also as template for other integrations!
             # Otherwise this sets a bad copy-paste example and leads to more issues in the future.
             # --> correct logic: check configured_entities, if empty: disconnect
@@ -197,7 +181,7 @@ async def on_device_disconnected(device_id: str):
 
 
 async def on_device_connection_error(device_id: str, message):
-    """Set entities of LG TV to state UNAVAILABLE if AVR connection error occurred."""
+    """Set entities of LG TV to state UNAVAILABLE if device connection error occurred."""
     _LOG.error(message)
 
     for entity_id in _entities_from_device_id(device_id):
@@ -219,14 +203,14 @@ async def handle_device_address_change(device_id: str, address: str) -> None:
     # TODO discover
     device = config.devices.get(device_id)
     if device and device.address != address:
-        _LOG.info("Updating IP address of configured AVR %s: %s -> %s", device_id, device.address, address)
+        _LOG.info("Updating IP address of configured LG TV %s: %s -> %s", device_id, device.address, address)
         device.address = address
         config.devices.update(device)
 
 
 async def on_device_update(device_id: str, update: dict[str, Any] | None) -> None:
     """
-    Update attributes of configured media-player entity if AVR properties changed.
+    Update attributes of configured media-player entity if device properties changed.
 
     :param device_id: device identifier
     :param update: dictionary containing the updated properties or None if
@@ -250,7 +234,9 @@ async def on_device_update(device_id: str, update: dict[str, Any] | None) -> Non
     attributes = None
 
     # TODO awkward logic: this needs better support from the integration library
+    _LOG.info("Update device %s for configured devices %s", device_id, api.configured_entities)
     for entity_id in _entities_from_device_id(device_id):
+
         configured_entity = api.configured_entities.get(entity_id)
         if configured_entity is None:
             return
@@ -267,7 +253,7 @@ def _entities_from_device_id(device_id: str) -> list[str]:
     """
     Return all associated entity identifiers of the given device.
 
-    :param device_id: the AVR identifier
+    :param device_id: the device identifier
     :return: list of entity identifiers
     """
     # dead simple for now: one media_player entity per device!
@@ -277,7 +263,7 @@ def _entities_from_device_id(device_id: str) -> list[str]:
 
 def _configure_new_device(device_config: config.LGConfigDevice, connect: bool = True) -> None:
     """
-    Create and configure a new AVR device.
+    Create and configure a new device.
 
     Supported entities of the device are created and registered in the integration library as available entities.
 
@@ -296,9 +282,11 @@ def _configure_new_device(device_config: config.LGConfigDevice, connect: bool = 
         device.events.on(lg.Events.ERROR, on_device_connection_error)
         device.events.on(lg.Events.UPDATE, on_device_update)
         # TODO event change address
-        # receiver.events.on(avr.Events.IP_ADDRESS_CHANGED, handle_avr_address_change)
+        # receiver.events.on(lg.Events.IP_ADDRESS_CHANGED, handle_lg_address_change)
         # receiver.connect()
         _configured_lgtvs[device.id] = device
+
+    _register_available_entities(device_config, device)
 
     if connect:
         # start background connection task
@@ -307,7 +295,7 @@ def _configure_new_device(device_config: config.LGConfigDevice, connect: bool = 
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.debug("Could not connect to device, probably because it is starting with magic packet %s", ex)
 
-    _register_available_entities(device_config, device)
+
 
 
 def _register_available_entities(device_config: config.LGConfigDevice, device: lg.LGDevice) -> None:
@@ -316,7 +304,7 @@ def _register_available_entities(device_config: config.LGConfigDevice, device: l
 
     :param device_config: Receiver
     """
-    # plain and simple for now: only one media_player per AVR device
+    # plain and simple for now: only one media_player per device
     # entity = media_player.create_entity(device)
     entity = media_player.LGTVMediaPlayer(device_config, device)
 
@@ -334,7 +322,7 @@ def on_device_added(device: config.LGConfigDevice) -> None:
 def on_device_removed(device: config.LGConfigDevice | None) -> None:
     """Handle a removed device in the configuration."""
     if device is None:
-        _LOG.debug("Configuration cleared, disconnecting & removing all configured AVR instances")
+        _LOG.debug("Configuration cleared, disconnecting & removing all configured LG TV instances")
         for configured in _configured_lgtvs.values():
             _LOOP.create_task(_async_remove(configured))
         _configured_lgtvs.clear()
@@ -342,7 +330,7 @@ def on_device_removed(device: config.LGConfigDevice | None) -> None:
         api.available_entities.clear()
     else:
         if device.id in _configured_lgtvs:
-            _LOG.debug("Disconnecting from removed AVR %s", device.id)
+            _LOG.debug("Disconnecting from removed LG TV %s", device.id)
             configured = _configured_lgtvs.pop(device.id)
             _LOOP.create_task(_async_remove(configured))
             for entity_id in _entities_from_device_id(configured.id):
@@ -376,10 +364,11 @@ async def main():
     for device in _configured_lgtvs.values():
         if not device.available:
             continue
-        try:
-            await _LOOP.create_task(device.connect())
-        except WEBOSTV_EXCEPTIONS as ex:
-            _LOG.debug("Could not connect to device, probably because it is starting with magic packet %s", ex)
+
+        # try:
+        #     await _LOOP.create_task(device.connect())
+        # except WEBOSTV_EXCEPTIONS as ex:
+        #     _LOG.debug("Could not connect to device, probably because it is starting with magic packet %s", ex)
 
     await api.init("driver.json", setup_flow.driver_setup_handler)
 

@@ -23,18 +23,18 @@ class LGTVMediaPlayer(MediaPlayer):
     def __init__(self, config_device: LGConfigDevice, device: lg.LGDevice):
         """Initialize the class."""
         self._device: lg.LGDevice = device
-
+        _LOG.debug("LGTVMediaPlayer init")
         entity_id = create_entity_id(config_device.id, EntityTypes.MEDIA_PLAYER)
-        features = LG_FEATURES
+        features = device.supported_features
         attributes = {
-            Attributes.STATE: States.OFF,
-            Attributes.VOLUME: 0,
-            Attributes.MUTED: False,
-            Attributes.SOURCE: "",
-            Attributes.SOURCE_LIST: [],
-            Attributes.MEDIA_IMAGE_URL: "",
-            Attributes.MEDIA_TITLE: "",
-            Attributes.MEDIA_TYPE: MediaType.VIDEO
+            Attributes.STATE: lg.LG_STATE_MAPPING.get(device.state),
+            Attributes.VOLUME: device.volume_level,
+            Attributes.MUTED: device.is_volume_muted,
+            Attributes.SOURCE: device.source,
+            Attributes.SOURCE_LIST: device.source_list,
+            Attributes.MEDIA_IMAGE_URL: device.media_image_url,
+            Attributes.MEDIA_TITLE: device.media_title,
+            Attributes.MEDIA_TYPE: device.media_type
         }
         # # use sound mode support & name from configuration: receiver might not yet be connected
         # if device.support_sound_mode:
@@ -192,7 +192,7 @@ class LGTVMediaPlayer(MediaPlayer):
                 attributes[Attributes.MEDIA_TITLE] = ""
                 attributes[Attributes.MEDIA_TYPE] = MediaType.VIDEO
                 attributes[Attributes.SOURCE] = ""
-
+        _LOG.debug("LGTVMediaPlayer update attributes %s -> %s", update, attributes)
         return attributes
 
     def _key_update_helper(self, key: str, value: str | None, attributes):
