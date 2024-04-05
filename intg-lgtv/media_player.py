@@ -152,6 +152,12 @@ class LGTVMediaPlayer(MediaPlayer):
             res = await self._device.button("RED")
         elif cmd_id == Commands.FUNCTION_BLUE:
             res = await self._device.button("BLUE")
+        elif cmd_id == Commands.GUIDE:
+            res = await self._device.button("GUIDE")
+        elif cmd_id == Commands.LIVE:
+            res = await self._device.button("DASH")
+        elif cmd_id == Commands.MY_RECORDINGS:
+            res = await self._device.button("LIST")
         else:
             return StatusCodes.NOT_IMPLEMENTED
 
