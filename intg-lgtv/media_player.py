@@ -30,10 +30,10 @@ class LGTVMediaPlayer(MediaPlayer):
             Attributes.STATE: lg.LG_STATE_MAPPING.get(device.state),
             Attributes.VOLUME: device.volume_level,
             Attributes.MUTED: device.is_volume_muted,
-            Attributes.SOURCE: device.source,
+            Attributes.SOURCE: device.source if device.source else "",
             Attributes.SOURCE_LIST: device.source_list,
-            Attributes.MEDIA_IMAGE_URL: device.media_image_url,
-            Attributes.MEDIA_TITLE: device.media_title,
+            Attributes.MEDIA_IMAGE_URL: device.media_image_url if device.media_image_url else "",
+            Attributes.MEDIA_TITLE: device.media_title if device.media_title else "",
             Attributes.MEDIA_TYPE: device.media_type
         }
         # # use sound mode support & name from configuration: receiver might not yet be connected
@@ -111,11 +111,11 @@ class LGTVMediaPlayer(MediaPlayer):
         elif cmd_id == Commands.HOME:
             res = await self._device.button("HOME")
         elif cmd_id == Commands.SETTINGS:
-            res = await self._device.button("INPUT_HUB")
-        elif cmd_id == Commands.MENU:
-            res = await self._device.button("MENU")
-        elif cmd_id == Commands.CONTEXT_MENU:
             res = await self._device.button("QMENU")
+        elif cmd_id == Commands.MENU:
+            res = await self._device.button("INPUT_HUB")
+        elif cmd_id == Commands.CONTEXT_MENU:
+            res = await self._device.button("MENU")
         elif cmd_id == Commands.INFO:
             res = await self._device.button("INFO")
         elif cmd_id == Commands.DIGIT_0:

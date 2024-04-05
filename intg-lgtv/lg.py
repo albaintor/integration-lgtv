@@ -49,11 +49,11 @@ class States(IntEnum):
 
 
 LG_STATE_MAPPING = {
-    States.OFF : MediaStates.OFF,
-    States.ON : MediaStates.ON,
-    States.STOPPED : MediaStates.STANDBY,
-    States.PLAYING : MediaStates.PLAYING,
-    States.PAUSED : MediaStates.PAUSED,
+    States.OFF: MediaStates.OFF,
+    States.ON: MediaStates.ON,
+    States.STOPPED: MediaStates.STANDBY,
+    States.PLAYING: MediaStates.PLAYING,
+    States.PAUSED: MediaStates.PAUSED,
 }
 
 
@@ -413,7 +413,7 @@ class LGDevice:
             return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("LG TV error power_on", ex)
-            return ucapi.StatusCodes.BAD_REQUEST
+        return ucapi.StatusCodes.BAD_REQUEST
 
     async def power_off(self) -> ucapi.StatusCodes:
         """Send power-off command to LG TV"""
@@ -422,7 +422,7 @@ class LGDevice:
             return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("LG TV error power_off", ex)
-            return ucapi.StatusCodes.BAD_REQUEST
+        return ucapi.StatusCodes.BAD_REQUEST
 
     async def set_volume_level(self, volume: float | None) -> ucapi.StatusCodes:
         """Set volume level, range 0..100."""
@@ -437,7 +437,7 @@ class LGDevice:
             await self.reconnect()
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("LG TV error volume_up", ex)
-            return ucapi.StatusCodes.BAD_REQUEST
+        return ucapi.StatusCodes.BAD_REQUEST
 
     async def volume_up(self) -> ucapi.StatusCodes:
         """Send volume-up command to LG TV"""
@@ -556,7 +556,7 @@ class LGDevice:
             await self.reconnect()
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("LG TV error select_source", ex)
-            return ucapi.StatusCodes.BAD_REQUEST
+        return ucapi.StatusCodes.BAD_REQUEST
 
     async def button(self, button: str) -> ucapi.StatusCodes:
         try:
@@ -566,4 +566,5 @@ class LGDevice:
             await self.reconnect()
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("LG TV error select_source", ex)
-            return ucapi.StatusCodes.BAD_REQUEST
+        return ucapi.StatusCodes.BAD_REQUEST
+
