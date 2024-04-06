@@ -413,7 +413,10 @@ class LGDevice:
             return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("LG TV error power_on", ex)
-        return ucapi.StatusCodes.BAD_REQUEST
+        except Exception as ex:
+            _LOG.error("LG TV error power_on", ex)
+        # return ucapi.StatusCodes.BAD_REQUEST
+        return ucapi.StatusCodes.OK
 
     async def power_off(self) -> ucapi.StatusCodes:
         """Send power-off command to LG TV"""
