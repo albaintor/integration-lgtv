@@ -309,7 +309,10 @@ class LGDevice:
                         for timestamp, value in self._buffered_callbacks.items():
                             if time.time() - timestamp <= BUFFER_LIFETIME:
                                 _LOG.debug("Calling buffered command %s", value)
-                                await value['function'](*value['args'])
+                                try:
+                                    await value['function'](*value['args'])
+                                except Exception:
+                                    pass
                             else:
                                 _LOG.debug("Buffered command too old %s, dropping it", value)
                         self._buffered_callbacks.clear()
