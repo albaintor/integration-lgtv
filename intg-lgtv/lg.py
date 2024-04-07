@@ -4,10 +4,11 @@ This module implements the AVR AVR receiver communication of the Remote Two inte
 :copyright: (c) 2023 by Unfolded Circle ApS.
 :license: Mozilla Public License Version 2.0, see LICENSE for more details.
 """
-
+import datetime
 import logging
 import os
-from asyncio import AbstractEventLoop
+import time
+from asyncio import AbstractEventLoop, Lock
 from enum import IntEnum
 from typing import cast
 
@@ -24,6 +25,7 @@ from wakeonlan import send_magic_packet
 _LOG = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 5
+BUFFER_LIFETIME = 30
 
 class Events(IntEnum):
     """Internal driver events."""
@@ -92,6 +94,8 @@ class LGDevice:
         self._attr_state = States.OFF
         self._mac_address = self.id
         self._connect_task = None
+        self._buffered_callbacks = {}
+        self._connect_lock = Lock()
 
         _LOG.debug("LG TV created: %s", device_config.address)
 
@@ -287,6 +291,7 @@ class LGDevice:
         if self._connecting: #TODO : to confirm or self.state != States.OFF:
             return
         try:
+            await self._connect_lock.acquire()
             self._connecting = True
             self._tv: WebOsClient = WebOsClient(
                 host=self._device_config.address,
@@ -297,8 +302,20 @@ class LGDevice:
                 await self._update_system()
             await self.async_activate_websocket()
             self._attr_available = True
+            # Handle awaiting commands to process
+            if self._buffered_callbacks:
+                while self._buffered_callbacks:
+                    try:
+                        for timestamp, value in self._buffered_callbacks.items():
+                            if time.time() - timestamp <= BUFFER_LIFETIME:
+                                _LOG.debug("Calling buffered command %s", value)
+                                await value['function'](*value['args'])
+                            else:
+                                _LOG.debug("Buffered command too old %s, dropping it", value)
+                        self._buffered_callbacks.clear()
+                    except RuntimeError:
+                        pass
         except WEBOSTV_EXCEPTIONS as ex:
-
             self._attr_available = False
             if not self._connect_task:
                 _LOG.warning("Unable to update, LG TV probably off: %s, running connect task", ex)
@@ -307,6 +324,7 @@ class LGDevice:
             # Always emit connected event even if the device is unreachable (off)
             self.events.emit(Events.CONNECTED, self.id)
             self._connecting = False
+            self._connect_lock.release()
 
     async def reconnect(self):
         """Occurs when the TV has been turned off and on : the client has to be resetted"""
@@ -546,6 +564,11 @@ class LGDevice:
         _LOG.debug("LG TV set input: %s", source)
         # switch to work.
         try:
+            if not self._tv.is_on:
+                raise WebOsTvCommandError
+            # If sources is empty, device is not connected so raise error to trigger connection
+            if not self._sources:
+                raise WebOsTvCommandError
             if (source_dict := self._sources.get(source)) is None:
                 _LOG.warning(
                     "Source %s not found for %s", source, self._sources)
@@ -554,12 +577,21 @@ class LGDevice:
                 await self._tv.launch_app(source_dict["id"])
             elif source_dict.get("label"):
                 await self._tv.set_input(source_dict["id"])
+            _LOG.debug("LG TV set input: %s succeeded", source)
             return ucapi.StatusCodes.OK
         except WebOsTvCommandError:
+            await self.power_on()
+            self._buffered_callbacks[time.time()] = {"function": self.select_source, "args": [source]}
+            _LOG.info("Device is not ready to accept command, buffering it : %s",self._buffered_callbacks)
             await self.reconnect()
+            return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("LG TV error select_source", ex)
+        except Exception as ex:
+            _LOG.error("LG TV unknown error select_source", ex)
         return ucapi.StatusCodes.BAD_REQUEST
+
+
 
     async def button(self, button: str) -> ucapi.StatusCodes:
         try:
