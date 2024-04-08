@@ -146,10 +146,10 @@ class LGDevice:
             if source["appId"] == LIVE_TV_APP_ID:
                 found_live_tv = True
             if source["appId"] == self._tv.current_app_id:
-                active_source = source["label"]
-                self._sources[source["label"]] = source
+                active_source = source["id"]
+                self._sources[source["id"]] = source
             else:
-                self._sources[source["label"]] = source
+                self._sources[source["id"]] = source
 
         # empty list, TV may be off, keep previous list
         if not self._sources and current_source_list:
@@ -306,11 +306,13 @@ class LGDevice:
             if self._buffered_callbacks:
                 while self._buffered_callbacks:
                     try:
-                        for timestamp, value in self._buffered_callbacks.items():
+                        items = self._buffered_callbacks.copy()
+                        for timestamp, value in items.items():
                             if time.time() - timestamp <= BUFFER_LIFETIME:
                                 _LOG.debug("Calling buffered command %s", value)
                                 try:
                                     await value['function'](*value['args'])
+                                    del self._buffered_callbacks[timestamp]
                                 except Exception:
                                     pass
                             else:

@@ -277,8 +277,9 @@ def _configure_new_device(device_config: config.LGConfigDevice, connect: bool = 
     else:
         device = lg.LGDevice(device_config, loop=_LOOP)
 
-        device.events.on(lg.Events.CONNECTED, on_device_connected)
-        device.events.on(lg.Events.DISCONNECTED, on_device_disconnected)
+        on_device_connected(device.id)
+        # device.events.on(lg.Events.CONNECTED, on_device_connected)
+        # device.events.on(lg.Events.DISCONNECTED, on_device_disconnected)
         device.events.on(lg.Events.ERROR, on_device_connection_error)
         device.events.on(lg.Events.UPDATE, on_device_update)
         # TODO event change address
