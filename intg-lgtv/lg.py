@@ -27,6 +27,8 @@ _LOG = logging.getLogger(__name__)
 DEFAULT_TIMEOUT = 5
 BUFFER_LIFETIME = 30
 
+INIT_APPS_LAUNCH_DELAY = 5
+
 class Events(IntEnum):
     """Internal driver events."""
 
@@ -562,13 +564,15 @@ class LGDevice:
             return ucapi.StatusCodes.BAD_REQUEST
         return ucapi.StatusCodes.OK
 
-    async def select_source(self, source: str | None) -> ucapi.StatusCodes:
+    async def select_source(self, source: str | None, delay: int = 0) -> ucapi.StatusCodes:
         """Send input_source command to LG TV"""
         if not source:
             return ucapi.StatusCodes.BAD_REQUEST
         _LOG.debug("LG TV set input: %s", source)
-        # switch to work.
+        launch_app = False
         try:
+            if delay > 0:
+                await asyncio.sleep(delay)
             if not self._tv.is_on:
                 raise WebOsTvCommandError
             # If sources is empty, device is not connected so raise error to trigger connection
@@ -579,6 +583,7 @@ class LGDevice:
                     "Source %s not found for %s", source, self._sources)
                 return ucapi.StatusCodes.BAD_REQUEST
             if source_dict.get("title"):
+                launch_app = True
                 await self._tv.launch_app(source_dict["id"])
             elif source_dict.get("label"):
                 await self._tv.set_input(source_dict["id"])
@@ -586,7 +591,11 @@ class LGDevice:
             return ucapi.StatusCodes.OK
         except WebOsTvCommandError:
             await self.power_on()
-            self._buffered_callbacks[time.time()] = {"function": self.select_source, "args": [source]}
+            if launch_app:
+                self._buffered_callbacks[time.time()] = {"function": self.select_source,
+                                                         "args": [source, INIT_APPS_LAUNCH_DELAY]}
+            else:
+                self._buffered_callbacks[time.time()] = {"function": self.select_source, "args": [source]}
             _LOG.info("Device is not ready to accept command, buffering it : %s",self._buffered_callbacks)
             await self.reconnect()
             return ucapi.StatusCodes.OK
