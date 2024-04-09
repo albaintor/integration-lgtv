@@ -5,7 +5,7 @@
   "name": {
     "en": "LG TV"
   },
-  "icon": "uc:integration",
+  "icon":"custom:lg.png",
   "description": {
     "en": "Control your LG TVs with Remote Two.",
     "de": "Steuere LG TVs mit Remote Two.",

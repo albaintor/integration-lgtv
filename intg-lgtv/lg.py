@@ -27,7 +27,7 @@ _LOG = logging.getLogger(__name__)
 DEFAULT_TIMEOUT = 5
 BUFFER_LIFETIME = 30
 
-INIT_APPS_LAUNCH_DELAY = 5
+INIT_APPS_LAUNCH_DELAY = 10
 
 class Events(IntEnum):
     """Internal driver events."""

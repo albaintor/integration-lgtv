@@ -49,14 +49,16 @@ async def on_r2_connect_cmd() -> None:
             await _LOOP.create_task(device.connect())
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.debug("Could not connect to device, probably because it is starting with magic packet %s", ex)
+    await api.set_device_state(ucapi.DeviceStates.CONNECTED)
 
 
 @api.listens_to(ucapi.Events.DISCONNECT)
 async def on_r2_disconnect_cmd():
     """Disconnect all configured TVs when the Remote Two sends the disconnect command."""
-    for device in _configured_lgtvs.values():
-        # start background task
-        await _LOOP.create_task(device.disconnect())
+    if len(api._clients) == 0:
+        for device in _configured_lgtvs.values():
+            # start background task
+            await _LOOP.create_task(device.disconnect())
 
 
 @api.listens_to(ucapi.Events.ENTER_STANDBY)
