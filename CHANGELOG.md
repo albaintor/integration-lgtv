@@ -1,4 +1,4 @@
-# Sony AVR integration for Remote Two Changelog
+# LG TV integration for Remote Two Changelog
 
 All notable changes to this project will be documented in this file.
 
@@ -11,5 +11,5 @@ _Changes in the next release_
 
 ---
 
-## v0.0.1 - 2024-03-16
+## v1.0.0 - 2024-04-25
 ### Initial release

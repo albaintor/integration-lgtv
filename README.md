@@ -46,7 +46,7 @@ pip3 install -r requirements.txt
 For running a separate integration driver on your network for Remote Two, the configuration in file
 [driver.json](driver.json) needs to be changed:
 
-- Set `driver_id` to a unique value, `uc_sony_driver` is already used for the embedded driver in the firmware.
+- Set `driver_id` to a unique value, `uc_lg_driver` is already used for the embedded driver in the firmware.
 - Change `name` to easily identify the driver for discovery & setup with Remote Two or the web-configurator.
 - Optionally add a `"port": 8090` field for the WebSocket server listening port.
     - Default port: `9090`
@@ -55,7 +55,7 @@ For running a separate integration driver on your network for Remote Two, the co
 ### Run
 
 ```shell
-python3 intg-sonyavr/driver.py
+python3 intg-lgtv/driver.py
 ```
 
 See
@@ -89,7 +89,7 @@ docker run --rm --name builder \
     docker.io/unfoldedcircle/r2-pyinstaller:3.11.6  \
     bash -c \
       "python -m pip install -r requirements.txt && \
-      pyinstaller --clean --onefile --name intg-sonyavr intg-sonyavr/driver.py"
+      pyinstaller --clean --onefile --name intg-lgtv intg-lgtv/driver.py"
 ```
 
 ### aarch64 Linux / Mac
@@ -103,18 +103,18 @@ docker run --rm --name builder \
     docker.io/unfoldedcircle/r2-pyinstaller:3.11.6  \
     bash -c \
       "python -m pip install -r requirements.txt && \
-      pyinstaller --clean --onefile --name intg-sonyavr intg-sonyavr/driver.py"
+      pyinstaller --clean --onefile --name intg-lgtv intg-lgtv/driver.py"
 ```
 
 ## Versioning
 
 We use [SemVer](http://semver.org/) for versioning. For the versions available, see the
-[tags and releases in this repository](https://github.com/unfoldedcircle/integration-sonyavr/releases).
+[tags and releases in this repository](https://github.com/albaintor/integration-lgtv/releases).
 
 ## Changelog
 
 The major changes found in each new release are listed in the [changelog](CHANGELOG.md)
-and under the GitHub [releases](https://github.com/unfoldedcircle/integration-sonyavr/releases).
+and under the GitHub [releases](https://github.com/albaintor/integration-lgtv/releases).
 
 ## Contributions
 
