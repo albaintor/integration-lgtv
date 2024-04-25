@@ -18,7 +18,7 @@ from aiowebostv.buttons import BUTTONS
 from config import LGConfigDevice
 from pyee import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr, MediaType, States as MediaStates
-from aiowebostv import WebOsClient
+from aiowebostv import WebOsClient, endpoints
 from const import *
 from wakeonlan import send_magic_packet
 
@@ -446,7 +446,8 @@ class LGDevice:
     async def power_off(self) -> ucapi.StatusCodes:
         """Send power-off command to LG TV"""
         try:
-            await self._tv.power_off()
+            # await self._tv.power_off() #Don't work correctly
+            await self._tv.command("request", endpoints.POWER_OFF)
             return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("LG TV error power_off", ex)
