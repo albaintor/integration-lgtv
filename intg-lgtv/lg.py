@@ -30,6 +30,7 @@ _LOG = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 5
 BUFFER_LIFETIME = 30
+CONNECTION_RETRIES = 10
 
 INIT_APPS_LAUNCH_DELAY = 10
 
@@ -166,6 +167,7 @@ class LGDevice:
         self._connect_task = None
         self._buffered_callbacks = {}
         self._connect_lock = Lock()
+        self._reconnect_retry = 0
 
         _LOG.debug("LG TV created: %s", device_config.address)
 
@@ -345,11 +347,20 @@ class LGDevice:
         or maybe the device has shutdown by itself"""
         while True:
             await asyncio.sleep(DEFAULT_TIMEOUT)
+            self._reconnect_retry +=1
+            if self._reconnect_retry > CONNECTION_RETRIES:
+                _LOG.debug("LG %s not connected abort retries", self._device_config.address)
+                self._connect_task = None
+                self._reconnect_retry = 0
+                break
+            _LOG.debug("LG %s not connected, retry %s / %s", self._device_config.address,
+                       self._reconnect_retry, CONNECTION_RETRIES)
             try:
                 await self.connect()
                 if self._tv.is_on:
                     _LOG.debug("LG TV connection succeeded")
                     self._connect_task = None
+                    self._reconnect_retry = 0
                     break
             except WEBOSTV_EXCEPTIONS:
                 pass
@@ -359,7 +370,7 @@ class LGDevice:
             return
         try:
             await self._connect_lock.acquire()
-            _LOG.debug("Connect %s", self._device_config.address)
+            # _LOG.debug("Connect %s", self._device_config.address)
             self._connecting = True
             self._tv: WebOsClient = WebOsClient(
                 host=self._device_config.address,
