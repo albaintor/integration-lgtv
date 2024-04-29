@@ -389,7 +389,7 @@ async def main():
     logging.getLogger("discover").setLevel(level)
     logging.getLogger("driver").setLevel(level)
     logging.getLogger("media_player").setLevel(level)
-    logging.getLogger("receiver").setLevel(level)
+    logging.getLogger("config").setLevel(level)
     logging.getLogger("setup_flow").setLevel(level)
 
     config.devices = config.Devices(api.config_dir_path, on_device_added, on_device_removed)

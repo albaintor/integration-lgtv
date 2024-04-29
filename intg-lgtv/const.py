@@ -1,8 +1,11 @@
 """Constants used for LG webOS Smart TV."""
 
 import asyncio
+from xmlrpc.client import ProtocolError
 
+from aiohttp import ServerTimeoutError
 from aiowebostv import WebOsTvCommandError
+from httpx import TransportError
 from ucapi.media_player import Features
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 
@@ -47,4 +50,7 @@ WEBOSTV_EXCEPTIONS = (
     WebOsTvCommandError,
     TimeoutError,
     asyncio.CancelledError,
+    TransportError,
+    ProtocolError,
+    ServerTimeoutError
 )

@@ -80,8 +80,8 @@ def cmd_wrapper(
         try:
             await func(obj, *args, **kwargs)
             return ucapi.StatusCodes.OK
-        except (WEBOSTV_EXCEPTIONS, TransportError, ProtocolError, ServerTimeoutError) as exc:
-            # If Kodi is off, we expect calls to fail.
+        except WEBOSTV_EXCEPTIONS as exc:
+            # If TV is off, we expect calls to fail.
             if obj.state == States.OFF:
                 log_function = _LOG.debug
             else:
@@ -106,8 +106,9 @@ def cmd_wrapper(
                 )
                 pass
             else:
-                if not obj._connect_error:
+                if obj._attr_available:
                     try:
+                        log_function("Trying again command %s : %r", func.__name__, obj.id)
                         await func(obj, *args, **kwargs)
                         return ucapi.StatusCodes.OK
                     except (TransportError, ProtocolError, ServerTimeoutError) as exc:
@@ -117,7 +118,7 @@ def cmd_wrapper(
                             obj.id,
                             exc,
                         )
-            # If Kodi is off, we expect calls to fail.
+            # If TV is off, we expect calls to fail.
             # await obj.event_loop.create_task(obj.connect())
             return ucapi.StatusCodes.BAD_REQUEST
         except Exception as ex:
@@ -358,6 +359,7 @@ class LGDevice:
             return
         try:
             await self._connect_lock.acquire()
+            _LOG.debug("Connect %s", self._device_config.address)
             self._connecting = True
             self._tv: WebOsClient = WebOsClient(
                 host=self._device_config.address,
@@ -510,7 +512,29 @@ class LGDevice:
     @cmd_wrapper
     async def power_off(self):
         """Send power-off command to LG TV"""
-        await self._tv.command("request", endpoints.POWER_OFF)
+        is_off = False
+        state = None
+        try:
+            async with asyncio.timeout(5):
+                state = await self._tv.get_power_state()
+                state_value = state.get("state", None)
+                if state_value == "Unknown":
+                    # fallback to current app id for some older webos versions
+                    # which don't support explicit power state
+                    if self._tv._current_app_id in [None, ""]:
+                        _LOG.debug("TV is already off [%s]", state)
+                        is_off = True
+                elif state_value in [None, "Power Off", "Suspend", "Active Standby"]:
+                    _LOG.debug("TV is already off [%s]", state)
+                    is_off = True
+        except asyncio.TimeoutError:
+            _LOG.debug("Power off requested but could not get TV state")
+            is_off = True
+            pass
+        if is_off is False:
+            _LOG.debug("TV is ON, powering off [%s]", state)
+            await self._tv.command("request", endpoints.POWER_OFF)
+
 
     @cmd_wrapper
     async def set_volume_level(self, volume: float | None):
@@ -578,12 +602,11 @@ class LGDevice:
         else:
             await self._tv.rewind()
 
-    async def select_source(self, source: str | None, delay: int = 0) -> ucapi.StatusCodes:
+    async def select_source_deferred(self, source: str | None, delay: int = 0) -> ucapi.StatusCodes:
         """Send input_source command to LG TV"""
         if not source:
             return ucapi.StatusCodes.BAD_REQUEST
         _LOG.debug("LG TV set input: %s", source)
-        launch_app = False
         try:
             if delay > 0:
                 await asyncio.sleep(delay)
@@ -603,13 +626,30 @@ class LGDevice:
                 await self._tv.set_input(source_dict["id"])
             _LOG.debug("LG TV set input: %s succeeded", source)
             return ucapi.StatusCodes.OK
+        except WEBOSTV_EXCEPTIONS as ex:
+            _LOG.error("LG TV error select_source", ex)
+        except Exception as ex:
+            _LOG.error("LG TV unknown error select_source", ex)
+        return ucapi.StatusCodes.BAD_REQUEST
+
+    async def select_source(self, source: str | None, delay: int = 0) -> ucapi.StatusCodes:
+        """Send input_source command to LG TV"""
+        if not source:
+            return ucapi.StatusCodes.BAD_REQUEST
+        _LOG.debug("LG TV set input: %s", source)
+        launch_app = False
+        try:
+            res = await self.select_source_deferred(source, delay)
+            if res != ucapi.StatusCodes.OK:
+                raise WebOsTvCommandError
+            return res
         except WebOsTvCommandError:
             await self.power_on()
             if launch_app:
-                self._buffered_callbacks[time.time()] = {"function": self.select_source,
+                self._buffered_callbacks[time.time()] = {"function": self.select_source_deferred,
                                                          "args": [source, INIT_APPS_LAUNCH_DELAY]}
             else:
-                self._buffered_callbacks[time.time()] = {"function": self.select_source, "args": [source]}
+                self._buffered_callbacks[time.time()] = {"function": self.select_source_deferred, "args": [source]}
             _LOG.info("Device is not ready to accept command, buffering it : %s", self._buffered_callbacks)
             await self.reconnect()
             return ucapi.StatusCodes.OK
