@@ -38,9 +38,7 @@ class LGTVMediaPlayer(MediaPlayer):
             Attributes.MUTED: device.is_volume_muted,
             Attributes.SOURCE: device.source if device.source else "",
             Attributes.SOURCE_LIST: device.source_list,
-            Attributes.MEDIA_IMAGE_URL: device.media_image_url
-            if device.media_image_url
-            else "",
+            Attributes.MEDIA_IMAGE_URL: device.media_image_url if device.media_image_url else "",
             Attributes.MEDIA_TITLE: device.media_title if device.media_title else "",
             Attributes.MEDIA_TYPE: device.media_type,
         }
@@ -87,9 +85,7 @@ class LGTVMediaPlayer(MediaPlayer):
             options=options,
         )
 
-    async def command(
-        self, cmd_id: str, params: dict[str, Any] | None = None
-    ) -> StatusCodes:
+    async def command(self, cmd_id: str, params: dict[str, Any] | None = None) -> StatusCodes:
         """
         Media-player entity command handler.
 

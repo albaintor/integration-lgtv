@@ -158,9 +158,7 @@ async def async_send_ssdp_broadcast_ip(ip_addr: str) -> Set[str]:
         # Close the connection
         transport.close()
 
-        _LOGGER.debug(
-            "Got %s results after SSDP queries using ip %s", len(protocol.urls), ip_addr
-        )
+        _LOGGER.debug("Got %s results after SSDP queries using ip %s", len(protocol.urls), ip_addr)
 
         return protocol.urls
     # pylint: disable = W0718
@@ -192,10 +190,7 @@ def evaluate_scpd_xml(url: str, body: str) -> Optional[Dict]:
             device_xml = root.find(SCPD_DEVICE)
         elif root.find(SCPD_DEVICE).find(SCPD_DEVICELIST) is not None:
             for dev in root.find(SCPD_DEVICE).find(SCPD_DEVICELIST):
-                if (
-                    dev.find(SCPD_DEVICETYPE).text in SUPPORTED_DEVICETYPES
-                    and dev.find(SCPD_SERIALNUMBER) is not None
-                ):
+                if dev.find(SCPD_DEVICETYPE).text in SUPPORTED_DEVICETYPES and dev.find(SCPD_SERIALNUMBER) is not None:
                     device_xml = dev
                     break
 
@@ -203,9 +198,7 @@ def evaluate_scpd_xml(url: str, body: str) -> Optional[Dict]:
             return None
 
         if device_xml.find(SCPD_PRESENTATIONURL) is not None:
-            device["host"] = urlparse(
-                device_xml.find(SCPD_PRESENTATIONURL).text
-            ).hostname
+            device["host"] = urlparse(device_xml.find(SCPD_PRESENTATIONURL).text).hostname
             device["presentationURL"] = device_xml.find(SCPD_PRESENTATIONURL).text
         else:
             device["host"] = urlparse(url).hostname
@@ -222,9 +215,7 @@ def evaluate_scpd_xml(url: str, body: str) -> Optional[Dict]:
         ParseError,
         UnicodeDecodeError,
     ) as err:
-        _LOGGER.error(
-            "Error occurred during evaluation of SCPD XML from URI %s: %s", url, err
-        )
+        _LOGGER.error("Error occurred during evaluation of SCPD XML from URI %s: %s", url, err)
         return None
 
 

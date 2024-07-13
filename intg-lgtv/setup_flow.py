@@ -31,6 +31,7 @@ _LOG = logging.getLogger(__name__)
 
 # pylint: disable = W1405
 
+
 class SetupSteps(IntEnum):
     """Enumeration of setup steps to keep track of user data responses."""
 
@@ -91,10 +92,7 @@ async def driver_setup_handler(msg: SetupDriver) -> SetupAction:
         return await handle_driver_setup(msg)
     if isinstance(msg, UserDataResponse):
         _LOG.debug(msg)
-        if (
-                _setup_step == SetupSteps.CONFIGURATION_MODE
-                and "action" in msg.input_values
-        ):
+        if _setup_step == SetupSteps.CONFIGURATION_MODE and "action" in msg.input_values:
             return await handle_configuration_mode(msg)
         if _setup_step == SetupSteps.DISCOVER and "address" in msg.input_values:
             return await _handle_discovery(msg)
@@ -137,9 +135,7 @@ async def handle_driver_setup(msg: DriverSetupRequest) -> RequestUserInput | Set
         # get all configured devices for the user to choose from
         dropdown_devices = []
         for device in config.devices.all():
-            dropdown_devices.append(
-                {"id": device.id, "label": {"en": f"{device.name} ({device.id})"}}
-            )
+            dropdown_devices.append({"id": device.id, "label": {"en": f"{device.name} ({device.id})"}})
 
         # TODO #12 externalize language texts
         # build user actions, based on available devices
@@ -220,9 +216,7 @@ async def handle_driver_setup(msg: DriverSetupRequest) -> RequestUserInput | Set
     return _user_input_discovery
 
 
-async def handle_configuration_mode(
-        msg: UserDataResponse,
-) -> RequestUserInput | SetupComplete | SetupError:
+async def handle_configuration_mode(msg: UserDataResponse) -> RequestUserInput | SetupComplete | SetupError:
     """
     Process user data response in a setup process.
 
@@ -375,9 +369,8 @@ async def handle_device_choice(msg: UserDataResponse) -> SetupComplete | SetupEr
         )
         return SetupError(error_type=IntegrationSetupError.OTHER)
 
-    config.devices.add(
-        LGConfigDevice(id=unique_id, name=model_name, address=host, key=key)
-    )  # triggers SonyLG TV instance creation
+    config.devices.add(LGConfigDevice(id=unique_id, name=model_name, address=host, key=key))
+    # triggers SonyLG TV instance creation
     config.devices.store()
 
     # LG TV device connection will be triggered with subscribe_entities request

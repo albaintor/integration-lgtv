@@ -116,9 +116,7 @@ async def on_subscribe_entities(entity_ids: list[str]) -> None:
         if device_id in _configured_lgtvs:
             device = _configured_lgtvs[device_id]
             state = lg.LG_STATE_MAPPING.get(device.state)
-            api.configured_entities.update_attributes(
-                entity_id, {ucapi.media_player.Attributes.STATE: state}
-            )
+            api.configured_entities.update_attributes(entity_id, {ucapi.media_player.Attributes.STATE: state})
             continue
 
         device = config.devices.get(device_id)
@@ -126,9 +124,7 @@ async def on_subscribe_entities(entity_ids: list[str]) -> None:
             _configure_new_device(device, connect=True)
             _LOOP.create_task(device.connect())
         else:
-            _LOG.error(
-                "Failed to subscribe entity %s: no LG TV configuration found", entity_id
-            )
+            _LOG.error("Failed to subscribe entity %s: no LG TV configuration found", entity_id)
 
 
 @api.listens_to(ucapi.Events.UNSUBSCRIBE_ENTITIES)
@@ -174,9 +170,7 @@ async def on_device_connected(device_id: str):
                 # TODO why STANDBY?
                 api.configured_entities.update_attributes(
                     entity_id,
-                    {
-                        ucapi.media_player.Attributes.STATE: ucapi.media_player.States.STANDBY
-                    },
+                    {ucapi.media_player.Attributes.STATE: ucapi.media_player.States.STANDBY},
                 )
 
 
@@ -192,9 +186,7 @@ async def on_device_disconnected(device_id: str):
         if configured_entity.entity_type == ucapi.EntityTypes.MEDIA_PLAYER:
             api.configured_entities.update_attributes(
                 entity_id,
-                {
-                    ucapi.media_player.Attributes.STATE: ucapi.media_player.States.UNAVAILABLE
-                },
+                {ucapi.media_player.Attributes.STATE: ucapi.media_player.States.UNAVAILABLE},
             )
 
     # TODO #20 when multiple devices are supported, the device state logic isn't that simple anymore!
@@ -213,9 +205,7 @@ async def on_device_connection_error(device_id: str, message):
         if configured_entity.entity_type == ucapi.EntityTypes.MEDIA_PLAYER:
             api.configured_entities.update_attributes(
                 entity_id,
-                {
-                    ucapi.media_player.Attributes.STATE: ucapi.media_player.States.UNAVAILABLE
-                },
+                {ucapi.media_player.Attributes.STATE: ucapi.media_player.States.UNAVAILABLE},
             )
 
     # TODO #20 when multiple devices are supported, the device state logic isn't that simple anymore!
@@ -263,9 +253,7 @@ async def on_device_update(device_id: str, update: dict[str, Any] | None) -> Non
     attributes = None
 
     # TODO awkward logic: this needs better support from the integration library
-    _LOG.info(
-        "Update device %s for configured devices %s", device_id, api.configured_entities
-    )
+    _LOG.info("Update device %s for configured devices %s", device_id, api.configured_entities)
     for entity_id in _entities_from_device_id(device_id):
         configured_entity = api.configured_entities.get(entity_id)
         if configured_entity is None:
@@ -358,9 +346,7 @@ def on_device_added(device: config.LGConfigDevice) -> None:
 def on_device_removed(device: config.LGConfigDevice | None) -> None:
     """Handle a removed device in the configuration."""
     if device is None:
-        _LOG.debug(
-            "Configuration cleared, disconnecting & removing all configured LG TV instances"
-        )
+        _LOG.debug("Configuration cleared, disconnecting & removing all configured LG TV instances")
         for configured in _configured_lgtvs.values():
             _LOOP.create_task(_async_remove(configured))
         _configured_lgtvs.clear()

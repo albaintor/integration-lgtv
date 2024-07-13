@@ -4,6 +4,7 @@ This module implements the AVR AVR receiver communication of the Remote Two inte
 :copyright: (c) 2023 by Unfolded Circle ApS.
 :license: Mozilla Public License Version 2.0, see LICENSE for more details.
 """
+
 import asyncio
 import logging
 import os
@@ -87,9 +88,7 @@ def cmd_wrapper(
     """Catch command exceptions."""
 
     @wraps(func)
-    async def wrapper(
-        obj: _LGDeviceT, *args: _P.args, **kwargs: _P.kwargs
-    ) -> ucapi.StatusCodes:
+    async def wrapper(obj: _LGDeviceT, *args: _P.args, **kwargs: _P.kwargs) -> ucapi.StatusCodes:
         """Wrap all command methods."""
         try:
             await func(obj, *args, **kwargs)
@@ -119,9 +118,7 @@ def cmd_wrapper(
             else:
                 if obj.available:
                     try:
-                        log_function(
-                            "Trying again command %s : %r", func.__name__, obj.id
-                        )
+                        log_function("Trying again command %s : %r", func.__name__, obj.id)
                         await func(obj, *args, **kwargs)
                         return ucapi.StatusCodes.OK
                     except (TransportError, ProtocolError, ServerTimeoutError) as ex:
@@ -160,9 +157,7 @@ class LGDevice:
         self._serial_number = ""
         self.event_loop = loop or asyncio.get_running_loop()
         self.events = AsyncIOEventEmitter(self.event_loop)
-        self._tv: WebOsClient = WebOsClient(
-            host=device_config.address, client_key=device_config.key
-        )
+        self._tv: WebOsClient = WebOsClient(host=device_config.address, client_key=device_config.key)
         self._attr_available: bool = True
         self._volume = 0
         self._attr_is_volume_muted = False
@@ -309,9 +304,7 @@ class LGDevice:
             updated_data[MediaAttr.MEDIA_TYPE] = self._media_type
 
         media_title = ""
-        if (self._tv.current_app_id == LIVE_TV_APP_ID) and (
-            self._tv.current_channel is not None
-        ):
+        if self._tv.current_app_id == LIVE_TV_APP_ID and self._tv.current_channel is not None:
             media_title = cast(str, self._tv.current_channel.get("channelName"))
 
         if media_title != self._media_title:
@@ -365,9 +358,7 @@ class LGDevice:
             await asyncio.sleep(DEFAULT_TIMEOUT)
             self._reconnect_retry += 1
             if self._reconnect_retry > CONNECTION_RETRIES:
-                _LOG.debug(
-                    "LG %s not connected abort retries", self._device_config.address
-                )
+                _LOG.debug("LG %s not connected abort retries", self._device_config.address)
                 self._connect_task = None
                 self._reconnect_retry = 0
                 break
@@ -396,9 +387,7 @@ class LGDevice:
             await self._connect_lock.acquire()
             # _LOG.debug("Connect %s", self._device_config.address)
             self._connecting = True
-            self._tv: WebOsClient = WebOsClient(
-                host=self._device_config.address, client_key=self._device_config.key
-            )
+            self._tv: WebOsClient = WebOsClient(host=self._device_config.address, client_key=self._device_config.key)
             await self._tv.connect()
             await self._update_states()
             if not self._mac_address:
@@ -420,18 +409,14 @@ class LGDevice:
                                 except Exception:
                                     pass
                             else:
-                                _LOG.debug(
-                                    "Buffered command too old %s, dropping it", value
-                                )
+                                _LOG.debug("Buffered command too old %s, dropping it", value)
                         self._buffered_callbacks.clear()
                     except RuntimeError:
                         pass
         except WEBOSTV_EXCEPTIONS as ex:
             self._attr_available = False
             if not self._connect_task:
-                _LOG.warning(
-                    "Unable to update, LG TV probably off: %s, running connect task", ex
-                )
+                _LOG.warning("Unable to update, LG TV probably off: %s, running connect task", ex)
                 self._connect_task = asyncio.create_task(self._connect_loop())
         finally:
             # Always emit connected event even if the device is unreachable (off)
@@ -647,9 +632,7 @@ class LGDevice:
         else:
             await self._tv.rewind()
 
-    async def select_source_deferred(
-        self, source: str | None, delay: int = 0
-    ) -> ucapi.StatusCodes:
+    async def select_source_deferred(self, source: str | None, delay: int = 0) -> ucapi.StatusCodes:
         """Send input_source command to LG TV."""
         if not source:
             return ucapi.StatusCodes.BAD_REQUEST
@@ -678,9 +661,7 @@ class LGDevice:
             _LOG.error("LG TV unknown error select_source %s", ex)
         return ucapi.StatusCodes.BAD_REQUEST
 
-    async def select_source(
-        self, source: str | None, delay: int = 0
-    ) -> ucapi.StatusCodes:
+    async def select_source(self, source: str | None, delay: int = 0) -> ucapi.StatusCodes:
         """Send input_source command to LG TV."""
         if not source:
             return ucapi.StatusCodes.BAD_REQUEST
