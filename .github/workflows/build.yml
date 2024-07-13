@@ -1,0 +1,146 @@
+# GitHub Action to build a self-contained binary of the Android TV Python driver
+---
+name: "Build & Release"
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]+*
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+env:
+  INTG_NAME: lgtv
+  HASH_FILENAME: uc-intg-lgtv.hash
+  # Python version to use in the builder image. See https://hub.docker.com/r/unfoldedcircle/r2-pyinstaller for possible versions.
+  PYTHON_VER: 3.11.6-0.2.0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # History of 200 should be more than enough to calculate commit count since last release tag.
+          fetch-depth: 200
+
+      - name: Fetch all tags to determine version
+        run: |
+          git fetch origin +refs/tags/*:refs/tags/*
+          echo "VERSION=$(git describe --match "v[0-9]*" --tags HEAD --always)" >> $GITHUB_ENV
+
+      - name: Verify driver.json version for release build
+        if: contains(github.ref, 'tags/v')
+        run: |
+          DRIVER_VERSION="v$(jq .version -r driver.json)"
+          if [ "${{ env.VERSION }}" != "$DRIVER_VERSION" ]; then
+            echo "Version in driver.json ($DRIVER_VERSION) doesn't match git version tag (${{ env.VERSION }})!"
+            exit 1
+          fi
+
+      - name: Prepare
+        run: |
+          sudo apt-get update && sudo apt-get install -y qemu binfmt-support qemu-user-static
+          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+          echo "Starting pyinstaller build"
+          docker run --rm --name builder \
+            --platform=aarch64 \
+            --user=$(id -u):$(id -g) \
+            -v ${GITHUB_WORKSPACE}:/workspace \
+            docker.io/unfoldedcircle/r2-pyinstaller:${PYTHON_VER} \
+            bash -c \
+            "cd /workspace && \
+              python -m pip install -r requirements.txt && \
+              pyinstaller --clean --onefile --name intg-lgtv intg-lgtv/driver.py"
+
+      - name: Add version
+        run: |
+          mkdir -p artifacts
+          cd artifacts
+          echo ${{ env.VERSION }} > version.txt
+          
+      - name: Prepare artifacts
+        shell: bash
+        run: |
+          cp dist/intg-lgtv artifacts/
+          cp driver.json artifacts/
+          cp lg.png artifacts/
+          echo "ARTIFACT_NAME=uc-intg-${{ env.INTG_NAME }}-${{ env.VERSION }}-aarch64" >> $GITHUB_ENV
+          
+      - name: Create upload artifact
+        shell: bash
+        run: | 
+          tar czvf ${{ env.ARTIFACT_NAME }}.tar.gz -C ${GITHUB_WORKSPACE}/artifacts .
+          ls -lah
+          
+      - uses: actions/upload-artifact@v4
+        id: upload_artifact
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.ARTIFACT_NAME }}.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+            
+  release:
+    name: Create Release
+    if: github.ref == 'refs/heads/main' || contains(github.ref, 'tags/v')
+    runs-on: ubuntu-latest
+    needs: [build]
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Extract build archives from downloaded files
+        run: |
+          ls -R
+          # extract tar.gz build archives from downloaded artifacts
+          # (wrapped in tar from actions/upload-artifact, then extracted into a directory by actions/download-artifact)
+          for D in * 
+            do if [ -d "${D}" ]; then
+              mv $D/* ./
+            fi
+          done;
+
+      # Use a common timestamp for all matrix build artifacts
+      - name: Get timestamp
+        run: |
+          echo "TIMESTAMP=$(date +"%Y%m%d_%H%M%S")" >> $GITHUB_ENV
+
+      # Add timestamp to development builds
+      - name: Create GitHub development build archives
+        if: "!contains(github.ref, 'tags/v')"
+        run: |
+          # append timestamp
+          for filename in *.tar.gz; do mv $filename "$(basename $filename .tar.gz)-${{ env.TIMESTAMP }}.tar.gz"; done;
+          for filename in *.tar.gz; do echo "sha256  `sha256sum $filename`" >> ${{ env.HASH_FILENAME }}; done;
+
+      - name: Create Pre-Release
+        uses: "marvinpinto/action-automatic-releases@latest"
+        if: "!contains(github.ref, 'tags/v')"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "latest"
+          prerelease: true
+          title: "Development Build"
+          files: |
+            *.tar.gz
+            ${{ env.HASH_FILENAME }}
+
+      - name: Create GitHub release archives
+        if: "contains(github.ref, 'tags/v')"
+        run: |
+          for filename in *.tar.gz; do echo "sha256  `sha256sum $filename`" >> ${{ env.HASH_FILENAME }}; done;
+
+      - name: Create Release
+        uses: "marvinpinto/action-automatic-releases@latest"
+        if: "contains(github.ref, 'tags/v')"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: false
+          files: |
+            *.tar.gz
+            ${{ env.HASH_FILENAME }}            

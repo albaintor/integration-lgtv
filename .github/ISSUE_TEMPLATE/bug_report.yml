@@ -1,0 +1,53 @@
+name: Bug report
+description: Create a report to help us improve
+title: '<title>'
+labels: [bug]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the existing issues first to see if the bug has already been recorded.
+        If you have more information about an existing bug, please add it as a comment and don't open a new issue.
+        Thank you!
+  - type: textarea
+    attributes:
+      label: Description
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: How to Reproduce
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. ...
+        2. ...
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Expected behavior
+      description: A clear and concise description of what you expected to happen.
+    validations:
+      required: true
+  - type: input
+    id: intg_version
+    attributes:
+      label: Integration version
+      description: You can find the integration version in driver.json or in the UI under Settings/Integrations
+      placeholder: ex. v0.4.5
+    validations:
+      required: false
+  - type: textarea
+    attributes:
+      label: Additional context
+      description: |
+        Add any other context about the problem here. Otherwise you can ignore this section.
+        How has this issue affected you? What are you trying to accomplish?
+        Providing context helps us come up with a solution that is most useful in the real world
+        
+        Tip: You can attach images or log files by clicking this area to highlight it and then dragging files in.
+    validations:
+      required: false

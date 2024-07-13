@@ -11,8 +11,14 @@ from typing import Any
 import lg
 from config import LGConfigDevice, create_entity_id
 from ucapi import EntityTypes, MediaPlayer, StatusCodes
-from ucapi.media_player import Attributes, Commands, DeviceClasses, Features, States, MediaType, Options
-from const import LG_FEATURES
+from ucapi.media_player import (
+    Attributes,
+    Commands,
+    DeviceClasses,
+    MediaType,
+    Options,
+    States,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -32,9 +38,11 @@ class LGTVMediaPlayer(MediaPlayer):
             Attributes.MUTED: device.is_volume_muted,
             Attributes.SOURCE: device.source if device.source else "",
             Attributes.SOURCE_LIST: device.source_list,
-            Attributes.MEDIA_IMAGE_URL: device.media_image_url if device.media_image_url else "",
+            Attributes.MEDIA_IMAGE_URL: device.media_image_url
+            if device.media_image_url
+            else "",
             Attributes.MEDIA_TITLE: device.media_title if device.media_title else "",
-            Attributes.MEDIA_TYPE: device.media_type
+            Attributes.MEDIA_TYPE: device.media_type,
         }
 
         # # use sound mode support & name from configuration: receiver might not yet be connected
@@ -59,15 +67,14 @@ class LGTVMediaPlayer(MediaPlayer):
                 "MAGNIFIER_ZOOM",  # Focus Zoom
                 "MYAPPS",  # Home Dashboard
                 "NETFLIX",
-                "PAUSE"
-                "PLAY",
+                "PAUSE" "PLAY",
                 "POWER",  # Power button
                 "PROGRAM",  # TV Guide
                 "RECENT",  # Home Dashboard - Recent Apps
                 "SAP",  # Multi Audio Setting
                 "SCREEN_REMOTE",  # Screen Remote
                 "TELETEXT",
-                "TEXTOPTION"
+                "TEXTOPTION",
             ]
         }
         super().__init__(
@@ -76,10 +83,12 @@ class LGTVMediaPlayer(MediaPlayer):
             features,
             attributes,
             device_class=DeviceClasses.RECEIVER,
-            options=options
+            options=options,
         )
 
-    async def command(self, cmd_id: str, params: dict[str, Any] | None = None) -> StatusCodes:
+    async def command(
+        self, cmd_id: str, params: dict[str, Any] | None = None
+    ) -> StatusCodes:
         """
         Media-player entity command handler.
 
@@ -223,7 +232,10 @@ class LGTVMediaPlayer(MediaPlayer):
 
         if Attributes.SOURCE_LIST in update:
             if Attributes.SOURCE_LIST in self.attributes:
-                if update[Attributes.SOURCE_LIST] != self.attributes[Attributes.SOURCE_LIST]:
+                if (
+                    update[Attributes.SOURCE_LIST]
+                    != self.attributes[Attributes.SOURCE_LIST]
+                ):
                     attributes[Attributes.SOURCE_LIST] = update[Attributes.SOURCE_LIST]
 
         if Attributes.STATE in attributes:
@@ -246,6 +258,3 @@ class LGTVMediaPlayer(MediaPlayer):
             attributes[key] = value
 
         return attributes
-
-
-

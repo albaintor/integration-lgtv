@@ -6,17 +6,14 @@ Setup flow for LG TV integration.
 """
 
 import asyncio
-import json
 import logging
 from enum import IntEnum
 
-from aiowebostv import WebOsClient
-
-from lg import LGDevice
-from const import WEBOSTV_EXCEPTIONS
 import config
 import discover
+from aiowebostv import WebOsClient
 from config import LGConfigDevice
+from const import WEBOSTV_EXCEPTIONS
 from ucapi import (
     AbortDriverSetup,
     DriverSetupRequest,
@@ -92,7 +89,10 @@ async def driver_setup_handler(msg: SetupDriver) -> SetupAction:
         return await handle_driver_setup(msg)
     if isinstance(msg, UserDataResponse):
         _LOG.debug(msg)
-        if _setup_step == SetupSteps.CONFIGURATION_MODE and "action" in msg.input_values:
+        if (
+            _setup_step == SetupSteps.CONFIGURATION_MODE
+            and "action" in msg.input_values
+        ):
             return await handle_configuration_mode(msg)
         if _setup_step == SetupSteps.DISCOVER and "address" in msg.input_values:
             return await _handle_discovery(msg)
@@ -103,7 +103,6 @@ async def driver_setup_handler(msg: SetupDriver) -> SetupAction:
         _LOG.info("Setup was aborted with code: %s", msg.error)
         if _pairing_lg_tv is not None:
             await _pairing_lg_tv.disconnect()
-            _pairing_android_tv = None
         _setup_step = SetupSteps.INIT
 
     # user confirmation not used in setup process
@@ -136,7 +135,9 @@ async def handle_driver_setup(msg: DriverSetupRequest) -> RequestUserInput | Set
         # get all configured devices for the user to choose from
         dropdown_devices = []
         for device in config.devices.all():
-            dropdown_devices.append({"id": device.id, "label": {"en": f"{device.name} ({device.id})"}})
+            dropdown_devices.append(
+                {"id": device.id, "label": {"en": f"{device.name} ({device.id})"}}
+            )
 
         # TODO #12 externalize language texts
         # build user actions, based on available devices
@@ -181,7 +182,12 @@ async def handle_driver_setup(msg: DriverSetupRequest) -> RequestUserInput | Set
             {"en": "Configuration mode", "de": "Konfigurations-Modus"},
             [
                 {
-                    "field": {"dropdown": {"value": dropdown_devices[0]["id"], "items": dropdown_devices}},
+                    "field": {
+                        "dropdown": {
+                            "value": dropdown_devices[0]["id"],
+                            "items": dropdown_devices,
+                        }
+                    },
                     "id": "choice",
                     "label": {
                         "en": "Configured devices",
@@ -190,7 +196,12 @@ async def handle_driver_setup(msg: DriverSetupRequest) -> RequestUserInput | Set
                     },
                 },
                 {
-                    "field": {"dropdown": {"value": dropdown_actions[0]["id"], "items": dropdown_actions}},
+                    "field": {
+                        "dropdown": {
+                            "value": dropdown_actions[0]["id"],
+                            "items": dropdown_actions,
+                        }
+                    },
                     "id": "action",
                     "label": {
                         "en": "Action",
@@ -207,7 +218,9 @@ async def handle_driver_setup(msg: DriverSetupRequest) -> RequestUserInput | Set
     return _user_input_discovery
 
 
-async def handle_configuration_mode(msg: UserDataResponse) -> RequestUserInput | SetupComplete | SetupError:
+async def handle_configuration_mode(
+    msg: UserDataResponse,
+) -> RequestUserInput | SetupComplete | SetupError:
     """
     Process user data response in a setup process.
 
@@ -275,7 +288,9 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
             await device.connect()
             info = await device.get_system_info()
             model_name = info.get("modelName")
-            dropdown_items.append({"id": address, "label": {"en": f"{model_name} [{address}]"}})
+            dropdown_items.append(
+                {"id": address, "label": {"en": f"{model_name} [{address}]"}}
+            )
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("Cannot connect to manually entered address %s: %s", address, ex)
             return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
@@ -295,10 +310,19 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
 
     _setup_step = SetupSteps.DEVICE_CHOICE
     return RequestUserInput(
-        {"en": "Please choose your LG TV", "de": "Bitte LG TV auswählen", "fr": "Sélectionnez votre TV LG"},
+        {
+            "en": "Please choose your LG TV",
+            "de": "Bitte LG TV auswählen",
+            "fr": "Sélectionnez votre TV LG",
+        },
         [
             {
-                "field": {"dropdown": {"value": dropdown_items[0]["id"], "items": dropdown_items}},
+                "field": {
+                    "dropdown": {
+                        "value": dropdown_items[0]["id"],
+                        "items": dropdown_items,
+                    }
+                },
                 "id": "choice",
                 "label": {
                     "en": "Choose your LG TV",
@@ -320,7 +344,9 @@ async def handle_device_choice(msg: UserDataResponse) -> SetupComplete | SetupEr
     :return: the setup action on how to continue: SetupComplete if a valid LG TV device was chosen.
     """
     host = msg.input_values["choice"]
-    _LOG.debug("Chosen LG TV: %s. Trying to connect and retrieve device information...", host)
+    _LOG.debug(
+        "Chosen LG TV: %s. Trying to connect and retrieve device information...", host
+    )
     try:
         # simple connection check
         device = WebOsClient(host)
@@ -341,7 +367,10 @@ async def handle_device_choice(msg: UserDataResponse) -> SetupComplete | SetupEr
 
     unique_id = mac_address
     if unique_id is None:
-        _LOG.error("Could not get mac address of host %s: required to create a unique device", host)
+        _LOG.error(
+            "Could not get mac address of host %s: required to create a unique device",
+            host,
+        )
         return SetupError(error_type=IntegrationSetupError.OTHER)
 
     config.devices.add(

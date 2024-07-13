@@ -12,20 +12,18 @@ import logging
 import os
 from typing import Any
 
-import websockets
-from ucapi import IntegrationAPI
-from ucapi.api import filter_log_msg_data
-
-from const import WEBOSTV_EXCEPTIONS
-
-import lg
 import config
+import lg
 import media_player
 import setup_flow
 import ucapi
-from config import device_from_entity_id
-from ucapi.media_player import Attributes as MediaAttr
 import ucapi.api_definitions as uc
+import websockets
+from config import device_from_entity_id
+from const import WEBOSTV_EXCEPTIONS
+from ucapi import IntegrationAPI
+from ucapi.api import filter_log_msg_data
+from ucapi.media_player import Attributes as MediaAttr
 
 _LOG = logging.getLogger("driver")  # avoid having __main__ in log messages
 _LOOP = asyncio.get_event_loop()
@@ -35,6 +33,7 @@ api = ucapi.IntegrationAPI(_LOOP)
 # Map of id -> LG instance
 _configured_lgtvs: dict[str, lg.LGDevice] = {}
 _R2_IN_STANDBY = False
+
 
 @api.listens_to(ucapi.Events.CONNECT)
 async def on_r2_connect_cmd() -> None:
@@ -48,7 +47,10 @@ async def on_r2_connect_cmd() -> None:
         try:
             await _LOOP.create_task(device.connect())
         except WEBOSTV_EXCEPTIONS as ex:
-            _LOG.debug("Could not connect to device, probably because it is starting with magic packet %s", ex)
+            _LOG.debug(
+                "Could not connect to device, probably because it is starting with magic packet %s",
+                ex,
+            )
     await api.set_device_state(ucapi.DeviceStates.CONNECTED)
 
 
@@ -113,7 +115,9 @@ async def on_subscribe_entities(entity_ids: list[str]) -> None:
         if device_id in _configured_lgtvs:
             device = _configured_lgtvs[device_id]
             state = lg.LG_STATE_MAPPING.get(device.state)
-            api.configured_entities.update_attributes(entity_id, {ucapi.media_player.Attributes.STATE: state})
+            api.configured_entities.update_attributes(
+                entity_id, {ucapi.media_player.Attributes.STATE: state}
+            )
             continue
 
         device = config.devices.get(device_id)
@@ -121,7 +125,9 @@ async def on_subscribe_entities(entity_ids: list[str]) -> None:
             _configure_new_device(device, connect=True)
             _LOOP.create_task(device.connect())
         else:
-            _LOG.error("Failed to subscribe entity %s: no LG TV configuration found", entity_id)
+            _LOG.error(
+                "Failed to subscribe entity %s: no LG TV configuration found", entity_id
+            )
 
 
 @api.listens_to(ucapi.Events.UNSUBSCRIBE_ENTITIES)
@@ -166,7 +172,10 @@ async def on_device_connected(device_id: str):
             ):
                 # TODO why STANDBY?
                 api.configured_entities.update_attributes(
-                    entity_id, {ucapi.media_player.Attributes.STATE: ucapi.media_player.States.STANDBY}
+                    entity_id,
+                    {
+                        ucapi.media_player.Attributes.STATE: ucapi.media_player.States.STANDBY
+                    },
                 )
 
 
@@ -181,7 +190,10 @@ async def on_device_disconnected(device_id: str):
 
         if configured_entity.entity_type == ucapi.EntityTypes.MEDIA_PLAYER:
             api.configured_entities.update_attributes(
-                entity_id, {ucapi.media_player.Attributes.STATE: ucapi.media_player.States.UNAVAILABLE}
+                entity_id,
+                {
+                    ucapi.media_player.Attributes.STATE: ucapi.media_player.States.UNAVAILABLE
+                },
             )
 
     # TODO #20 when multiple devices are supported, the device state logic isn't that simple anymore!
@@ -199,7 +211,10 @@ async def on_device_connection_error(device_id: str, message):
 
         if configured_entity.entity_type == ucapi.EntityTypes.MEDIA_PLAYER:
             api.configured_entities.update_attributes(
-                entity_id, {ucapi.media_player.Attributes.STATE: ucapi.media_player.States.UNAVAILABLE}
+                entity_id,
+                {
+                    ucapi.media_player.Attributes.STATE: ucapi.media_player.States.UNAVAILABLE
+                },
             )
 
     # TODO #20 when multiple devices are supported, the device state logic isn't that simple anymore!
@@ -211,7 +226,12 @@ async def handle_device_address_change(device_id: str, address: str) -> None:
     # TODO discover
     device = config.devices.get(device_id)
     if device and device.address != address:
-        _LOG.info("Updating IP address of configured LG TV %s: %s -> %s", device_id, device.address, address)
+        _LOG.info(
+            "Updating IP address of configured LG TV %s: %s -> %s",
+            device_id,
+            device.address,
+            address,
+        )
         device.address = address
         config.devices.update(device)
 
@@ -242,9 +262,10 @@ async def on_device_update(device_id: str, update: dict[str, Any] | None) -> Non
     attributes = None
 
     # TODO awkward logic: this needs better support from the integration library
-    _LOG.info("Update device %s for configured devices %s", device_id, api.configured_entities)
+    _LOG.info(
+        "Update device %s for configured devices %s", device_id, api.configured_entities
+    )
     for entity_id in _entities_from_device_id(device_id):
-
         configured_entity = api.configured_entities.get(entity_id)
         if configured_entity is None:
             return
@@ -269,7 +290,9 @@ def _entities_from_device_id(device_id: str) -> list[str]:
     return [f"media_player.{device_id}"]
 
 
-def _configure_new_device(device_config: config.LGConfigDevice, connect: bool = True) -> None:
+def _configure_new_device(
+    device_config: config.LGConfigDevice, connect: bool = True
+) -> None:
     """
     Create and configure a new device.
 
@@ -302,12 +325,15 @@ def _configure_new_device(device_config: config.LGConfigDevice, connect: bool = 
         try:
             _LOOP.create_task(device.connect())
         except WEBOSTV_EXCEPTIONS as ex:
-            _LOG.debug("Could not connect to device, probably because it is starting with magic packet %s", ex)
+            _LOG.debug(
+                "Could not connect to device, probably because it is starting with magic packet %s",
+                ex,
+            )
 
 
-
-
-def _register_available_entities(device_config: config.LGConfigDevice, device: lg.LGDevice) -> None:
+def _register_available_entities(
+    device_config: config.LGConfigDevice, device: lg.LGDevice
+) -> None:
     """
     Create entities for given receiver device and register them as available entities.
 
@@ -331,7 +357,9 @@ def on_device_added(device: config.LGConfigDevice) -> None:
 def on_device_removed(device: config.LGConfigDevice | None) -> None:
     """Handle a removed device in the configuration."""
     if device is None:
-        _LOG.debug("Configuration cleared, disconnecting & removing all configured LG TV instances")
+        _LOG.debug(
+            "Configuration cleared, disconnecting & removing all configured LG TV instances"
+        )
         for configured in _configured_lgtvs.values():
             _LOOP.create_task(_async_remove(configured))
         _configured_lgtvs.clear()
@@ -354,7 +382,7 @@ async def _async_remove(device: lg.LGDevice) -> None:
 
 
 async def patched_broadcast_ws_event(
-        self, msg: str, msg_data: dict[str, Any], category: uc.EventCategory
+    self, msg: str, msg_data: dict[str, Any], category: uc.EventCategory
 ) -> None:
     """
     Send the given event-message to all connected WebSocket clients.
@@ -380,6 +408,7 @@ async def patched_broadcast_ws_event(
         except websockets.exceptions.WebSocketException:
             pass
 
+
 async def main():
     """Start the Remote Two integration driver."""
     logging.basicConfig()
@@ -392,7 +421,9 @@ async def main():
     logging.getLogger("config").setLevel(level)
     logging.getLogger("setup_flow").setLevel(level)
 
-    config.devices = config.Devices(api.config_dir_path, on_device_added, on_device_removed)
+    config.devices = config.Devices(
+        api.config_dir_path, on_device_added, on_device_removed
+    )
     for device_config in config.devices.all():
         _configure_new_device(device_config, connect=False)
 

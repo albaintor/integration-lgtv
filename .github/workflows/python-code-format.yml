@@ -1,0 +1,52 @@
+name: Check Python code formatting
+
+on:
+  push:
+    paths:
+      - 'intg-lgtv/**'
+      - 'requirements.txt'
+      - 'test-requirements.txt'
+      - 'tests/**'
+      - '.github/**/*.yml'
+      - '.pylintrc'
+      - 'pyproject.toml'
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+
+    name: Check Python code formatting
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pip
+        run: |
+          python -m pip install --upgrade pip
+
+      - name: Install dependencies
+        run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f test-requirements.txt ]; then pip install -r test-requirements.txt; fi
+      - name: Analyzing the code with pylint
+        run: |
+          python -m pylint intg-lgtv
+      - name: Lint with flake8
+        run: |
+          python -m flake8 intg-lgtv --count --show-source --statistics
+      - name: Check code formatting with isort
+        run: |
+          python -m isort intg-lgtv/. --check --verbose
+      - name: Check code formatting with black
+        run: |
+          python -m black intg-lgtv --check --diff --verbose --line-length 120

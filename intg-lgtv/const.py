@@ -11,7 +11,8 @@ from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 
 LIVE_TV_APP_ID = "com.webos.app.livetv"
 
-LG_FEATURES = [Features.ON_OFF,
+LG_FEATURES = [
+    Features.ON_OFF,
     Features.TOGGLE,
     Features.VOLUME,
     Features.VOLUME_UP_DOWN,
@@ -40,7 +41,8 @@ LG_FEATURES = [Features.ON_OFF,
     Features.AUDIO_TRACK,
     Features.SUBTITLE,
     Features.RECORD,
-    Features.SETTINGS]
+    Features.SETTINGS,
+]
 
 WEBOSTV_EXCEPTIONS = (
     OSError,
@@ -52,5 +54,5 @@ WEBOSTV_EXCEPTIONS = (
     asyncio.CancelledError,
     TransportError,
     ProtocolError,
-    ServerTimeoutError
+    ServerTimeoutError,
 )
