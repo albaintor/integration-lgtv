@@ -57,6 +57,7 @@ async def on_r2_connect_cmd() -> None:
 @api.listens_to(ucapi.Events.DISCONNECT)
 async def on_r2_disconnect_cmd():
     """Disconnect all configured TVs when the Remote Two sends the disconnect command."""
+    # pylint: disable = W0212
     if len(api._clients) == 0:
         for device in _configured_lgtvs.values():
             # start background task
@@ -399,7 +400,7 @@ async def patched_broadcast_ws_event(
     # filter fields
     if _LOG.isEnabledFor(logging.DEBUG):
         data_log = json.dumps(data) if filter_log_msg_data(data) else data_dump
-
+    # pylint: disable = W0212
     for websocket in self._clients.copy():
         if _LOG.isEnabledFor(logging.DEBUG):
             _LOG.debug("[%s] ->: %s", websocket.remote_address, data_log)
@@ -437,6 +438,7 @@ async def main():
         # except WEBOSTV_EXCEPTIONS as ex:
         #     _LOG.debug("Could not connect to device, probably because it is starting with magic packet %s", ex)
     # Patched method
+    # pylint: disable = W0212
     IntegrationAPI._broadcast_ws_event = patched_broadcast_ws_event
     await api.init("driver.json", setup_flow.driver_setup_handler)
 

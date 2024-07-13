@@ -71,7 +71,7 @@ def get_best_family(*address):
         type=socket.SOCK_STREAM,
         flags=socket.AI_PASSIVE,
     )
-    family, type, proto, canonname, sockaddr = next(iter(infos))
+    family, _type, _proto, _canonname, sockaddr = next(iter(infos))
     return family, sockaddr
 
 
@@ -105,6 +105,7 @@ async def async_identify_lg_devices() -> List[Dict]:
                 device = evaluate_scpd_xml(url, res.text)
                 if device is not None:
                     devices.append(device)
+            # pylint: disable = W0718
             except Exception as ex:
                 _LOGGER.error("Error while discovering %s", ex)
 
@@ -162,6 +163,7 @@ async def async_send_ssdp_broadcast_ip(ip_addr: str) -> Set[str]:
         )
 
         return protocol.urls
+    # pylint: disable = W0718
     except Exception:
         return set()
 

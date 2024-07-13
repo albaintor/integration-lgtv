@@ -117,23 +117,24 @@ def cmd_wrapper(
             except asyncio.TimeoutError:
                 log_function("Timeout for reconnect, command won't be sent")
             else:
-                if obj._attr_available:
+                if obj.available:
                     try:
                         log_function(
                             "Trying again command %s : %r", func.__name__, obj.id
                         )
                         await func(obj, *args, **kwargs)
                         return ucapi.StatusCodes.OK
-                    except (TransportError, ProtocolError, ServerTimeoutError) as exc:
+                    except (TransportError, ProtocolError, ServerTimeoutError) as ex:
                         log_function(
                             "Error calling %s on entity %s: %r trying to reconnect",
                             func.__name__,
                             obj.id,
-                            exc,
+                            ex,
                         )
             # If TV is off, we expect calls to fail.
             # await obj.event_loop.create_task(obj.connect())
             return ucapi.StatusCodes.BAD_REQUEST
+        # pylint: disable = W0718
         except Exception:
             _LOG.error("Unknown error %s", func.__name__)
 
@@ -146,7 +147,6 @@ class LGDevice:
     def __init__(
         self,
         device_config: LGConfigDevice,
-        timeout: float = DEFAULT_TIMEOUT,
         loop: AbstractEventLoop | None = None,
     ):
         """Create instance with given IP or hostname of AVR."""
@@ -260,6 +260,7 @@ class LGDevice:
 
     async def _update_states(self) -> None:
         """Update entity state attributes."""
+        # pylint: disable = R0915
         updated_data = {}
         if not self._sources:
             try:
@@ -268,6 +269,7 @@ class LGDevice:
                 await self._tv.set_inputs_state(sources)
                 await self._tv.set_apps_state(await self._tv.get_apps())
                 await self._tv.set_current_app_state(await self._tv.get_current_app())
+            # pylint: disable = W0718
             except Exception:
                 pass
 
@@ -275,8 +277,10 @@ class LGDevice:
 
         # Bug on LG library where power_state not updated, force it
         try:
+            # pylint: disable = W0212
             self._tv._power_state = await self._tv.get_power_state()
             is_on = self._tv.is_on
+        # pylint: disable = W0718
         except Exception:
             is_on = False
 
@@ -385,6 +389,7 @@ class LGDevice:
 
     async def connect(self):
         """Connect to the device."""
+        # pylint: disable = R1702
         if self._connecting:  # TODO : to confirm or self.state != States.OFF:
             return
         try:
@@ -411,6 +416,7 @@ class LGDevice:
                                 try:
                                     await value["function"](*value["args"])
                                     del self._buffered_callbacks[timestamp]
+                                # pylint: disable = W0718
                                 except Exception:
                                     pass
                             else:
@@ -543,9 +549,10 @@ class LGDevice:
             # await self._tv.power_on()
             return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
-            _LOG.error("LG TV error power_on", ex)
+            _LOG.error("LG TV error power_on %s", ex)
+        # pylint: disable = W0718
         except Exception as ex:
-            _LOG.error("LG TV error power_on", ex)
+            _LOG.error("LG TV error power_on %s", ex)
         # return ucapi.StatusCodes.BAD_REQUEST
         return ucapi.StatusCodes.OK
 
@@ -561,7 +568,7 @@ class LGDevice:
                 if state_value == "Unknown":
                     # fallback to current app id for some older webos versions
                     # which don't support explicit power state
-                    if self._tv._current_app_id in [None, ""]:
+                    if self._tv.current_app_id in [None, ""]:
                         _LOG.debug("TV is already off [%s]", state)
                         is_off = True
                 elif state_value in [None, "Power Off", "Suspend", "Active Standby"]:
@@ -665,9 +672,10 @@ class LGDevice:
             _LOG.debug("LG TV set input: %s succeeded", source)
             return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
-            _LOG.error("LG TV error select_source", ex)
+            _LOG.error("LG TV error select_source %s", ex)
+        # pylint: disable = W0718
         except Exception as ex:
-            _LOG.error("LG TV unknown error select_source", ex)
+            _LOG.error("LG TV unknown error select_source %s", ex)
         return ucapi.StatusCodes.BAD_REQUEST
 
     async def select_source(
@@ -702,9 +710,10 @@ class LGDevice:
             await self.reconnect()
             return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
-            _LOG.error("LG TV error select_source", ex)
+            _LOG.error("LG TV error select_source %s", ex)
+        # pylint: disable = W0718
         except Exception as ex:
-            _LOG.error("LG TV unknown error select_source", ex)
+            _LOG.error("LG TV unknown error select_source %s", ex)
         return ucapi.StatusCodes.BAD_REQUEST
 
     @cmd_wrapper

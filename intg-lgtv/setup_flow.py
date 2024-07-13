@@ -29,6 +29,8 @@ from ucapi import (
 _LOG = logging.getLogger(__name__)
 
 
+# pylint: disable = W1405
+
 class SetupSteps(IntEnum):
     """Enumeration of setup steps to keep track of user data responses."""
 
@@ -90,8 +92,8 @@ async def driver_setup_handler(msg: SetupDriver) -> SetupAction:
     if isinstance(msg, UserDataResponse):
         _LOG.debug(msg)
         if (
-            _setup_step == SetupSteps.CONFIGURATION_MODE
-            and "action" in msg.input_values
+                _setup_step == SetupSteps.CONFIGURATION_MODE
+                and "action" in msg.input_values
         ):
             return await handle_configuration_mode(msg)
         if _setup_step == SetupSteps.DISCOVER and "address" in msg.input_values:
@@ -219,7 +221,7 @@ async def handle_driver_setup(msg: DriverSetupRequest) -> RequestUserInput | Set
 
 
 async def handle_configuration_mode(
-    msg: UserDataResponse,
+        msg: UserDataResponse,
 ) -> RequestUserInput | SetupComplete | SetupError:
     """
     Process user data response in a setup process.
@@ -268,7 +270,7 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
     :param msg: response data from the requested user data
     :return: the setup action on how to continue
     """
-    global _discovered_lg_tvs
+    # global _discovered_lg_tvs
     global _pairing_lg_tv
     global _setup_step
 

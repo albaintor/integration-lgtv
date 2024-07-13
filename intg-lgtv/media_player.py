@@ -67,7 +67,8 @@ class LGTVMediaPlayer(MediaPlayer):
                 "MAGNIFIER_ZOOM",  # Focus Zoom
                 "MYAPPS",  # Home Dashboard
                 "NETFLIX",
-                "PAUSE" "PLAY",
+                "PAUSE",
+                "PLAY",
                 "POWER",  # Power button
                 "PROGRAM",  # TV Guide
                 "RECENT",  # Home Dashboard - Recent Apps
@@ -98,6 +99,7 @@ class LGTVMediaPlayer(MediaPlayer):
         :param params: optional command parameters
         :return: status code of the command request
         """
+        # pylint: disable = R0915
         _LOG.info("Got %s command request: %s %s", self.id, cmd_id, params)
 
         if self._device is None:
