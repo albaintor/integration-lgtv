@@ -284,9 +284,7 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
             await device.connect()
             info = await device.get_system_info()
             model_name = info.get("modelName")
-            dropdown_items.append(
-                {"id": address, "label": {"en": f"{model_name} [{address}]"}}
-            )
+            dropdown_items.append({"id": address, "label": {"en": f"{model_name} [{address}]"}})
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("Cannot connect to manually entered address %s: %s", address, ex)
             return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
@@ -340,9 +338,7 @@ async def handle_device_choice(msg: UserDataResponse) -> SetupComplete | SetupEr
     :return: the setup action on how to continue: SetupComplete if a valid LG TV device was chosen.
     """
     host = msg.input_values["choice"]
-    _LOG.debug(
-        "Chosen LG TV: %s. Trying to connect and retrieve device information...", host
-    )
+    _LOG.debug("Chosen LG TV: %s. Trying to connect and retrieve device information...", host)
     try:
         # simple connection check
         device = WebOsClient(host)

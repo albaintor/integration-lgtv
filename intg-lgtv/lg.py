@@ -82,9 +82,7 @@ _P = ParamSpec("_P")
 
 def cmd_wrapper(
     func: Callable[Concatenate[_LGDeviceT, _P], Awaitable[ucapi.StatusCodes | None]],
-) -> Callable[
-    Concatenate[_LGDeviceT, _P], Coroutine[Any, Any, ucapi.StatusCodes | None]
-]:
+) -> Callable[Concatenate[_LGDeviceT, _P], Coroutine[Any, Any, ucapi.StatusCodes | None]]:
     """Catch command exceptions."""
 
     @wraps(func)

@@ -279,9 +279,7 @@ def _entities_from_device_id(device_id: str) -> list[str]:
     return [f"media_player.{device_id}"]
 
 
-def _configure_new_device(
-    device_config: config.LGConfigDevice, connect: bool = True
-) -> None:
+def _configure_new_device(device_config: config.LGConfigDevice, connect: bool = True) -> None:
     """
     Create and configure a new device.
 
@@ -320,9 +318,7 @@ def _configure_new_device(
             )
 
 
-def _register_available_entities(
-    device_config: config.LGConfigDevice, device: lg.LGDevice
-) -> None:
+def _register_available_entities(device_config: config.LGConfigDevice, device: lg.LGDevice) -> None:
     """
     Create entities for given receiver device and register them as available entities.
 
@@ -368,9 +364,7 @@ async def _async_remove(device: lg.LGDevice) -> None:
     device.events.remove_all_listeners()
 
 
-async def patched_broadcast_ws_event(
-    self, msg: str, msg_data: dict[str, Any], category: uc.EventCategory
-) -> None:
+async def patched_broadcast_ws_event(self, msg: str, msg_data: dict[str, Any], category: uc.EventCategory) -> None:
     """
     Send the given event-message to all connected WebSocket clients.
 
@@ -408,9 +402,7 @@ async def main():
     logging.getLogger("config").setLevel(level)
     logging.getLogger("setup_flow").setLevel(level)
 
-    config.devices = config.Devices(
-        api.config_dir_path, on_device_added, on_device_removed
-    )
+    config.devices = config.Devices(api.config_dir_path, on_device_added, on_device_removed)
     for device_config in config.devices.all():
         _configure_new_device(device_config, connect=False)
 

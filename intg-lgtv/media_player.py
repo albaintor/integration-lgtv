@@ -230,10 +230,7 @@ class LGTVMediaPlayer(MediaPlayer):
 
         if Attributes.SOURCE_LIST in update:
             if Attributes.SOURCE_LIST in self.attributes:
-                if (
-                    update[Attributes.SOURCE_LIST]
-                    != self.attributes[Attributes.SOURCE_LIST]
-                ):
+                if update[Attributes.SOURCE_LIST] != self.attributes[Attributes.SOURCE_LIST]:
                     attributes[Attributes.SOURCE_LIST] = update[Attributes.SOURCE_LIST]
 
         if Attributes.STATE in attributes:
