@@ -6,5 +6,4 @@ defusedxml~=0.7.1
 wakeonlan~=3.1.0
 aiohttp~=3.9.3
 ssdp~=1.3.0
-logging~=0.4.9.6
 websockets~=12.0
