@@ -11,7 +11,7 @@
     "de": "Steuere LG TVs mit Remote Two.",
     "fr": "Contrôler LG TVs avec Remote Two."
   },
-  "port": 8092,
+  "port": 9092,
   "developer": {
     "name": "Unfolded Circle ApS",
     "email": "hello@unfoldedcircle.com",
