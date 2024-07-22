@@ -1,17 +1,18 @@
 {
   "driver_id": "uc_lgtv_driver",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "min_core_api": "0.20.0",
   "name": {
     "en": "LG TV"
   },
   "icon":"custom:lg.png",
   "description": {
-    "en": "Control your LG TVs with Remote Two.",
-    "de": "Steuere LG TVs mit Remote Two.",
-    "fr": "Contrôler LG TVs avec Remote Two."
+    "en": "Control your LG TVs with Remote Two or Remote Three.",
+    "de": "Steuere LG TVs mit Remote Two oder Remote Three.",
+    "fr": "Contrôler LG TVs avec Remote Two ou Remote Three."
   },
   "port": 9092,
+  "device_discovery": true,
   "developer": {
     "name": "Unfolded Circle ApS",
     "email": "hello@unfoldedcircle.com",
@@ -44,5 +45,5 @@
       }
     ]
   },
-  "release_date": "2024-04-01"
+  "release_date": "2024-07-22"
 }
