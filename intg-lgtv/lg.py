@@ -7,7 +7,6 @@ This module implements the AVR AVR receiver communication of the Remote Two inte
 
 import asyncio
 import logging
-import os
 import time
 from asyncio import AbstractEventLoop, Lock
 from enum import IntEnum
@@ -519,6 +518,7 @@ class LGDevice:
     async def power_on(self) -> ucapi.StatusCodes:
         """Send power-on command to LG TV."""
         try:
+            # TODO : this does not work on internal integration but is necessary for external. To fix later
             # interface = os.getenv("UC_INTEGRATION_INTERFACE")
             interface = None
             if interface is None:
