@@ -1,6 +1,6 @@
 {
   "driver_id": "uc_lgtv_driver",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "min_core_api": "0.20.0",
   "name": {
     "en": "LG TV"
