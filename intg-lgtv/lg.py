@@ -519,7 +519,8 @@ class LGDevice:
     async def power_on(self) -> ucapi.StatusCodes:
         """Send power-on command to LG TV."""
         try:
-            interface = os.getenv("UC_INTEGRATION_INTERFACE")
+            # interface = os.getenv("UC_INTEGRATION_INTERFACE")
+            interface = None
             if interface is None:
                 interface = "0.0.0.0"
             _LOG.debug(
