@@ -1,9 +1,9 @@
 {
-  "driver_id": "uc_lgtv_driver",
-  "version": "1.0.3",
+  "driver_id": "lgwebos_driver",
+  "version": "1.0.4",
   "min_core_api": "0.20.0",
   "name": {
-    "en": "LG TV"
+    "en": "LG WebOS"
   },
   "icon":"custom:lg.png",
   "description": {
@@ -12,11 +12,11 @@
     "fr": "Contrôler LG TVs avec Remote Two ou Remote Three."
   },
   "developer": {
-    "name": "Unfolded Circle ApS",
-    "email": "hello@unfoldedcircle.com",
-    "url": "https://www.unfoldedcircle.com"
+    "name": "Albaintor",
+    "email": "albaintor@github.com",
+    "url": "https://github.com/albaintor"
   },
-  "home_page": "https://www.unfoldedcircle.com",
+  "home_page": "https://github.com/albaintor/integration-lgtv",
   "setup_data_schema": {
     "title": {
       "en": "Integration setup",
