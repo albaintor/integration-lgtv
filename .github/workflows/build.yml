@@ -30,7 +30,8 @@ jobs:
       - name: Fetch all tags to determine version
         run: |
           git fetch origin +refs/tags/*:refs/tags/*
-          echo "VERSION=$(git describe --match "v[0-9]*" --tags HEAD --always)" >> $GITHUB_ENV
+          echo VERSION="v$(jq .version -r driver.json)" >> $GITHUB_ENV
+        # echo "VERSION=$(git describe --match "v[0-9]*" --tags HEAD --always)" >> $GITHUB_ENV
 
       - name: Verify driver.json version for release build
         if: contains(github.ref, 'tags/v')
@@ -58,9 +59,11 @@ jobs:
 
       - name: Add version
         run: |
+          DRIVER_VERSION="v$(jq .version -r driver.json)"
           mkdir -p artifacts/bin
           cd artifacts
-          echo ${{ env.VERSION }} > version.txt
+          # echo ${{ env.VERSION }} > version.txt
+          echo $DRIVER_VERSION > version.txt
           
       - name: Prepare artifacts
         shell: bash
