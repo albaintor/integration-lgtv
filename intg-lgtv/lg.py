@@ -27,7 +27,7 @@ import ucapi
 from aiohttp import ServerTimeoutError
 from aiowebostv import WebOsClient, WebOsTvCommandError, endpoints
 from config import LGConfigDevice
-from const import LG_FEATURES, LIVE_TV_APP_ID, WEBOSTV_EXCEPTIONS
+from const import LG_FEATURES, LIVE_TV_APP_ID, WEBOSTV_EXCEPTIONS, States
 from httpx import TransportError
 from pyee import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr
@@ -55,18 +55,6 @@ class Events(IntEnum):
     # IP_ADDRESS_CHANGED = 6
 
 
-class States(IntEnum):
-    """State of a connected AVR."""
-
-    UNKNOWN = 0
-    UNAVAILABLE = 1
-    OFF = 2
-    ON = 3
-    PLAYING = 4
-    PAUSED = 5
-    STOPPED = 6
-
-
 LG_STATE_MAPPING = {
     States.OFF: MediaStates.OFF,
     States.ON: MediaStates.ON,
@@ -80,7 +68,7 @@ _P = ParamSpec("_P")
 
 
 def cmd_wrapper(
-    func: Callable[Concatenate[_LGDeviceT, _P], Awaitable[ucapi.StatusCodes | None]],
+        func: Callable[Concatenate[_LGDeviceT, _P], Awaitable[ucapi.StatusCodes | None]],
 ) -> Callable[Concatenate[_LGDeviceT, _P], Coroutine[Any, Any, ucapi.StatusCodes | None]]:
     """Catch command exceptions."""
 
@@ -139,9 +127,9 @@ class LGDevice:
     """Representing a LG TV Device."""
 
     def __init__(
-        self,
-        device_config: LGConfigDevice,
-        loop: AbstractEventLoop | None = None,
+            self,
+            device_config: LGConfigDevice,
+            loop: AbstractEventLoop | None = None,
     ):
         """Create instance with given IP or hostname of AVR."""
         # identifier from configuration
@@ -240,7 +228,7 @@ class LGDevice:
                 self._sources["Live TV"] = app
 
         if (
-            not current_source_list and self._sources
+                not current_source_list and self._sources
         ):  # or (self._sources and list(self._sources.keys()).sort() != list(current_source_list).sort()):
             _LOG.debug("Source list %s", self._sources)
             updated_data[MediaAttr.SOURCE_LIST] = sorted(self._sources)
@@ -514,6 +502,30 @@ class LGDevice:
     def media_type(self) -> MediaType:
         """Current media type."""
         return self._media_type
+
+    async def power_toggle(self) -> ucapi.StatusCodes:
+        is_off = False
+        state = None
+        try:
+            async with asyncio.timeout(5):
+                state = await self._tv.get_power_state()
+                state_value = state.get("state", None)
+                if state_value == "Unknown":
+                    # fallback to current app id for some older webos versions
+                    # which don't support explicit power state
+                    if self._tv.current_app_id in [None, ""]:
+                        _LOG.debug("TV is already off [%s]", state)
+                        is_off = True
+                elif state_value in [None, "Power Off", "Suspend", "Active Standby"]:
+                    _LOG.debug("TV is already off [%s]", state)
+                    is_off = True
+        except Exception:
+            pass
+        if is_off:
+            await self.power_on()
+        else:
+            await self.power_off()
+        return ucapi.StatusCodes.OK
 
     async def power_on(self) -> ucapi.StatusCodes:
         """Send power-on command to LG TV."""

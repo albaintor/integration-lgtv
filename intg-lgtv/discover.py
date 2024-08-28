@@ -16,6 +16,7 @@ import httpx
 # import netifaces
 from defusedxml import DefusedXmlException
 from defusedxml.ElementTree import ParseError, fromstring
+from httpx import Response
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,11 +26,12 @@ SSDP_MX = 2
 SSDP_TARGET = (SSDP_ADDR, SSDP_PORT)
 SSDP_ST_1 = "ssdp:all"
 SSDP_ST_2 = "upnp:rootdevice"
-SSDP_ST_3 = "urn:schemas-upnp-org:device:Basic:1"
+SSDP_ST_4 = "urn:schemas-upnp-org:device:Basic:1"
+SSDP_ST_3 = "urn:lge-com:service:webos-second-screen:1"
 
-SSDP_ST_LIST = (SSDP_ST_1, SSDP_ST_2, SSDP_ST_3)
+SSDP_ST_LIST = (SSDP_ST_1, SSDP_ST_2, SSDP_ST_3, SSDP_ST_4)
 
-SSDP_LOCATION_PATTERN = re.compile(r"(?<=Location:\s).+?(?=\r)")
+SSDP_LOCATION_PATTERN = re.compile(r"(?<=Location:\s).+?(?=\r)", re.IGNORECASE)
 
 SCPD_XMLNS = "{urn:schemas-upnp-org:device-1-0}"
 SCPD_DEVICE = f"{SCPD_XMLNS}device"
@@ -41,9 +43,12 @@ SCPD_SERIALNUMBER = f"{SCPD_XMLNS}serialNumber"
 SCPD_FRIENDLYNAME = f"{SCPD_XMLNS}friendlyName"
 SCPD_PRESENTATIONURL = f"{SCPD_XMLNS}presentationURL"
 
-SUPPORTED_DEVICETYPES = ["urn:schemas-upnp-org:device:Basic:1"]
+SUPPORTED_DEVICETYPES = ["urn:schemas-upnp-org:device:Basic:1",
+                         "urn:dial-multiscreen-org:service:dial:1",
+                         "urn:lge:device:tv:1",
+                         "urn:schemas-upnp-org:device:MediaRenderer:1"]
 
-SUPPORTED_MANUFACTURERS = ["LG Electronics"]
+SUPPORTED_MANUFACTURERS = ["LG Electronics", "LG"]
 
 
 def ssdp_request(ssdp_st: str, ssdp_mx: float = SSDP_MX) -> bytes:
@@ -102,14 +107,15 @@ async def async_identify_lg_devices() -> List[Dict]:
             continue
         else:
             try:
-                device = evaluate_scpd_xml(url, res.text)
+                device = evaluate_scpd_xml(url, res)
                 if device is not None:
                     devices.append(device)
             # pylint: disable = W0718
             except Exception as ex:
                 _LOGGER.error("Error while discovering %s", ex)
 
-    return devices
+    unique_devices = list({v['host']: v for v in devices}.values())
+    return unique_devices
 
 
 async def async_send_ssdp_broadcast() -> Set[str]:
@@ -119,14 +125,15 @@ async def async_send_ssdp_broadcast() -> Set[str]:
     Returns a set of SCPD XML resource urls for all discovered devices.
     """
     # Send up to three different broadcast messages
-    # ips = get_local_ips()
+    ips = get_local_ips()
     # Prepare output of responding devices
     urls = set()
 
     tasks = []
-    # for ip_addr in ips:
-    #     tasks.append(async_send_ssdp_broadcast_ip(ip_addr))
+    for ip_addr in ips:
+        tasks.append(async_send_ssdp_broadcast_ip(ip_addr))
     tasks.append(async_send_ssdp_broadcast_ip(""))
+    tasks.append(async_send_ssdp_broadcast_ip("0.0.0.0"))
     results = await asyncio.gather(*tasks)
 
     for result in results:
@@ -146,7 +153,7 @@ async def async_send_ssdp_broadcast_ip(ip_addr: str) -> Set[str]:
 
         # Prepare socket
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-        # sock.bind((ip_addr, 0))
+        sock.bind((ip_addr, 0))
 
         # Get asyncio loop
         loop = asyncio.get_event_loop()
@@ -166,7 +173,7 @@ async def async_send_ssdp_broadcast_ip(ip_addr: str) -> Set[str]:
         return set()
 
 
-def evaluate_scpd_xml(url: str, body: str) -> Optional[Dict]:
+def evaluate_scpd_xml(url: str, response: Response) -> Optional[Dict]:
     """
     Evaluate SCPD XML.
 
@@ -174,11 +181,12 @@ def evaluate_scpd_xml(url: str, body: str) -> Optional[Dict]:
     "presentationURL" if a Orange TV device was found and "None" if not.
     """
     try:
-        root = fromstring(body)
+        root = fromstring(response.text)
         # Look for manufacturer "SoftAtHome" in response.
         # Using "try" in case tags are not available in XML
         device = {}
         device_xml = None
+
         device["manufacturer"] = root.find(SCPD_DEVICE).find(SCPD_MANUFACTURER).text
 
         _LOGGER.debug("Device %s has manufacturer %s", url, device["manufacturer"])
@@ -207,14 +215,7 @@ def evaluate_scpd_xml(url: str, body: str) -> Optional[Dict]:
         device["serialNumber"] = device_xml.find(SCPD_SERIALNUMBER).text
         device["friendlyName"] = device_xml.find(SCPD_FRIENDLYNAME).text
         return device
-    except (
-        AttributeError,
-        ValueError,
-        ET.ParseError,
-        DefusedXmlException,
-        ParseError,
-        UnicodeDecodeError,
-    ) as err:
+    except Exception as err:
         _LOGGER.error("Error occurred during evaluation of SCPD XML from URI %s: %s", url, err)
         return None
 

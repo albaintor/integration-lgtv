@@ -43,7 +43,7 @@ class SetupSteps(IntEnum):
 
 _setup_step = SetupSteps.INIT
 _cfg_add_device: bool = False
-_discovered_lg_tvs: list[dict[str, str]] = []
+_discovered_devices: list[dict[str, str]] = []
 _pairing_lg_tv: WebOsClient | None = None
 _user_input_discovery = RequestUserInput(
     {"en": "Setup mode", "de": "Setup Modus"},
@@ -264,9 +264,9 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
     :param msg: response data from the requested user data
     :return: the setup action on how to continue
     """
-    # global _discovered_lg_tvs
     global _pairing_lg_tv
     global _setup_step
+    global _discovered_devices
 
     # clear all configured devices and any previous pairing attempt
     if _pairing_lg_tv:
@@ -290,8 +290,8 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
             return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
     else:
         _LOG.debug("Starting auto-discovery driver setup")
-        devices = await discover.async_identify_lg_devices()
-        for device in devices:
+        _discovered_devices = await discover.async_identify_lg_devices()
+        for device in _discovered_devices:
             device_data = {
                 "id": device.get("host"),
                 "label": {"en": f"{device.get('friendlyName')} [{device.get('host')}]"},
@@ -337,7 +337,16 @@ async def handle_device_choice(msg: UserDataResponse) -> SetupComplete | SetupEr
     :param msg: response data from the requested user data
     :return: the setup action on how to continue: SetupComplete if a valid LG TV device was chosen.
     """
+    global _discovered_devices
+    discovered_device = None
     host = msg.input_values["choice"]
+
+    if _discovered_devices:
+        for device in _discovered_devices:
+            if device.get("host", None) == host:
+                discovered_device = device
+                break
+
     _LOG.debug("Chosen LG TV: %s. Trying to connect and retrieve device information...", host)
     try:
         # simple connection check
@@ -346,6 +355,8 @@ async def handle_device_choice(msg: UserDataResponse) -> SetupComplete | SetupEr
         key = device.client_key
         info = await device.get_system_info()
         model_name = info.get("modelName")
+        if discovered_device and discovered_device.get("friendlyName"):
+            model_name = discovered_device.get("friendlyName")
         # serial_number = info.get("serialNumber")
         info = await device.get_software_info()
         mac_address = info.get("device_id")

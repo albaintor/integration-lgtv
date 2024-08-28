@@ -19,6 +19,7 @@ from ucapi.media_player import (
     Options,
     States,
 )
+from const import LG_SIMPLE_COMMANDS
 
 _LOG = logging.getLogger(__name__)
 
@@ -49,32 +50,7 @@ class LGTVMediaPlayer(MediaPlayer):
         #     attributes[Attributes.SOUND_MODE] = ""
         #     attributes[Attributes.SOUND_MODE_LIST] = []
         options = {
-            Options.SIMPLE_COMMANDS: [
-                "ASTERISK",
-                "3D_MODE",
-                "AD",  # Audio Description toggle
-                "AMAZON",
-                "ASPECT_RATIO",  # Quick Settings Menu - Aspect Ratio
-                "CC",  # Closed Captions
-                "DASH",  # Live TV
-                "EXIT",
-                "GUIDE",
-                "INPUT_HUB",  # Home Dashboard
-                "LIST",  # Live TV
-                "LIVE_ZOOM",  # Live Zoom
-                "MAGNIFIER_ZOOM",  # Focus Zoom
-                "MYAPPS",  # Home Dashboard
-                "NETFLIX",
-                "PAUSE",
-                "PLAY",
-                "POWER",  # Power button
-                "PROGRAM",  # TV Guide
-                "RECENT",  # Home Dashboard - Recent Apps
-                "SAP",  # Multi Audio Setting
-                "SCREEN_REMOTE",  # Screen Remote
-                "TELETEXT",
-                "TEXTOPTION",
-            ]
+            Options.SIMPLE_COMMANDS: LG_SIMPLE_COMMANDS
         }
         super().__init__(
             entity_id,
