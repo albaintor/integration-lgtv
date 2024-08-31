@@ -25,7 +25,7 @@ from ucapi import (
     SetupError,
     UserDataResponse,
 )
-from getmac import get_mac_address
+from getmac.getmac import get_mac_address
 
 _LOG = logging.getLogger(__name__)
 
