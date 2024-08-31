@@ -155,7 +155,7 @@ class LGDevice:
         self._media_title = ""
         self._media_image_url = ""
         self._attr_state = States.OFF
-        self._mac_address = self.id
+        self._mac_address = self._device_config.mac_address
         self._connect_task = None
         self._buffered_callbacks = {}
         self._connect_lock = Lock()
@@ -541,6 +541,14 @@ class LGDevice:
                 interface,
             )
             send_magic_packet(self._mac_address, interface=interface)
+            if self._device_config.mac_address2:
+                _LOG.debug(
+                    "LG TV power on : sending magic packet to other %s on interface %s",
+                    self._device_config.mac_address2,
+                    interface,
+                )
+                send_magic_packet(self._device_config.mac_address2, interface=interface)
+
             # await asyncio.sleep(10)
             # await self._tv.power_on()
             return ucapi.StatusCodes.OK

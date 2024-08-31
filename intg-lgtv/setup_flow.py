@@ -25,6 +25,7 @@ from ucapi import (
     SetupError,
     UserDataResponse,
 )
+from getmac import get_mac_address
 
 _LOG = logging.getLogger(__name__)
 
@@ -364,6 +365,14 @@ async def handle_device_choice(msg: UserDataResponse) -> SetupComplete | SetupEr
         _LOG.error("Cannot connect to %s: %s", host, ex)
         return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
 
+    mac_address2 = None
+    try:
+        mac_address2 = get_mac_address(host)
+        if mac_address2 == mac_address:
+            mac_address2 = None
+    except Exception:
+        pass
+
     assert device
     assert mac_address
     assert model_name
@@ -376,12 +385,12 @@ async def handle_device_choice(msg: UserDataResponse) -> SetupComplete | SetupEr
         )
         return SetupError(error_type=IntegrationSetupError.OTHER)
 
-    config.devices.add(LGConfigDevice(id=unique_id, name=model_name, address=host, key=key))
-    # triggers SonyLG TV instance creation
+    config.devices.add(LGConfigDevice(id=unique_id, name=model_name, address=host, key=key,
+                                      mac_address=mac_address, mac_address2=mac_address2))
+    # triggers LG TV instance creation
     config.devices.store()
 
     # LG TV device connection will be triggered with subscribe_entities request
-
     await asyncio.sleep(1)
 
     _LOG.info("Setup successfully completed for %s (%s)", model_name, unique_id)

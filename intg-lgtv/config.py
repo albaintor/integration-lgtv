@@ -44,6 +44,8 @@ class LGConfigDevice:
     name: str
     address: str
     key: str
+    mac_address: str
+    mac_address2: str | None
 
 
 class _EnhancedJSONEncoder(json.JSONEncoder):
@@ -110,6 +112,8 @@ class Devices:
                 item.address = device.address
                 item.name = device.name
                 item.key = device.key
+                item.mac_address = item.mac_address
+                item.mac_address2 = item.mac_address2
                 return self.store()
         return False
 
