@@ -29,7 +29,7 @@ from aiowebostv import WebOsClient, WebOsTvCommandError, endpoints
 from config import LGConfigDevice
 from const import LG_FEATURES, LIVE_TV_APP_ID, WEBOSTV_EXCEPTIONS, States
 from httpx import TransportError
-from pyee import AsyncIOEventEmitter
+from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr
 from ucapi.media_player import Features, MediaType
 from ucapi.media_player import States as MediaStates

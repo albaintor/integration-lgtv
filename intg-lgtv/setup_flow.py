@@ -27,7 +27,6 @@ from ucapi import (
     SetupError,
     UserDataResponse,
 )
-import scapy
 
 _LOG = logging.getLogger(__name__)
 

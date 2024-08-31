@@ -1,4 +1,4 @@
-pyee>=11.1.0
+pyee~=12.0.0
 aiowebostv~=0.4.2
 ucapi~=0.2.0
 httpx~=0.27.0
