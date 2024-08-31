@@ -9,6 +9,8 @@ import asyncio
 import logging
 from enum import IntEnum
 
+from scapy.layers.l2 import getmacbyip
+
 import config
 import discover
 from aiowebostv import WebOsClient
@@ -25,7 +27,7 @@ from ucapi import (
     SetupError,
     UserDataResponse,
 )
-from getmac.getmac import get_mac_address
+import scapy
 
 _LOG = logging.getLogger(__name__)
 
@@ -367,7 +369,7 @@ async def handle_device_choice(msg: UserDataResponse) -> SetupComplete | SetupEr
 
     mac_address2 = None
     try:
-        mac_address2 = get_mac_address(host)
+        mac_address2 = getmacbyip(host)
         if mac_address2 == mac_address:
             mac_address2 = None
     except Exception:
