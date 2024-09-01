@@ -96,7 +96,7 @@ class Devices:
             _LOG.debug("Existing config %s, updating it %s", atv.id, atv)
             self.update(atv)
         else:
-            _LOG.debug("Adding new config %", atv)
+            _LOG.debug("Adding new config %s", atv)
             self._config.append(atv)
         if self._add_handler is not None:
             self._add_handler(atv)
@@ -116,8 +116,8 @@ class Devices:
                 item.address = device.address
                 item.name = device.name
                 item.key = device.key
-                item.mac_address = item.mac_address
-                item.mac_address2 = item.mac_address2
+                item.mac_address = device.mac_address
+                item.mac_address2 = device.mac_address2
                 return self.store()
         return False
 
