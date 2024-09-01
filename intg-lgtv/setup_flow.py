@@ -409,6 +409,7 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
     mac_address2 = None
     try:
         mac_address2 = getmac.get_mac_address(ip=host)
+        _LOG.debug("Result of extraction of mac address from IP %s : %s", host, mac_address2)
         if mac_address2 == mac_address or mac_address2 == "ff:ff:ff:ff:ff:ff":
             mac_address2 = None
     except Exception:
