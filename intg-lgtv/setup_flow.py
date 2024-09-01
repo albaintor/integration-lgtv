@@ -9,7 +9,7 @@ import asyncio
 import logging
 from enum import IntEnum
 
-from scapy.layers.l2 import getmacbyip
+from getmac import getmac
 
 import config
 import discover
@@ -376,8 +376,8 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
 
     mac_address2 = None
     try:
-        mac_address2 = getmacbyip(host)
-        if mac_address2 == mac_address:
+        mac_address2 = getmac.get_mac_address(host)
+        if mac_address2 == mac_address or mac_address2 == "ff:ff:ff:ff:ff:ff":
             mac_address2 = None
     except Exception:
         pass
@@ -389,6 +389,21 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
     _setup_step = SetupSteps.ADDITIONAL_SETTINGS
 
     additional_fields = [
+        {
+            "id": "info",
+            "label": {
+                "en": "Additional settings",
+                "fr": "Paramètres supplémentaires",
+            },
+            "field": {
+                "label": {
+                    "value": {
+                        "en": "Mac address is necessary to turn on the TV, check the displayed value",
+                        "fr": "L'adresse mac est nécessaire pour allumer la TV, vérifiez la valeur affichée",
+                    }
+                }
+            },
+        },
         {
             "field": {"text": {"value": mac_address}},
             "id": "mac_address",
@@ -405,8 +420,8 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
         )
     return RequestUserInput(
         title={
-            "en": "Additional settings (mac address is necessary to turn on the TV, check the displayed value)",
-            "fr": "Paramètres supplémentaires (l'adresse mac est nécessaire pour allumer la TV, vérifiez la valeur affichée)",
+            "en": "Additional settings",
+            "fr": "Paramètres supplémentaires",
         },
         settings=additional_fields
     )
