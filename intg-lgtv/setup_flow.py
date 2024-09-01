@@ -366,6 +366,7 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
         ],
     )
 
+
 async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | SetupError:
     """
     Process user data response in a setup process.
@@ -474,6 +475,7 @@ async def handle_additional_settings(msg: UserDataResponse) -> SetupComplete | S
     _config_device.mac_address = mac_address
     _config_device.mac_address2 = mac_address2
 
+    _LOG.info("Setup updated settings %s", _config_device)
     config.devices.add_or_update(_config_device)
     # triggers LG TV instance creation
     config.devices.store()

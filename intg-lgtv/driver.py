@@ -322,6 +322,7 @@ def _configure_new_device(device_config: config.LGConfigDevice, connect: bool = 
     """
     # the device may be already configured if the user changed settings of existing device
     if device_config.id in _configured_devices:
+        _LOG.debug("Existing config device updated, update the running device %s", device_config)
         device = _configured_devices[device_config.id]
         device.update_config(device_config)
     else:

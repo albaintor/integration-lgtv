@@ -93,8 +93,10 @@ class Devices:
     def add_or_update(self, atv: LGConfigDevice) -> None:
         """Add a new configured device."""
         if self.contains(atv.id):
+            _LOG.debug("Existing config %s, updating it %s", atv.id, atv)
             self.update(atv)
         else:
+            _LOG.debug("Adding new config %", atv)
             self._config.append(atv)
         if self._add_handler is not None:
             self._add_handler(atv)

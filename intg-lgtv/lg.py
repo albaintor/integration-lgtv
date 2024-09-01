@@ -155,7 +155,6 @@ class LGDevice:
         self._media_title = ""
         self._media_image_url = ""
         self._attr_state = States.OFF
-        self._mac_address = self._device_config.mac_address
         self._connect_task = None
         self._buffered_callbacks = {}
         self._connect_lock = Lock()
@@ -165,7 +164,6 @@ class LGDevice:
 
     def update_config(self, device_config: LGConfigDevice):
         self._device_config = device_config
-        self._mac_address = device_config.mac_address
 
     async def async_activate_websocket(self):
         """Activate websocket for listening if wanted. the websocket has to be recreated when the device goes off."""
@@ -379,7 +377,7 @@ class LGDevice:
             self._tv: WebOsClient = WebOsClient(host=self._device_config.address, client_key=self._device_config.key)
             await self._tv.connect()
             await self._update_states()
-            if not self._mac_address:
+            if not self._device_config.mac_address:
                 await self._update_system()
             await self.async_activate_websocket()
             self._attr_available = True
@@ -425,7 +423,7 @@ class LGDevice:
         self._model_name = info.get("modelName")
         self._serial_number = info.get("serialNumber")
         info = await self._tv.get_software_info()
-        self._mac_address = info.get("device_id")
+        self._device_config.mac_address = info.get("device_id")
 
     async def disconnect(self):
         """Disconnect from TV."""
@@ -541,10 +539,10 @@ class LGDevice:
                 interface = "0.0.0.0"
             _LOG.debug(
                 "LG TV power on : sending magic packet to %s on interface %s",
-                self._mac_address,
+                self._device_config.mac_address,
                 interface,
             )
-            send_magic_packet(self._mac_address, interface=interface)
+            send_magic_packet(self._device_config.mac_address, interface=interface)
             if self._device_config.mac_address2:
                 _LOG.debug(
                     "LG TV power on : sending magic packet to other %s on interface %s",
