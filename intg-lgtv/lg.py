@@ -163,6 +163,10 @@ class LGDevice:
 
         _LOG.debug("LG TV created: %s", device_config.address)
 
+    def update_config(self, device_config: LGConfigDevice):
+        self._device_config = device_config
+        self._mac_address = device_config.mac_address
+
     async def async_activate_websocket(self):
         """Activate websocket for listening if wanted. the websocket has to be recreated when the device goes off."""
         _LOG.info("LG TV Activating websocket connection")

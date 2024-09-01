@@ -320,9 +320,10 @@ def _configure_new_device(device_config: config.LGConfigDevice, connect: bool = 
     :param device: the receiver configuration.
     :param connect: True: start connection to receiver.
     """
-    # the device should not yet be configured, but better be safe
+    # the device may be already configured if the user changed settings of existing device
     if device_config.id in _configured_devices:
         device = _configured_devices[device_config.id]
+        device.update_config(device_config)
     else:
         device = lg.LGDevice(device_config, loop=_LOOP)
 

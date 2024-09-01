@@ -38,7 +38,7 @@ def device_from_entity_id(entity_id: str) -> str | None:
 
 @dataclass
 class LGConfigDevice:
-    """Sony device configuration."""
+    """Device configuration."""
 
     id: str
     name: str
@@ -58,7 +58,7 @@ class _EnhancedJSONEncoder(json.JSONEncoder):
 
 
 class Devices:
-    """Integration driver configuration class. Manages all configured Sony devices."""
+    """Integration driver configuration class. Manages all configured devices."""
 
     def __init__(self, data_path: str, add_handler, remove_handler):
         """
@@ -90,10 +90,12 @@ class Devices:
                 return True
         return False
 
-    def add(self, atv: LGConfigDevice) -> None:
-        """Add a new configured Sony device."""
-        # TODO duplicate check
-        self._config.append(atv)
+    def add_or_update(self, atv: LGConfigDevice) -> None:
+        """Add a new configured device."""
+        if self.contains(atv.id):
+            self.update(atv)
+        else:
+            self._config.append(atv)
         if self._add_handler is not None:
             self._add_handler(atv)
 
@@ -106,7 +108,7 @@ class Devices:
         return None
 
     def update(self, device: LGConfigDevice) -> bool:
-        """Update a configured Sony device and persist configuration."""
+        """Update a configured device and persist configuration."""
         for item in self._config:
             if item.id == device.id:
                 item.address = device.address

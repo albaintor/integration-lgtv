@@ -160,6 +160,15 @@ async def handle_driver_setup(msg: DriverSetupRequest) -> RequestUserInput | Set
         if dropdown_devices:
             dropdown_actions.append(
                 {
+                    "id": "configure",
+                    "label": {
+                        "en": "Configure selected device",
+                        "fr": "Configurer l'appareil sélectionné",
+                    },
+                },
+            )
+            dropdown_actions.append(
+                {
                     "id": "remove",
                     "label": {
                         "en": "Delete selected device",
@@ -234,6 +243,7 @@ async def handle_configuration_mode(msg: UserDataResponse) -> RequestUserInput |
     """
     global _setup_step
     global _cfg_add_device
+    global _config_device
 
     action = msg.input_values["action"]
 
@@ -250,6 +260,13 @@ async def handle_configuration_mode(msg: UserDataResponse) -> RequestUserInput |
                 return SetupError(error_type=IntegrationSetupError.OTHER)
             config.devices.store()
             return SetupComplete()
+        case "configure":
+            choice = msg.input_values["choice"]
+            if not choice in config.devices.contains(choice):
+                _LOG.warning("Could not configure existing device from configuration: %s", choice)
+                return SetupError(error_type=IntegrationSetupError.OTHER)
+            _config_device = config.devices.get(choice)
+            return get_additional_settings(_config_device)
         case "reset":
             config.devices.clear()  # triggers device instance removal
         case _:
@@ -318,6 +335,21 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
         },
         [
             {
+                "id": "info",
+                "label": {
+                    "en": "Please choose your LG TV",
+                    "fr": "Sélectionnez votre TV LG",
+                },
+                "field": {
+                    "label": {
+                        "value": {
+                            "en": "After clicking next you may be prompted to confirm pairing on your TV",
+                            "fr": "Après avoir cliqué sur suivant, un message de confirmation d'apparairage peut s'afficher sur la TV",
+                        }
+                    }
+                },
+            },
+            {
                 "field": {
                     "dropdown": {
                         "value": dropdown_items[0]["id"],
@@ -333,7 +365,6 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
             }
         ],
     )
-
 
 async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | SetupError:
     """
@@ -386,8 +417,12 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
     _config_device = LGConfigDevice(id=unique_id, name=model_name, address=host, key=key,
                                     mac_address=mac_address, mac_address2=mac_address2)
 
-    _setup_step = SetupSteps.ADDITIONAL_SETTINGS
+    return get_additional_settings(_config_device)
 
+
+def get_additional_settings(config_device: LGConfigDevice) -> RequestUserInput:
+    global _setup_step
+    _setup_step = SetupSteps.ADDITIONAL_SETTINGS
     additional_fields = [
         {
             "id": "info",
@@ -405,15 +440,15 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
             },
         },
         {
-            "field": {"text": {"value": mac_address}},
+            "field": {"text": {"value": config_device.mac_address}},
             "id": "mac_address",
             "label": {"en": "Mac address", "de": "Mac address", "fr": "Adresse Mac"},
         }
     ]
-    if mac_address2:
+    if config_device.mac_address2:
         additional_fields.append(
             {
-                "field": {"text": {"value": mac_address2}},
+                "field": {"text": {"value": config_device.mac_address2}},
                 "id": "mac_address2",
                 "label": {"en": "Second mac address", "fr": "Seconde adresse Mac"},
             }
@@ -439,7 +474,7 @@ async def handle_additional_settings(msg: UserDataResponse) -> SetupComplete | S
     _config_device.mac_address = mac_address
     _config_device.mac_address2 = mac_address2
 
-    config.devices.add(_config_device)
+    config.devices.add_or_update(_config_device)
     # triggers LG TV instance creation
     config.devices.store()
 
