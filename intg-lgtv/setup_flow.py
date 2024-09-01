@@ -262,7 +262,7 @@ async def handle_configuration_mode(msg: UserDataResponse) -> RequestUserInput |
             return SetupComplete()
         case "configure":
             choice = msg.input_values["choice"]
-            if not choice in config.devices.contains(choice):
+            if not config.devices.contains(choice):
                 _LOG.warning("Could not configure existing device from configuration: %s", choice)
                 return SetupError(error_type=IntegrationSetupError.OTHER)
             _config_device = config.devices.get(choice)
