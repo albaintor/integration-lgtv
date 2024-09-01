@@ -41,12 +41,14 @@ class SetupSteps(IntEnum):
     CONFIGURATION_MODE = 1
     DISCOVER = 2
     DEVICE_CHOICE = 3
+    ADDITIONAL_SETTINGS = 4
 
 
 _setup_step = SetupSteps.INIT
 _cfg_add_device: bool = False
 _discovered_devices: list[dict[str, str]] = []
 _pairing_lg_tv: WebOsClient | None = None
+_config_device: LGConfigDevice | None = None
 _user_input_discovery = RequestUserInput(
     {"en": "Setup mode", "de": "Setup Modus"},
     [
@@ -100,6 +102,8 @@ async def driver_setup_handler(msg: SetupDriver) -> SetupAction:
             return await _handle_discovery(msg)
         if _setup_step == SetupSteps.DEVICE_CHOICE and "choice" in msg.input_values:
             return await handle_device_choice(msg)
+        if _setup_step == SetupSteps.ADDITIONAL_SETTINGS and "mac_address" in msg.input_values:
+            return await handle_additional_settings(msg)
         _LOG.error("No or invalid user response was received: %s", msg)
     elif isinstance(msg, AbortDriverSetup):
         _LOG.info("Setup was aborted with code: %s", msg.error)
@@ -287,6 +291,7 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
             info = await device.get_system_info()
             model_name = info.get("modelName")
             dropdown_items.append({"id": address, "label": {"en": f"{model_name} [{address}]"}})
+            await device.disconnect()
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("Cannot connect to manually entered address %s: %s", address, ex)
             return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
@@ -330,7 +335,7 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
     )
 
 
-async def handle_device_choice(msg: UserDataResponse) -> SetupComplete | SetupError:
+async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | SetupError:
     """
     Process user data response in a setup process.
 
@@ -340,6 +345,9 @@ async def handle_device_choice(msg: UserDataResponse) -> SetupComplete | SetupEr
     :return: the setup action on how to continue: SetupComplete if a valid LG TV device was chosen.
     """
     global _discovered_devices
+    global _pairing_lg_tv
+    global _config_device
+    global _setup_step
     discovered_device = None
     host = msg.input_values["choice"]
 
@@ -352,15 +360,15 @@ async def handle_device_choice(msg: UserDataResponse) -> SetupComplete | SetupEr
     _LOG.debug("Chosen LG TV: %s. Trying to connect and retrieve device information...", host)
     try:
         # simple connection check
-        device = WebOsClient(host)
-        await device.connect()
-        key = device.client_key
-        info = await device.get_system_info()
+        _pairing_lg_tv = WebOsClient(host)
+        await _pairing_lg_tv.connect()
+        key = _pairing_lg_tv.client_key
+        info = await _pairing_lg_tv.get_system_info()
         model_name = info.get("modelName")
         if discovered_device and discovered_device.get("friendlyName"):
             model_name = discovered_device.get("friendlyName")
         # serial_number = info.get("serialNumber")
-        info = await device.get_software_info()
+        info = await _pairing_lg_tv.get_software_info()
         mac_address = info.get("device_id")
     except WEBOSTV_EXCEPTIONS as ex:
         _LOG.error("Cannot connect to %s: %s", host, ex)
@@ -374,25 +382,57 @@ async def handle_device_choice(msg: UserDataResponse) -> SetupComplete | SetupEr
     except Exception:
         pass
 
-    assert device
-    assert mac_address
-    assert model_name
-
     unique_id = mac_address
-    if unique_id is None:
-        _LOG.error(
-            "Could not get mac address of host %s: required to create a unique device",
-            host,
-        )
-        return SetupError(error_type=IntegrationSetupError.OTHER)
+    _config_device = LGConfigDevice(id=unique_id, name=model_name, address=host, key=key,
+                                    mac_address=mac_address, mac_address2=mac_address2)
 
-    config.devices.add(LGConfigDevice(id=unique_id, name=model_name, address=host, key=key,
-                                      mac_address=mac_address, mac_address2=mac_address2))
+    _setup_step = SetupSteps.ADDITIONAL_SETTINGS
+
+    additional_fields = [
+        {
+            "field": {"text": {"value": mac_address}},
+            "id": "mac_address",
+            "label": {"en": "Mac address", "de": "Mac address", "fr": "Adresse Mac"},
+        }
+    ]
+    if mac_address2:
+        additional_fields.append(
+            {
+                "field": {"text": {"value": mac_address2}},
+                "id": "mac_address2",
+                "label": {"en": "Second mac address", "fr": "Seconde adresse Mac"},
+            }
+        )
+    return RequestUserInput(
+        title={
+            "en": "Additional settings (mac address is necessary to turn on the TV, check the displayed value)",
+            "fr": "Paramètres supplémentaires (l'adresse mac est nécessaire pour allumer la TV, vérifiez la valeur affichée)",
+        },
+        settings=additional_fields
+    )
+
+
+async def handle_additional_settings(msg: UserDataResponse) -> SetupComplete | SetupError:
+
+    global _config_device
+    global _pairing_lg_tv
+    mac_address = msg.input_values.get("mac_address", "")
+    mac_address2 = msg.input_values.get("mac_address2", None)
+    if mac_address2 == "":
+        mac_address2 = None
+
+    _config_device.mac_address = mac_address
+    _config_device.mac_address2 = mac_address2
+
+    config.devices.add(_config_device)
     # triggers LG TV instance creation
     config.devices.store()
 
+    if _pairing_lg_tv:
+        await _pairing_lg_tv.disconnect()
+        _pairing_lg_tv = None
+
     # LG TV device connection will be triggered with subscribe_entities request
     await asyncio.sleep(1)
-
-    _LOG.info("Setup successfully completed for %s (%s)", model_name, unique_id)
+    _LOG.info("Setup successfully completed for %s (%s)", _config_device.name, _config_device.id)
     return SetupComplete()
