@@ -543,6 +543,12 @@ class LGDevice:
                 interface,
             )
             send_magic_packet(self._device_config.mac_address, interface=interface)
+            send_magic_packet(self._device_config.mac_address)
+            try:
+                send_magic_packet(self._device_config.mac_address, ip_address="192.168.1.255", port=9)
+            except Exception as ex:
+                _LOG.error("LG TV error magic packet %s", ex)
+
             if self._device_config.mac_address2:
                 _LOG.debug(
                     "LG TV power on : sending magic packet to other %s on interface %s",
