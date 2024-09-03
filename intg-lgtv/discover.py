@@ -42,6 +42,8 @@ SCPD_MODELNAME = f"{SCPD_XMLNS}modelName"
 SCPD_SERIALNUMBER = f"{SCPD_XMLNS}serialNumber"
 SCPD_FRIENDLYNAME = f"{SCPD_XMLNS}friendlyName"
 SCPD_PRESENTATIONURL = f"{SCPD_XMLNS}presentationURL"
+SCPD_WIFIMAC = f"{SCPD_XMLNS}wifiMac"
+SCPD_WIREDMAC = f"{SCPD_XMLNS}wiredMac"
 
 SUPPORTED_DEVICETYPES = ["urn:schemas-upnp-org:device:Basic:1",
                          "urn:dial-multiscreen-org:service:dial:1",
@@ -114,8 +116,18 @@ async def async_identify_lg_devices() -> List[Dict]:
             except Exception as ex:
                 _LOGGER.error("Error while discovering %s", ex)
 
-    unique_devices = list({v['host']: v for v in devices}.values())
-    return unique_devices
+    unique_devices: dict[str, dict[str, any]] = {}
+    for device in devices:
+        unique_device = unique_devices.get(device.get("host"), None)
+        if not unique_device:
+            unique_devices[device.get("host")] = device
+            continue
+        if device.get("wiredMac"):
+            unique_device["wiredMac"] = device.get("wiredMac")
+        if device.get("wifiMac"):
+            unique_device["wifiMac"] = device.get("wifiMac")
+
+    return list(unique_devices.values())
 
 
 async def async_send_ssdp_broadcast() -> Set[str]:
@@ -214,6 +226,12 @@ def evaluate_scpd_xml(url: str, response: Response) -> Optional[Dict]:
         device["modelName"] = device_xml.find(SCPD_MODELNAME).text
         device["serialNumber"] = device_xml.find(SCPD_SERIALNUMBER).text
         device["friendlyName"] = device_xml.find(SCPD_FRIENDLYNAME).text
+
+        if device_xml.find(SCPD_WIREDMAC) is not None:
+            device["wiredMac"] = device_xml.find(SCPD_WIREDMAC).text
+        if device_xml.find(SCPD_WIFIMAC) is not None:
+            device["wifiMac"] = device_xml.find(SCPD_WIFIMAC).text
+
         return device
     except Exception as err:
         _LOGGER.error("Error occurred during evaluation of SCPD XML from URI %s: %s", url, err)

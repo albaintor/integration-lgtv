@@ -8,9 +8,6 @@ Setup flow for LG TV integration.
 import asyncio
 import logging
 from enum import IntEnum
-
-from getmac import getmac
-
 import config
 import discover
 from aiowebostv import WebOsClient
@@ -382,14 +379,20 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
     global _setup_step
     discovered_device = None
     host = msg.input_values["choice"]
+    mac_address = None
+    mac_address2 = None
 
     if _discovered_devices:
         for device in _discovered_devices:
             if device.get("host", None) == host:
                 discovered_device = device
-                break
+                if device.get("wiredMac"):
+                    mac_address = device.get("wiredMac")
+                if device.get("wifiMac"):
+                    mac_address2 = device.get("wifiMac")
 
-    _LOG.debug("Chosen LG TV: %s. Trying to connect and retrieve device information...", host)
+    _LOG.debug("Chosen LG TV: %s (wired mac %s, wifi mac %s). Trying to connect and retrieve device information...",
+               host, mac_address, mac_address2)
     try:
         # simple connection check
         _pairing_lg_tv = WebOsClient(host)
@@ -399,23 +402,16 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
         model_name = info.get("modelName")
         if discovered_device and discovered_device.get("friendlyName"):
             model_name = discovered_device.get("friendlyName")
+
         # serial_number = info.get("serialNumber")
         info = await _pairing_lg_tv.get_software_info()
-        mac_address = info.get("device_id")
+        unique_id = info.get("device_id")
+        if mac_address is None:
+            mac_address = unique_id
     except WEBOSTV_EXCEPTIONS as ex:
         _LOG.error("Cannot connect to %s: %s", host, ex)
         return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
 
-    mac_address2 = None
-    try:
-        mac_address2 = getmac.get_mac_address(ip=host)
-        _LOG.debug("Result of extraction of mac address from IP %s : %s", host, mac_address2)
-        if mac_address2 == mac_address or mac_address2 == "ff:ff:ff:ff:ff:ff":
-            mac_address2 = None
-    except Exception:
-        pass
-
-    unique_id = mac_address
     _config_device = LGConfigDevice(id=unique_id, name=model_name, address=host, key=key,
                                     mac_address=mac_address, mac_address2=mac_address2)
 
