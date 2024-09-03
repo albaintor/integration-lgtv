@@ -44,7 +44,7 @@ class LGConfigDevice:
     name: str
     address: str
     key: str
-    mac_address: str
+    mac_address: str | None
     mac_address2: str | None
 
 

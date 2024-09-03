@@ -421,6 +421,9 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
 def get_additional_settings(config_device: LGConfigDevice) -> RequestUserInput:
     global _setup_step
     _setup_step = SetupSteps.ADDITIONAL_SETTINGS
+    if config_device.mac_address2 is None:
+        config_device.mac_address2 = ""
+
     additional_fields = [
         {
             "id": "info",
@@ -440,17 +443,15 @@ def get_additional_settings(config_device: LGConfigDevice) -> RequestUserInput:
         {
             "field": {"text": {"value": config_device.mac_address}},
             "id": "mac_address",
-            "label": {"en": "Mac address", "de": "Mac address", "fr": "Adresse Mac"},
+            "label": {"en": "Mac address (wired)", "fr": "Adresse Mac (cablé)"},
+        },
+        {
+            "field": {"text": {"value": config_device.mac_address2}},
+            "id": "mac_address2",
+            "label": {"en": "Mac address (wifi)", "fr": "Adresse Mac (wifi)"},
         }
     ]
-    if config_device.mac_address2:
-        additional_fields.append(
-            {
-                "field": {"text": {"value": config_device.mac_address2}},
-                "id": "mac_address2",
-                "label": {"en": "Second mac address", "fr": "Seconde adresse Mac"},
-            }
-        )
+
     return RequestUserInput(
         title={
             "en": "Additional settings",
@@ -465,7 +466,9 @@ async def handle_additional_settings(msg: UserDataResponse) -> SetupComplete | S
     global _config_device
     global _pairing_lg_tv
     mac_address = msg.input_values.get("mac_address", "")
-    mac_address2 = msg.input_values.get("mac_address2", None)
+    mac_address2 = msg.input_values.get("mac_address2", "")
+    if mac_address == "":
+        mac_address = None
     if mac_address2 == "":
         mac_address2 = None
 

@@ -542,23 +542,17 @@ class LGDevice:
                 self._device_config.mac_address,
                 interface,
             )
-            send_magic_packet(self._device_config.mac_address, interface=interface)
-            send_magic_packet(self._device_config.mac_address)
-            try:
-                send_magic_packet(self._device_config.mac_address, ip_address="192.168.1.255", port=9)
-            except Exception as ex:
-                _LOG.error("LG TV error magic packet %s", ex)
+            if self._device_config.mac_address:
+                _LOG.debug("LG TV power on : sending magic packet to %s (wired)",self._device_config.mac_address)
+                send_magic_packet(self._device_config.mac_address, interface=interface)
 
             if self._device_config.mac_address2:
-                _LOG.debug(
-                    "LG TV power on : sending magic packet to other %s on interface %s",
-                    self._device_config.mac_address2,
-                    interface,
-                )
+                _LOG.debug("LG TV power on : sending magic packet to %s (wifi)", self._device_config.mac_address2)
                 send_magic_packet(self._device_config.mac_address2, interface=interface)
-
-            # await asyncio.sleep(10)
-            # await self._tv.power_on()
+            # try:
+            #     send_magic_packet(self._device_config.mac_address, ip_address="192.168.1.255", port=9)
+            # except Exception as ex:
+            #     _LOG.error("LG TV error magic packet %s", ex)
             return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("LG TV error power_on %s", ex)
