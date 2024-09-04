@@ -683,22 +683,29 @@ class LGDevice:
         return ucapi.StatusCodes.BAD_REQUEST
 
     async def select_source_next(self) -> ucapi.StatusCodes:
-        sources = self.source_list
+        if self._tv is None:
+            return ucapi.StatusCodes.SERVICE_UNAVAILABLE
+        sources:list[dict] = list(self._tv.inputs.values())
         current_source = self.source
         if not sources or len(sources) == 0:
             _LOG.error("LG TV next input command : sources list is not feed yet")
             return ucapi.StatusCodes.SERVICE_UNAVAILABLE
         if not current_source:
-            current_source = self.source_list[0]
+            current_source = sources[0]["id"]
         else:
             try:
-                index = sources.index(current_source)
+                source = [source for source in sources if source["id"] == current_source]
+                if len(source) > 0:
+                    source = source[0]
+                else:
+                    source = None
+                index = sources.index(source)
                 index += 1
                 if index >= len(sources):
                     index = 0
-                current_source = self.source_list[index]
-            except ValueError:
-                current_source = self.source_list[0]
+                current_source = sources[index]["id"]
+            except (ValueError, AttributeError):
+                current_source = sources[0]["id"]
         return await self.select_source(current_source)
 
     async def select_source(self, source: str | None, delay: int = 0) -> ucapi.StatusCodes:
