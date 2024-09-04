@@ -72,6 +72,12 @@ class States(IntEnum):
     STOPPED = 6
 
 
+# Custom commands to be handled specifically
+LG_SIMPLE_COMMANDS_CUSTOM = [
+    "INPUT_SOURCE"  # Next input source
+]
+
+# Simple commands for both media and remote entities
 LG_SIMPLE_COMMANDS = [
     "ASTERISK",
     "3D_MODE",
@@ -97,6 +103,7 @@ LG_SIMPLE_COMMANDS = [
     "SCREEN_REMOTE",  # Screen Remote
     "TELETEXT",
     "TEXTOPTION",
+    *LG_SIMPLE_COMMANDS_CUSTOM
 ]
 
 LG_REMOTE_BUTTONS_MAPPING: [DeviceButtonMapping] = [
@@ -190,12 +197,76 @@ LG_REMOTE_UI_PAGES: [UiPage] = [
             {
                 "command": {
                     "cmd_id": "remote.send",
+                    "params": {"command": "MYAPPS", "repeat": 1}
+                },
+                "icon": "uc:home",
+                "location": {
+                    "x": 0,
+                    "y": 1
+                },
+                "size": {
+                    "height": 1,
+                    "width": 1
+                },
+                "type": "icon"
+            },
+            {
+                "command": {
+                    "cmd_id": "remote.send",
+                    "params": {"command": "MENU", "repeat": 1}
+                },
+                "text": "Settings",
+                "location": {
+                    "x": 1,
+                    "y": 1
+                },
+                "size": {
+                    "height": 1,
+                    "width": 1
+                },
+                "type": "text"
+            },
+            {
+                "command": {
+                    "cmd_id": "remote.send",
+                    "params": {"command": "INPUT_SOURCE", "repeat": 1}
+                },
+                "text": "Input",
+                "location": {
+                    "x": 2,
+                    "y": 1
+                },
+                "size": {
+                    "height": 1,
+                    "width": 1
+                },
+                "type": "text"
+            },
+            {
+                "command": {
+                    "cmd_id": "remote.send",
+                    "params": {"command": "3D_MODE", "repeat": 1}
+                },
+                "text": "3D",
+                "location": {
+                    "x": 3,
+                    "y": 1
+                },
+                "size": {
+                    "height": 1,
+                    "width": 1
+                },
+                "type": "text"
+            },
+            {
+                "command": {
+                    "cmd_id": "remote.send",
                     "params": {"command": "REWIND", "repeat": 1}
                 },
                 "icon": "uc:bw",
                 "location": {
                     "x": 0,
-                    "y": 1
+                    "y": 2
                 },
                 "size": {
                     "height": 1,
@@ -211,7 +282,7 @@ LG_REMOTE_UI_PAGES: [UiPage] = [
                 "icon": "uc:play",
                 "location": {
                     "x": 1,
-                    "y": 1
+                    "y": 2
                 },
                 "size": {
                     "height": 1,
@@ -227,7 +298,7 @@ LG_REMOTE_UI_PAGES: [UiPage] = [
                 "icon": "uc:ff",
                 "location": {
                     "x": 3,
-                    "y": 1
+                    "y": 2
                 },
                 "size": {
                     "height": 1,
@@ -243,7 +314,7 @@ LG_REMOTE_UI_PAGES: [UiPage] = [
                 "icon": "uc:stop",
                 "location": {
                     "x": 0,
-                    "y": 2
+                    "y": 3
                 },
                 "size": {
                     "height": 1,
@@ -259,7 +330,7 @@ LG_REMOTE_UI_PAGES: [UiPage] = [
                 "icon": "uc:pause",
                 "location": {
                     "x": 1,
-                    "y": 2
+                    "y": 3
                 },
                 "size": {
                     "height": 1,
@@ -275,7 +346,7 @@ LG_REMOTE_UI_PAGES: [UiPage] = [
                 "icon": "uc:up-arrow",
                 "location": {
                     "x": 3,
-                    "y": 2
+                    "y": 3
                 },
                 "size": {
                     "height": 1,
@@ -291,56 +362,7 @@ LG_REMOTE_UI_PAGES: [UiPage] = [
                 "icon": "uc:down-arrow",
                 "location": {
                     "x": 3,
-                    "y": 3
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "icon"
-            },
-            {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "3D_MODE", "repeat": 1}
-                },
-                "text": "3D",
-                "location": {
-                    "x": 0,
-                    "y": 3
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "text"
-            },
-
-            {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "MENU", "repeat": 1}
-                },
-                "text": "Settings",
-                "location": {
-                    "x": 1,
-                    "y": 3
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "text"
-            },
-            {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "MYAPPS", "repeat": 1}
-                },
-                "icon": "uc:home",
-                "location": {
-                    "x": 2,
-                    "y": 3
+                    "y": 4
                 },
                 "size": {
                     "height": 1,
@@ -354,6 +376,22 @@ LG_REMOTE_UI_PAGES: [UiPage] = [
                     "params": {"command": "MUTE", "repeat": 1}
                 },
                 "icon": "uc:mute",
+                "location": {
+                    "x": 0,
+                    "y": 5
+                },
+                "size": {
+                    "height": 1,
+                    "width": 1
+                },
+                "type": "icon"
+            },
+            {
+                "command": {
+                    "cmd_id": "remote.send",
+                    "params": {"command": "VOLUMEDOWN", "repeat": 1}
+                },
+                "icon": "uc:minus",
                 "location": {
                     "x": 1,
                     "y": 5
@@ -372,27 +410,11 @@ LG_REMOTE_UI_PAGES: [UiPage] = [
                 "icon": "uc:plus",
                 "location": {
                     "x": 2,
-                    "y": 4
-                },
-                "size": {
-                    "height": 1,
-                    "width": 2
-                },
-                "type": "icon"
-            },
-            {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "VOLUMEDOWN", "repeat": 1}
-                },
-                "icon": "uc:minus",
-                "location": {
-                    "x": 2,
                     "y": 5
                 },
                 "size": {
                     "height": 1,
-                    "width": 2
+                    "width": 1
                 },
                 "type": "icon"
             },

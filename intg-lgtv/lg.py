@@ -682,6 +682,25 @@ class LGDevice:
             _LOG.error("LG TV unknown error select_source %s", ex)
         return ucapi.StatusCodes.BAD_REQUEST
 
+    async def select_source_next(self) -> ucapi.StatusCodes:
+        sources = self.source_list
+        current_source = self.source
+        if not sources or len(sources) == 0:
+            _LOG.error("LG TV next input command : sources list is not feed yet")
+            return ucapi.StatusCodes.SERVICE_UNAVAILABLE
+        if not current_source:
+            current_source = self.source_list[0]
+        else:
+            try:
+                index = sources.index(current_source)
+                index += 1
+                if index >= len(sources):
+                    index = 0
+                current_source = self.source_list[index]
+            except ValueError:
+                current_source = self.source_list[0]
+        return await self.select_source(current_source)
+
     async def select_source(self, source: str | None, delay: int = 0) -> ucapi.StatusCodes:
         """Send input_source command to LG TV."""
         if not source:

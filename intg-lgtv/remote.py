@@ -14,7 +14,7 @@ from config import create_entity_id, LGConfigDevice
 from lg import LGDevice
 from ucapi import EntityTypes, Remote, StatusCodes
 from ucapi.remote import Attributes, Commands, States as RemoteStates, Options, Features
-from const import LG_REMOTE_BUTTONS_MAPPING, LG_REMOTE_UI_PAGES, States
+from const import LG_REMOTE_BUTTONS_MAPPING, LG_REMOTE_UI_PAGES, States, LG_SIMPLE_COMMANDS_CUSTOM
 
 _LOG = logging.getLogger(__name__)
 
@@ -87,7 +87,11 @@ class LGRemote(Remote):
         command = params.get("command", "")
 
         if command in self.options[Options.SIMPLE_COMMANDS]:
-            res = await self._device.button(command)
+            if cmd_id in LG_SIMPLE_COMMANDS_CUSTOM:
+                if cmd_id == "INPUT_SOURCE":
+                    res = await self._device.select_source_next()
+            else:
+                res = await self._device.button(command)
         elif cmd_id == Commands.ON:
             return await self._device.power_on()
         elif cmd_id == Commands.OFF:

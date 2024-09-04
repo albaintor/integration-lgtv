@@ -19,7 +19,7 @@ from ucapi.media_player import (
     Options,
     States,
 )
-from const import LG_SIMPLE_COMMANDS
+from const import LG_SIMPLE_COMMANDS, LG_SIMPLE_COMMANDS_CUSTOM
 
 _LOG = logging.getLogger(__name__)
 
@@ -175,7 +175,11 @@ class LGTVMediaPlayer(MediaPlayer):
         elif cmd_id == Commands.REWIND:
             res = await self._device.button("REWIND")
         elif cmd_id in self.options[Options.SIMPLE_COMMANDS]:
-            res = await self._device.button(cmd_id)
+            if cmd_id in LG_SIMPLE_COMMANDS_CUSTOM:
+                if cmd_id == "INPUT_SOURCE":
+                    res = await self._device.select_source_next()
+            else:
+                res = await self._device.button(cmd_id)
         else:
             return StatusCodes.NOT_IMPLEMENTED
         return res
