@@ -444,6 +444,23 @@ class LGDevice:
         return self._unique_id
 
     @property
+    def attributes(self) -> dict[str, any]:
+        """Return the device attributes."""
+        updated_data = {
+            MediaAttr.STATE: LG_STATE_MAPPING.get(self.state),
+            MediaAttr.MUTED: self.is_volume_muted,
+            MediaAttr.VOLUME: self.volume_level,
+            MediaAttr.MEDIA_TYPE: self._media_type,
+            MediaAttr.MEDIA_IMAGE_URL: self.media_image_url,
+            MediaAttr.MEDIA_TITLE: self.media_title,
+        }
+        if self.source_list:
+            updated_data[MediaAttr.SOURCE_LIST] = self.source_list
+        if self.source:
+            updated_data[MediaAttr.SOURCE] = self.source
+        return updated_data
+
+    @property
     def available(self) -> bool:
         """Return True if device is available."""
         return self._attr_available

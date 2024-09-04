@@ -24,7 +24,7 @@ from config import device_from_entity_id
 from const import WEBOSTV_EXCEPTIONS
 from ucapi import IntegrationAPI
 from ucapi.api import filter_log_msg_data
-from ucapi.media_player import Attributes as MediaAttr
+from ucapi.media_player import Attributes as MediaAttr, States
 
 _LOG = logging.getLogger("driver")  # avoid having __main__ in log messages
 _LOOP = asyncio.get_event_loop()
@@ -118,14 +118,16 @@ async def on_subscribe_entities(entity_ids: list[str]) -> None:
         device_id = device_from_entity_id(entity_id)
         if device_id in _configured_devices:
             device = _configured_devices[device_id]
-            state = lg.LG_STATE_MAPPING.get(device.state)
+            attributes = device.attributes
             if isinstance(entity, media_player.LGTVMediaPlayer):
+
                 api.configured_entities.update_attributes(
-                    entity_id, {ucapi.media_player.Attributes.STATE: lg.LG_STATE_MAPPING.get(device.state)}
+                    entity_id, attributes
                 )
             if isinstance(entity, remote.LGRemote):
+                attributes[ucapi.remote.Attributes.STATE] = remote.LG_REMOTE_STATE_MAPPING.get(attributes.get(MediaAttr.STATE, States.UNKNOWN))
                 api.configured_entities.update_attributes(
-                    entity_id, {ucapi.remote.Attributes.STATE: remote.LG_REMOTE_STATE_MAPPING.get(device.state)}
+                    entity_id, attributes
                 )
             continue
 

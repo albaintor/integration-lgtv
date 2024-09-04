@@ -30,7 +30,6 @@ class LGTVMediaPlayer(MediaPlayer):
     def __init__(self, config_device: LGConfigDevice, device: lg.LGDevice):
         """Initialize the class."""
         self._device: lg.LGDevice = device
-        _LOG.debug("LGTVMediaPlayer init")
         entity_id = create_entity_id(config_device.id, EntityTypes.MEDIA_PLAYER)
         features = device.supported_features
         attributes = {
@@ -43,6 +42,7 @@ class LGTVMediaPlayer(MediaPlayer):
             Attributes.MEDIA_TITLE: device.media_title if device.media_title else "",
             Attributes.MEDIA_TYPE: device.media_type,
         }
+        _LOG.debug("LGTVMediaPlayer init %s : %s", entity_id, attributes)
 
         # # use sound mode support & name from configuration: receiver might not yet be connected
         # if device.support_sound_mode:
