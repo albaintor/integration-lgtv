@@ -460,6 +460,11 @@ def get_additional_settings(config_device: LGConfigDevice) -> RequestUserInput:
             },
         },
         {
+            "field": {"text": {"value": config_device.address}},
+            "id": "address",
+            "label": {"en": "IP address", "fr": "Adresse IP"},
+        },
+        {
             "field": {"text": {"value": config_device.mac_address}},
             "id": "mac_address",
             "label": {"en": "Mac address (wired)", "fr": "Adresse Mac (cablé)"},
@@ -500,8 +505,8 @@ def get_additional_settings(config_device: LGConfigDevice) -> RequestUserInput:
         {
             "id": "pairing",
             "label": {
-                "en": "Regenerate the pairing key for connection",
-                "fr": "Régénérer la clé d'appairage",
+                "en": "Regenerate the pairing key and test connection",
+                "fr": "Régénérer la clé d'appairage et tester la connection",
             },
             "field": {"checkbox": {"value": False}},
         },
@@ -601,6 +606,7 @@ async def handle_additional_settings(msg: UserDataResponse) -> RequestUserConfir
     global _config_device
     global _pairing_lg_tv
     global _setup_step
+    address = msg.input_values.get("address", "")
     mac_address = msg.input_values.get("mac_address", "")
     mac_address2 = msg.input_values.get("mac_address2", "")
     interface  = msg.input_values.get("interface", "")
@@ -613,6 +619,8 @@ async def handle_additional_settings(msg: UserDataResponse) -> RequestUserConfir
     except ValueError:
         return SetupError(error_type=IntegrationSetupError.OTHER)
 
+    if address != "":
+        _config_device.address = addressi .
     if mac_address == "":
         mac_address = None
     if mac_address2 == "":
