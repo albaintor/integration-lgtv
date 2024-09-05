@@ -6,6 +6,7 @@ Setup flow for LG TV integration.
 """
 
 import asyncio
+import ipaddress
 import logging
 import os
 import socket
@@ -515,6 +516,13 @@ def get_additional_settings(config_device: LGConfigDevice) -> RequestUserInput:
     )
 
 
+def _is_ipv6_address(ip_address: str) -> bool:
+    try:
+        return isinstance(ipaddress.ip_address(ip_address), ipaddress.IPv6Address)
+    except ValueError:
+        return False
+
+
 def get_wakeonlan_settings() -> RequestUserInput:
     global _config_device
 
@@ -522,9 +530,10 @@ def get_wakeonlan_settings() -> RequestUserInput:
     try:
         interface = os.getenv("UC_INTEGRATION_INTERFACE")
         if interface is None or interface == "127.0.0.1":
+            interface = None
             ips = [i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None)]
             for ip_addr in ips:
-                if ip_addr is None or ip_addr == "127.0.0.1":
+                if ip_addr is None or ip_addr == "127.0.0.1" or _is_ipv6_address(ip_addr):
                     continue
                 interface = ip_addr
                 break
