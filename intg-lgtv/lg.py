@@ -7,6 +7,7 @@ This module implements the AVR AVR receiver communication of the Remote Two inte
 
 import asyncio
 import logging
+import os
 import time
 from asyncio import AbstractEventLoop, Lock
 from enum import IntEnum
@@ -33,7 +34,7 @@ from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr
 from ucapi.media_player import Features, MediaType
 from ucapi.media_player import States as MediaStates
-from wakeonlan import send_magic_packet
+from wakeonlan import send_magic_packet, BROADCAST_IP
 
 _LOG = logging.getLogger(__name__)
 
@@ -549,23 +550,29 @@ class LGDevice:
     async def power_on(self) -> ucapi.StatusCodes:
         """Send power-on command to LG TV."""
         try:
-            # TODO : this does not work on internal integration but is necessary for external. To fix later
-            # interface = os.getenv("UC_INTEGRATION_INTERFACE")
-            interface = None
-            if interface is None:
-                interface = "0.0.0.0"
+            ip_address = self._device_config.broadcast
+            if ip_address is None:
+                ip_address = BROADCAST_IP
             _LOG.debug(
-                "LG TV power on : sending magic packet to %s on interface %s",
+                "LG TV power on : sending magic packet to %s on interface %s, port %s, broadcast %s",
                 self._device_config.mac_address,
-                interface,
+                self._device_config.interface,
+                self._device_config.wol_port,
+                ip_address
             )
+
             if self._device_config.mac_address:
-                _LOG.debug("LG TV power on : sending magic packet to %s (wired)",self._device_config.mac_address)
-                send_magic_packet(self._device_config.mac_address, interface=interface)
+                _LOG.debug("LG TV power on : sending magic packet to %s (wired)",
+                           self._device_config.mac_address)
+                send_magic_packet(self._device_config.mac_address, interface=self._device_config.interface,
+                                  ip_address=ip_address, port=self._device_config.wol_port)
 
             if self._device_config.mac_address2:
-                _LOG.debug("LG TV power on : sending magic packet to %s (wifi)", self._device_config.mac_address2)
-                send_magic_packet(self._device_config.mac_address2, interface=interface)
+                _LOG.debug("LG TV power on : sending magic packet to %s (wifi)",
+                           self._device_config.mac_address2)
+                send_magic_packet(self._device_config.mac_address2, interface=self._device_config.interface,
+                                  ip_address=ip_address, port=self._device_config.wol_port)
+
             # try:
             #     send_magic_packet(self._device_config.mac_address, ip_address="192.168.1.255", port=9)
             # except Exception as ex:
