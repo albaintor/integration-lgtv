@@ -8,6 +8,7 @@ Setup flow for LG TV integration.
 import asyncio
 import logging
 import os
+import socket
 from enum import IntEnum
 
 import wakeonlan
@@ -517,11 +518,20 @@ def get_additional_settings(config_device: LGConfigDevice) -> RequestUserInput:
 def get_wakeonlan_settings() -> RequestUserInput:
     global _config_device
 
-    # if _wakeonlan_broadcast is None and _wakeonlan_interface is None
-    interface = os.getenv("UC_INTEGRATION_INTERFACE")
     broadcast = ""
-    if interface is not None:
-        broadcast = interface[:interface.rfind('.') + 1] + '255'
+    try:
+        interface = os.getenv("UC_INTEGRATION_INTERFACE")
+        if interface is None or interface == "127.0.0.1":
+            ips = [i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None)]
+            for ip_addr in ips:
+                if ip_addr is None or ip_addr == "127.0.0.1":
+                    continue
+                interface = ip_addr
+                break
+        if interface is not None:
+            broadcast = interface[:interface.rfind('.') + 1] + '255'
+    except Exception:
+        pass
 
     return RequestUserInput(
         title={
