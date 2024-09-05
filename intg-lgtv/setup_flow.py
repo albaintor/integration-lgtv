@@ -620,7 +620,7 @@ async def handle_additional_settings(msg: UserDataResponse) -> RequestUserConfir
         return SetupError(error_type=IntegrationSetupError.OTHER)
 
     if address != "":
-        _config_device.address = addressi .
+        _config_device.address = address
     if mac_address == "":
         mac_address = None
     if mac_address2 == "":
