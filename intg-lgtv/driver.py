@@ -120,14 +120,13 @@ async def on_subscribe_entities(entity_ids: list[str]) -> None:
             device = _configured_devices[device_id]
             attributes = device.attributes
             if isinstance(entity, media_player.LGTVMediaPlayer):
-
                 api.configured_entities.update_attributes(
                     entity_id, attributes
                 )
             if isinstance(entity, remote.LGRemote):
-                attributes[ucapi.remote.Attributes.STATE] = remote.LG_REMOTE_STATE_MAPPING.get(attributes.get(MediaAttr.STATE, States.UNKNOWN))
                 api.configured_entities.update_attributes(
-                    entity_id, attributes
+                    entity_id, {ucapi.remote.Attributes.STATE:
+                                    remote.LG_REMOTE_STATE_MAPPING.get(attributes.get(MediaAttr.STATE, States.UNKNOWN))}
                 )
             continue
 
@@ -185,8 +184,8 @@ async def on_device_connected(device_id: str):
 
         if configured_entity.entity_type == ucapi.EntityTypes.MEDIA_PLAYER:
             if (
-                configured_entity.attributes[ucapi.media_player.Attributes.STATE]
-                == ucapi.media_player.States.UNAVAILABLE
+                    configured_entity.attributes[ucapi.media_player.Attributes.STATE]
+                    == ucapi.media_player.States.UNAVAILABLE
             ):
                 api.configured_entities.update_attributes(
                     entity_id,
