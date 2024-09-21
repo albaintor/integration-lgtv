@@ -52,7 +52,6 @@ async def on_r2_connect_cmd() -> None:
                 "Could not connect to device, probably because it is starting with magic packet %s",
                 ex,
             )
-    await api.set_device_state(ucapi.DeviceStates.CONNECTED)
 
 
 @api.listens_to(ucapi.Events.DISCONNECT)
@@ -330,7 +329,7 @@ def _configure_new_device(device_config: config.LGConfigDevice, connect: bool = 
     else:
         device = lg.LGDevice(device_config, loop=_LOOP)
 
-        on_device_connected(device.id)
+        _LOOP.create_task(on_device_connected(device.id))
         # device.events.on(lg.Events.CONNECTED, on_device_connected)
         # device.events.on(lg.Events.DISCONNECTED, on_device_disconnected)
         device.events.on(lg.Events.ERROR, on_device_connection_error)

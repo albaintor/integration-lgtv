@@ -30,6 +30,7 @@ from ucapi import (
     SetupError,
     UserDataResponse, RequestUserConfirmation, UserConfirmationResponse,
 )
+from lg import LGDevice
 
 _LOG = logging.getLogger(__name__)
 
@@ -561,8 +562,8 @@ def get_wakeonlan_settings() -> RequestUserInput:
             "field": {
                 "label": {
                     "value": {
-                        "en": f"Remote interface {interface} : suggested broadcast {broadcast}",
-                        "fr": f"Adresse de la télécommande {interface} : broadcast suggéré {broadcast}",
+                        "en": f"Remote address {interface}",
+                        "fr": f"Adresse de la télécommande {interface}",
                     }
                 }
             },
@@ -613,7 +614,6 @@ async def handle_additional_settings(msg: UserDataResponse) -> RequestUserConfir
     broadcast = msg.input_values.get("broadcast", "")
     test_wakeonlan = msg.input_values.get("test_wakeonlan", "false") == "true"
     pairing = msg.input_values.get("pairing", "false") == "true"
-    wolport = wakeonlan.DEFAULT_PORT
     try:
         wolport = int(msg.input_values.get("wolport", wakeonlan.DEFAULT_PORT))
     except ValueError:
@@ -673,7 +673,7 @@ async def handle_wake_on_lan(msg: UserDataResponse) -> RequestUserConfirmation |
     test_wakeonlan = msg.input_values.get("test_wakeonlan", False)
     wolport = wakeonlan.DEFAULT_PORT
     try:
-        wolport = int(msg.input_values.get("wolport", wakeonlan.DEFAULT_PORT))
+        wolport = int(msg.input_values.get("wolport", wolport))
     except ValueError:
         return SetupError(error_type=IntegrationSetupError.OTHER)
 
@@ -697,31 +697,39 @@ async def handle_wake_on_lan(msg: UserDataResponse) -> RequestUserConfirmation |
     # triggers LG TV instance creation
     config.devices.store()
 
-    ip_address = _config_device.broadcast
-    if ip_address is None:
-        ip_address = wakeonlan.BROADCAST_IP
-
-    _LOG.debug(
-        "LG TV power on : sending magic packet on interface %s, port %s, broadcast %s",
-        _config_device.interface,
-        _config_device.wol_port,
-        ip_address
-    )
+    # ip_address = _config_device.broadcast
+    # if ip_address is None:
+    #     ip_address = wakeonlan.BROADCAST_IP
+    #
+    # _LOG.debug(
+    #     "LG TV power on : sending magic packet on interface %s, port %s, broadcast %s",
+    #     _config_device.interface,
+    #     _config_device.wol_port,
+    #     ip_address
+    # )
 
     requests = 0
     if _config_device.mac_address:
         requests += 1
-        _LOG.debug("LG TV power on : sending magic packet to %s",
-                   _config_device.mac_address)
-        wakeonlan.send_magic_packet(_config_device.mac_address, interface=_config_device.interface,
-                                    ip_address=ip_address, port=_config_device.wol_port)
-
     if _config_device.mac_address2:
         requests += 1
-        _LOG.debug("LG TV power on : sending magic packet to %s",
-                   _config_device.mac_address2)
-        wakeonlan.send_magic_packet(_config_device.mac_address2, interface=_config_device.interface,
-                          ip_address=ip_address, port=_config_device.wol_port)
+
+    device = LGDevice(device_config=_config_device)
+    device.wakeonlan()
+
+    # if _config_device.mac_address:
+    #     requests += 1
+    #     _LOG.debug("LG TV power on : sending magic packet to %s",
+    #                _config_device.mac_address)
+    #     wakeonlan.send_magic_packet(_config_device.mac_address, interface=_config_device.interface,
+    #                                 ip_address=ip_address, port=_config_device.wol_port)
+    #
+    # if _config_device.mac_address2:
+    #     requests += 1
+    #     _LOG.debug("LG TV power on : sending magic packet to %s",
+    #                _config_device.mac_address2)
+    #     wakeonlan.send_magic_packet(_config_device.mac_address2, interface=_config_device.interface,
+    #                       ip_address=ip_address, port=_config_device.wol_port)
 
     return RequestUserConfirmation(title={
             "en": f"{requests} requests sent to the TV",

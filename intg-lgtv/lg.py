@@ -7,7 +7,8 @@ This module implements the AVR AVR receiver communication of the Remote Two inte
 
 import asyncio
 import logging
-import os
+import socket
+import struct
 import time
 from asyncio import AbstractEventLoop, Lock
 from enum import IntEnum
@@ -547,6 +548,40 @@ class LGDevice:
             await self.power_off()
         return ucapi.StatusCodes.OK
 
+    def _create_magic_packet(self, mac_address: str) -> bytes:
+        """Create a magic packet to wake on LAN."""
+        addr_byte = mac_address.split(":")
+        hw_addr = struct.pack(
+            "BBBBBB",
+            int(addr_byte[0], 16),
+            int(addr_byte[1], 16),
+            int(addr_byte[2], 16),
+            int(addr_byte[3], 16),
+            int(addr_byte[4], 16),
+            int(addr_byte[5], 16),
+        )
+        return b"\xff" * 6 + hw_addr * 16
+
+    def wakeonlan(self) -> None:
+        """Send WOL command. to known mac addresses."""
+        messages = []
+        if self._device_config.mac_address:
+            _LOG.debug("LG TV power on : sending magic packet to %s (wired)",
+                       self._device_config.mac_address)
+            messages.append(self._create_magic_packet(self._device_config.mac_address))
+
+        if self._device_config.mac_address2:
+            _LOG.debug("LG TV power on : sending magic packet to %s (wifi)",
+                       self._device_config.mac_address2)
+            messages.append(self._create_magic_packet(self._device_config.mac_address2))
+
+        if len(messages) > 0:
+            socket_instance = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            socket_instance.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            for msg in messages:
+                socket_instance.sendto(msg, ("<broadcast>", self._device_config.wol_port))
+            socket_instance.close()
+
     async def power_on(self) -> ucapi.StatusCodes:
         """Send power-on command to LG TV."""
         try:
@@ -561,17 +596,19 @@ class LGDevice:
                 ip_address
             )
 
-            if self._device_config.mac_address:
-                _LOG.debug("LG TV power on : sending magic packet to %s (wired)",
-                           self._device_config.mac_address)
-                send_magic_packet(self._device_config.mac_address, interface=self._device_config.interface,
-                                  ip_address=ip_address, port=self._device_config.wol_port)
-
-            if self._device_config.mac_address2:
-                _LOG.debug("LG TV power on : sending magic packet to %s (wifi)",
-                           self._device_config.mac_address2)
-                send_magic_packet(self._device_config.mac_address2, interface=self._device_config.interface,
-                                  ip_address=ip_address, port=self._device_config.wol_port)
+            self.wakeonlan()
+            # TODO remove if previous method work
+            # if self._device_config.mac_address:
+            #     _LOG.debug("LG TV power on : sending magic packet to %s (wired)",
+            #                self._device_config.mac_address)
+            #     send_magic_packet(self._device_config.mac_address, interface=self._device_config.interface,
+            #                       ip_address=ip_address, port=self._device_config.wol_port)
+            #
+            # if self._device_config.mac_address2:
+            #     _LOG.debug("LG TV power on : sending magic packet to %s (wifi)",
+            #                self._device_config.mac_address2)
+            #     send_magic_packet(self._device_config.mac_address2, interface=self._device_config.interface,
+            #                       ip_address=ip_address, port=self._device_config.wol_port)
 
             # try:
             #     send_magic_packet(self._device_config.mac_address, ip_address="192.168.1.255", port=9)
