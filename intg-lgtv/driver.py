@@ -52,6 +52,7 @@ async def on_r2_connect_cmd() -> None:
                 "Could not connect to device, probably because it is starting with magic packet %s",
                 ex,
             )
+    await api.set_device_state(ucapi.DeviceStates.CONNECTED)
 
 
 @api.listens_to(ucapi.Events.DISCONNECT)
