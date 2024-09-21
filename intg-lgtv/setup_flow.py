@@ -12,8 +12,6 @@ import os
 import socket
 from enum import IntEnum
 
-import wakeonlan
-
 import config
 import discover
 from aiowebostv import WebOsClient
@@ -432,7 +430,7 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
 
     _config_device = LGConfigDevice(id=unique_id, name=model_name, address=host, key=key,
                                     mac_address=mac_address, mac_address2=mac_address2,
-                                    interface="0.0.0.0", broadcast=None, wol_port=wakeonlan.DEFAULT_PORT)
+                                    interface="0.0.0.0", broadcast=None, wol_port=9)
 
     return get_additional_settings(_config_device)
 
@@ -615,7 +613,7 @@ async def handle_additional_settings(msg: UserDataResponse) -> RequestUserConfir
     test_wakeonlan = msg.input_values.get("test_wakeonlan", "false") == "true"
     pairing = msg.input_values.get("pairing", "false") == "true"
     try:
-        wolport = int(msg.input_values.get("wolport", wakeonlan.DEFAULT_PORT))
+        wolport = int(msg.input_values.get("wolport", 9))
     except ValueError:
         return SetupError(error_type=IntegrationSetupError.OTHER)
 
@@ -671,7 +669,7 @@ async def handle_wake_on_lan(msg: UserDataResponse) -> RequestUserConfirmation |
     interface = msg.input_values.get("interface", "")
     broadcast = msg.input_values.get("broadcast", "")
     test_wakeonlan = msg.input_values.get("test_wakeonlan", False)
-    wolport = wakeonlan.DEFAULT_PORT
+    wolport = 9
     try:
         wolport = int(msg.input_values.get("wolport", wolport))
     except ValueError:

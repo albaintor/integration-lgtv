@@ -35,7 +35,6 @@ from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr
 from ucapi.media_player import Features, MediaType
 from ucapi.media_player import States as MediaStates
-from wakeonlan import send_magic_packet, BROADCAST_IP
 
 _LOG = logging.getLogger(__name__)
 
@@ -590,7 +589,7 @@ class LGDevice:
         try:
             ip_address = self._device_config.broadcast
             if ip_address is None:
-                ip_address = BROADCAST_IP
+                ip_address = "255.255.255.255"
             _LOG.debug(
                 "LG TV power on : sending magic packet to %s on interface %s, port %s, broadcast %s",
                 self._device_config.mac_address,
