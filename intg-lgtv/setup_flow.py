@@ -562,8 +562,8 @@ def get_wakeonlan_settings() -> RequestUserInput:
             "field": {
                 "label": {
                     "value": {
-                        "en": f"Remote address {interface}",
-                        "fr": f"Adresse de la télécommande {interface}",
+                        "en": f"Remote interface {interface} : suggested broadcast {broadcast}",
+                        "fr": f"Adresse de la télécommande {interface} : broadcast suggéré {broadcast}",
                     }
                 }
             },
@@ -697,17 +697,6 @@ async def handle_wake_on_lan(msg: UserDataResponse) -> RequestUserConfirmation |
     # triggers LG TV instance creation
     config.devices.store()
 
-    # ip_address = _config_device.broadcast
-    # if ip_address is None:
-    #     ip_address = wakeonlan.BROADCAST_IP
-    #
-    # _LOG.debug(
-    #     "LG TV power on : sending magic packet on interface %s, port %s, broadcast %s",
-    #     _config_device.interface,
-    #     _config_device.wol_port,
-    #     ip_address
-    # )
-
     requests = 0
     if _config_device.mac_address:
         requests += 1
@@ -716,20 +705,6 @@ async def handle_wake_on_lan(msg: UserDataResponse) -> RequestUserConfirmation |
 
     device = LGDevice(device_config=_config_device)
     device.wakeonlan()
-
-    # if _config_device.mac_address:
-    #     requests += 1
-    #     _LOG.debug("LG TV power on : sending magic packet to %s",
-    #                _config_device.mac_address)
-    #     wakeonlan.send_magic_packet(_config_device.mac_address, interface=_config_device.interface,
-    #                                 ip_address=ip_address, port=_config_device.wol_port)
-    #
-    # if _config_device.mac_address2:
-    #     requests += 1
-    #     _LOG.debug("LG TV power on : sending magic packet to %s",
-    #                _config_device.mac_address2)
-    #     wakeonlan.send_magic_packet(_config_device.mac_address2, interface=_config_device.interface,
-    #                       ip_address=ip_address, port=_config_device.wol_port)
 
     return RequestUserConfirmation(title={
             "en": f"{requests} requests sent to the TV",
