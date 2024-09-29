@@ -117,8 +117,8 @@ async def on_subscribe_entities(entity_ids: list[str]) -> None:
         entity = api.configured_entities.get(entity_id)
         device_id = device_from_entity_id(entity_id)
         if device_id in _configured_devices:
-            device = _configured_devices[device_id]
-            attributes = device.attributes
+            device_config = _configured_devices[device_id]
+            attributes = device_config.attributes
             if isinstance(entity, media_player.LGTVMediaPlayer):
                 api.configured_entities.update_attributes(
                     entity_id, attributes
@@ -130,10 +130,9 @@ async def on_subscribe_entities(entity_ids: list[str]) -> None:
                 )
             continue
 
-        device = config.devices.get(device_id)
-        if device:
-            _configure_new_device(device, connect=True)
-            _LOOP.create_task(device.connect())
+        device_config = config.devices.get(device_id)
+        if device_config:
+            _configure_new_device(device_config, connect=True)
         else:
             _LOG.error("Failed to subscribe entity %s: no LG TV configuration found", entity_id)
 
@@ -318,7 +317,7 @@ def _configure_new_device(device_config: config.LGConfigDevice, connect: bool = 
 
     Supported entities of the device are created and registered in the integration library as available entities.
 
-    :param device: the receiver configuration.
+    :param device_config: the receiver configuration.
     :param connect: True: start connection to receiver.
     """
     # the device may be already configured if the user changed settings of existing device

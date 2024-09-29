@@ -33,7 +33,7 @@ class LGTVMediaPlayer(MediaPlayer):
         entity_id = create_entity_id(config_device.id, EntityTypes.MEDIA_PLAYER)
         features = device.supported_features
         attributes = {
-            Attributes.STATE: lg.LG_STATE_MAPPING.get(device.state),
+            Attributes.STATE: device.state,
             Attributes.VOLUME: device.volume_level,
             Attributes.MUTED: device.is_volume_muted,
             Attributes.SOURCE: device.source if device.source else "",
@@ -73,6 +73,7 @@ class LGTVMediaPlayer(MediaPlayer):
         """
         # pylint: disable = R0915
         _LOG.info("Got %s command request: %s %s", self.id, cmd_id, params)
+        res = None
 
         if self._device is None:
             _LOG.warning("No LG TV instance for entity: %s", self.id)

@@ -9,12 +9,13 @@ import logging
 from typing import Any
 
 from aiowebostv.buttons import BUTTONS
+from ucapi.media_player import States
 
 from config import create_entity_id, LGConfigDevice
 from lg import LGDevice
 from ucapi import EntityTypes, Remote, StatusCodes
 from ucapi.remote import Attributes, Commands, States as RemoteStates, Options, Features
-from const import LG_REMOTE_BUTTONS_MAPPING, LG_REMOTE_UI_PAGES, States, LG_SIMPLE_COMMANDS_CUSTOM
+from const import LG_REMOTE_BUTTONS_MAPPING, LG_REMOTE_UI_PAGES, LG_SIMPLE_COMMANDS_CUSTOM
 
 _LOG = logging.getLogger(__name__)
 
@@ -25,7 +26,6 @@ LG_REMOTE_STATE_MAPPING = {
     States.ON: RemoteStates.ON,
     States.PLAYING: RemoteStates.ON,
     States.PAUSED: RemoteStates.ON,
-    States.STOPPED: RemoteStates.ON
 }
 
 
@@ -85,6 +85,7 @@ class LGRemote(Remote):
         hold = self.getIntParam("hold", params, 0)
         delay = self.getIntParam("delay", params, 0)
         command = params.get("command", "")
+        res = None
 
         if command in self.options[Options.SIMPLE_COMMANDS]:
             if cmd_id in LG_SIMPLE_COMMANDS_CUSTOM:

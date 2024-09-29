@@ -29,10 +29,10 @@ import ucapi
 from aiohttp import ServerTimeoutError
 from aiowebostv import WebOsClient, WebOsTvCommandError, endpoints
 from config import LGConfigDevice
-from const import LG_FEATURES, LIVE_TV_APP_ID, WEBOSTV_EXCEPTIONS, States
+from const import LG_FEATURES, LIVE_TV_APP_ID, WEBOSTV_EXCEPTIONS
 from httpx import TransportError
 from pyee.asyncio import AsyncIOEventEmitter
-from ucapi.media_player import Attributes as MediaAttr
+from ucapi.media_player import Attributes as MediaAttr, States
 from ucapi.media_player import Features, MediaType
 from ucapi.media_player import States as MediaStates
 
@@ -55,14 +55,6 @@ class Events(IntEnum):
     UPDATE = 4
     # IP_ADDRESS_CHANGED = 6
 
-
-LG_STATE_MAPPING = {
-    States.OFF: MediaStates.OFF,
-    States.ON: MediaStates.ON,
-    States.STOPPED: MediaStates.STANDBY,
-    States.PLAYING: MediaStates.PLAYING,
-    States.PAUSED: MediaStates.PAUSED,
-}
 
 _LGDeviceT = TypeVar("_LGDeviceT", bound="LGDevice")
 _P = ParamSpec("_P")
@@ -270,7 +262,7 @@ class LGDevice:
         state = States.ON if is_on else States.OFF
         if state != self.state:
             self._attr_state = state
-            updated_data[MediaAttr.STATE] = LG_STATE_MAPPING.get(self.state)
+            updated_data[MediaAttr.STATE] = self.state
 
         muted = cast(bool, self._tv.muted)
         if muted != self._attr_is_volume_muted:
@@ -448,7 +440,7 @@ class LGDevice:
     def attributes(self) -> dict[str, any]:
         """Return the device attributes."""
         updated_data = {
-            MediaAttr.STATE: LG_STATE_MAPPING.get(self.state),
+            MediaAttr.STATE: self.state,
             MediaAttr.MUTED: self.is_volume_muted,
             MediaAttr.VOLUME: self.volume_level,
             MediaAttr.MEDIA_TYPE: self._media_type,

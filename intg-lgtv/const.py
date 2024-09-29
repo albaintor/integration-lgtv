@@ -60,18 +60,6 @@ WEBOSTV_EXCEPTIONS = (
 )
 
 
-class States(IntEnum):
-    """State of a connected AVR."""
-
-    UNKNOWN = 0
-    UNAVAILABLE = 1
-    OFF = 2
-    ON = 3
-    PLAYING = 4
-    PAUSED = 5
-    STOPPED = 6
-
-
 # Custom commands to be handled specifically
 LG_SIMPLE_COMMANDS_CUSTOM = [
     "INPUT_SOURCE"  # Next input source
