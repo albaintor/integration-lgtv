@@ -38,6 +38,8 @@ class LGTVMediaPlayer(MediaPlayer):
             Attributes.MUTED: device.is_volume_muted,
             Attributes.SOURCE: device.source if device.source else "",
             Attributes.SOURCE_LIST: device.source_list,
+            Attributes.SOUND_MODE: device.sound_output if device.sound_output else "",
+            Attributes.SOUND_MODE_LIST: device.sound_outputs,
             Attributes.MEDIA_IMAGE_URL: device.media_image_url if device.media_image_url else "",
             Attributes.MEDIA_TITLE: device.media_title if device.media_title else "",
             Attributes.MEDIA_TYPE: device.media_type,
@@ -175,6 +177,8 @@ class LGTVMediaPlayer(MediaPlayer):
             res = await self._device.button("FASTFORWARD")
         elif cmd_id == Commands.REWIND:
             res = await self._device.button("REWIND")
+        elif cmd_id == Commands.SELECT_SOUND_MODE:
+            res = await self._device.select_sound_output(params.get("mode"))
         elif cmd_id in self.options[Options.SIMPLE_COMMANDS]:
             if cmd_id in LG_SIMPLE_COMMANDS_CUSTOM:
                 if cmd_id == "INPUT_SOURCE":
@@ -205,6 +209,8 @@ class LGTVMediaPlayer(MediaPlayer):
             Attributes.MUTED,
             Attributes.SOURCE,
             Attributes.VOLUME,
+            Attributes.SOUND_MODE,
+            Attributes.SOUND_MODE_LIST
         ]:
             if attr in update:
                 attributes = self._key_update_helper(attr, update[attr], attributes)

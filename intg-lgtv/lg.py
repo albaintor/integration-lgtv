@@ -29,12 +29,11 @@ import ucapi
 from aiohttp import ServerTimeoutError
 from aiowebostv import WebOsClient, WebOsTvCommandError, endpoints
 from config import LGConfigDevice
-from const import LG_FEATURES, LIVE_TV_APP_ID, WEBOSTV_EXCEPTIONS
+from const import LG_FEATURES, LIVE_TV_APP_ID, WEBOSTV_EXCEPTIONS, LG_SOUND_OUTPUTS
 from httpx import TransportError
 from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr, States
 from ucapi.media_player import Features, MediaType
-from ucapi.media_player import States as MediaStates
 
 _LOG = logging.getLogger(__name__)
 
@@ -152,6 +151,7 @@ class LGDevice:
         self._buffered_callbacks = {}
         self._connect_lock = Lock()
         self._reconnect_retry = 0
+        self._sound_output = None
 
         _LOG.debug("LG TV created: %s", device_config.address)
 
@@ -162,9 +162,9 @@ class LGDevice:
         """Activate websocket for listening if wanted. the websocket has to be recreated when the device goes off."""
         _LOG.info("LG TV Activating websocket connection")
 
-        async def _on_state_changed(client):
+        async def _on_state_changed(client: WebOsClient):
             """State changed callback."""
-            await self._update_states()
+            await self._update_states(client)
             if not client.power_state:
                 self._attr_state = States.OFF
 
@@ -181,9 +181,10 @@ class LGDevice:
             # _LOG.debug(f"Current channel: {client.current_channel}")
             # _LOG.debug(f"Muted: {client.muted}")
             # _LOG.debug(f"Volume: {client.volume}")
-            # _LOG.debug(f"Sound output: {client.sound_output}")
+            _LOG.debug(f"Sound output: {client.sound_output}")
 
         await self._tv.register_state_update_callback(_on_state_changed)
+        await self._tv.subscribe_sound_output(_on_state_changed)
 
     def _update_sources(self, updated_data: any) -> None:
         """Update list of sources from current source, apps, inputs and configured list."""
@@ -233,7 +234,7 @@ class LGDevice:
             self._active_source = active_source
             updated_data[MediaAttr.SOURCE] = self._active_source
 
-    async def _update_states(self) -> None:
+    async def _update_states(self, data: WebOsClient | None) -> None:
         """Update entity state attributes."""
         # pylint: disable = R0915
         updated_data = {}
@@ -258,6 +259,20 @@ class LGDevice:
         # pylint: disable = W0718
         except Exception:
             is_on = False
+
+        if data and data.sound_output:
+            if self._sound_output != data.sound_output:
+                self._sound_output = data.sound_output
+                updated_data[MediaAttr.SOUND_MODE] = self.sound_output
+        elif self._sound_output is None:
+            try:
+                self._sound_output = await self._tv.get_sound_output()
+                if self._sound_output:
+                    updated_data[MediaAttr.SOUND_MODE] = self.sound_output
+                _LOG.debug("Sound output %s", self._sound_output)
+            except Exception as ex:
+                _LOG.warning("Error extraction of sound output", ex)
+                pass
 
         state = States.ON if is_on else States.OFF
         if state != self.state:
@@ -305,28 +320,10 @@ class LGDevice:
         if updated_data:
             self.events.emit(Events.UPDATE, self.id, updated_data)
 
-        # if self.state != States.OFF or not self._supported_features:
-        #     self._supported_features = LG_FEATURES
-        #     if self._tv.sound_output in ("external_arc", "external_speaker"):
-        #         self._supported_features.append(Features.VOLUME_UP_DOWN)
-        #     elif self._tv.sound_output != "lineout":
-        #         self._supported_features.append(Features.VOLUME_UP_DOWN)
-        #         self._supported_features.append(Features.VOLUME)
-
-        # if self._tv.system_info is not None or self.state != States.OFF:
-        #     maj_v = self._tv.software_info.get("major_ver")
-        #     min_v = self._tv.software_info.get("minor_ver")
-        #     if maj_v and min_v:
-        #         self._attr_device_info["sw_version"] = f"{maj_v}.{min_v}"
-        #
-        #     if model := self._tv.system_info.get("modelName"):
-        #         self._attr_device_info["model"] = model
-
-        # self._attr_extra_state_attributes = {}
-        # if self._tv.sound_output is not None or self.state != States.OFF:
-        #     self._attr_extra_state_attributes = {
-        #         ATTR_SOUND_OUTPUT: self._client.sound_output
-        #     }
+        _sound_output = self._sound_output
+        self._sound_output = self._tv.sound_output
+        if _sound_output != self._sound_output:
+            updated_data[MediaAttr.SOUND_MODE] = self.sound_output
 
     async def _connect_loop(self) -> None:
         """Connect loop.
@@ -369,7 +366,7 @@ class LGDevice:
             self._connecting = True
             self._tv: WebOsClient = WebOsClient(host=self._device_config.address, client_key=self._device_config.key)
             await self._tv.connect()
-            await self._update_states()
+            await self._update_states(None)
             if not self._device_config.mac_address:
                 await self._update_system()
             await self.async_activate_websocket()
@@ -446,11 +443,14 @@ class LGDevice:
             MediaAttr.MEDIA_TYPE: self._media_type,
             MediaAttr.MEDIA_IMAGE_URL: self.media_image_url,
             MediaAttr.MEDIA_TITLE: self.media_title,
+            MediaAttr.SOUND_MODE_LIST: self.sound_outputs,
         }
         if self.source_list:
             updated_data[MediaAttr.SOURCE_LIST] = self.source_list
         if self.source:
             updated_data[MediaAttr.SOURCE] = self.source
+        if self.sound_output:
+            updated_data[MediaAttr.SOUND_MODE] = self.sound_output
         return updated_data
 
     @property
@@ -489,6 +489,21 @@ class LGDevice:
     def source(self) -> str:
         """Return the current input source."""
         return self._active_source
+
+    @property
+    def sound_output(self) -> str | None:
+        """Return the current sound output."""
+        if self._sound_output is None:
+            return None
+        _sound_output = LG_SOUND_OUTPUTS.get(self._sound_output, None)
+        if _sound_output is None:
+            _LOG.error("Unknown sound output %s, report to developer", self._sound_output)
+        return _sound_output
+
+    @property
+    def sound_outputs(self) -> [str]:
+        """Return the current sound output."""
+        return list(LG_SOUND_OUTPUTS.values())
 
     @property
     def is_volume_muted(self) -> bool:
@@ -781,6 +796,20 @@ class LGDevice:
         except Exception as ex:
             _LOG.error("LG TV unknown error select_source %s", ex)
         return ucapi.StatusCodes.BAD_REQUEST
+
+    @cmd_wrapper
+    async def select_sound_output(self, mode: str | None):
+        """Set sound output."""
+        if mode is None:
+            return ucapi.StatusCodes.BAD_REQUEST
+        _LOG.debug("LG TV setting sound output to %s", mode)
+        inv_map = {v: k for k, v in LG_SOUND_OUTPUTS.items()}
+        sound_output = inv_map.get(mode)
+        if sound_output is None:
+            _LOG.debug("LG TV invalid sound output %s from list (%s)", mode, inv_map)
+            return ucapi.StatusCodes.BAD_REQUEST
+        _LOG.debug("LG set sound output to %s", sound_output)
+        await self._tv.change_sound_output(sound_output)
 
     @cmd_wrapper
     async def button(self, button: str):

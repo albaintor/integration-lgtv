@@ -44,6 +44,7 @@ LG_FEATURES = [
     Features.SUBTITLE,
     Features.RECORD,
     Features.SETTINGS,
+    Features.SELECT_SOUND_MODE
 ]
 
 WEBOSTV_EXCEPTIONS = (
@@ -59,6 +60,18 @@ WEBOSTV_EXCEPTIONS = (
     ServerTimeoutError,
 )
 
+LG_SOUND_OUTPUTS: dict[str, str] = {
+    "tv_speaker":"Internal TV speaker",
+    "external_optical":"Optical",
+    "external_arc":"HDMI Arc",
+    "lineout":"Line out",
+    "headphone":"Headphones",
+    "external_speaker":"Audio out (optical/hdmi arc)",
+    "tv_external_speaker":"TV speaker and optical",
+    "tv_speaker_headphone":"TV speaker and headphones",
+    "bt_soundbar":"Bluetooth soundbar and bluetooth devices",
+    "soundbar":"Soundbar optical"
+}
 
 # Custom commands to be handled specifically
 LG_SIMPLE_COMMANDS_CUSTOM = [
