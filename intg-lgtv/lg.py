@@ -115,6 +115,21 @@ def cmd_wrapper(
     return wrapper
 
 
+def create_magic_packet(mac_address: str) -> bytes:
+    """Create a magic packet to wake on LAN."""
+    addr_byte = mac_address.split(":")
+    hw_addr = struct.pack(
+        "BBBBBB",
+        int(addr_byte[0], 16),
+        int(addr_byte[1], 16),
+        int(addr_byte[2], 16),
+        int(addr_byte[3], 16),
+        int(addr_byte[4], 16),
+        int(addr_byte[5], 16),
+    )
+    return b"\xff" * 6 + hw_addr * 16
+
+
 class LGDevice:
     """Representing a LG TV Device."""
 
@@ -333,6 +348,15 @@ class LGDevice:
         """
         while True:
             await asyncio.sleep(DEFAULT_TIMEOUT)
+            try:
+                await self.connect()
+                if self._tv.is_on:
+                    _LOG.debug("LG TV connection succeeded")
+                    self._connect_task = None
+                    self._reconnect_retry = 0
+                    break
+            except WEBOSTV_EXCEPTIONS:
+                pass
             self._reconnect_retry += 1
             if self._reconnect_retry > CONNECTION_RETRIES:
                 _LOG.debug("LG %s not connected abort retries", self._device_config.address)
@@ -345,15 +369,6 @@ class LGDevice:
                 self._reconnect_retry,
                 CONNECTION_RETRIES,
             )
-            try:
-                await self.connect()
-                if self._tv.is_on:
-                    _LOG.debug("LG TV connection succeeded")
-                    self._connect_task = None
-                    self._reconnect_retry = 0
-                    break
-            except WEBOSTV_EXCEPTIONS:
-                pass
 
     async def connect(self):
         """Connect to the device."""
@@ -554,32 +569,18 @@ class LGDevice:
             await self.power_off()
         return ucapi.StatusCodes.OK
 
-    def _create_magic_packet(self, mac_address: str) -> bytes:
-        """Create a magic packet to wake on LAN."""
-        addr_byte = mac_address.split(":")
-        hw_addr = struct.pack(
-            "BBBBBB",
-            int(addr_byte[0], 16),
-            int(addr_byte[1], 16),
-            int(addr_byte[2], 16),
-            int(addr_byte[3], 16),
-            int(addr_byte[4], 16),
-            int(addr_byte[5], 16),
-        )
-        return b"\xff" * 6 + hw_addr * 16
-
     def wakeonlan(self) -> None:
         """Send WOL command. to known mac addresses."""
         messages = []
         if self._device_config.mac_address:
             _LOG.debug("LG TV power on : sending magic packet to %s (wired)",
                        self._device_config.mac_address)
-            messages.append(self._create_magic_packet(self._device_config.mac_address))
+            messages.append(create_magic_packet(self._device_config.mac_address))
 
         if self._device_config.mac_address2:
             _LOG.debug("LG TV power on : sending magic packet to %s (wifi)",
                        self._device_config.mac_address2)
-            messages.append(self._create_magic_packet(self._device_config.mac_address2))
+            messages.append(create_magic_packet(self._device_config.mac_address2))
 
         if len(messages) > 0:
             broadcast = "<broadcast>"
@@ -729,7 +730,7 @@ class LGDevice:
             _LOG.debug("LG TV set input: %s succeeded", source)
             return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
-            _LOG.error("LG TV error select_source %s", ex)
+            _LOG.error("LG TV error select_source", ex)
         # pylint: disable = W0718
         except Exception as ex:
             _LOG.error("LG TV unknown error select_source %s", ex)
@@ -788,7 +789,7 @@ class LGDevice:
                 "Device is not ready to accept command, buffering it : %s",
                 self._buffered_callbacks,
             )
-            await self.reconnect()
+            self.event_loop.create_task(self.reconnect())
             return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("LG TV error select_source %s", ex)
