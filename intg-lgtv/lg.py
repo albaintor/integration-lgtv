@@ -798,8 +798,13 @@ class LGDevice:
             _LOG.error("LG TV unknown error select_source %s", ex)
         return ucapi.StatusCodes.BAD_REQUEST
 
-    @cmd_wrapper
-    async def select_sound_output(self, mode: str | None):
+    async def select_sound_output_deferred(self, sound_output: str | None) -> ucapi.StatusCodes:
+        """Set sound output."""
+        _LOG.debug("LG set sound output to %s", sound_output)
+        await self._tv.change_sound_output(sound_output)
+        return ucapi.StatusCodes.OK
+
+    async def select_sound_output(self, mode: str | None) -> ucapi.StatusCodes:
         """Set sound output."""
         if mode is None:
             return ucapi.StatusCodes.BAD_REQUEST
@@ -809,8 +814,29 @@ class LGDevice:
         if sound_output is None:
             _LOG.debug("LG TV invalid sound output %s from list (%s)", mode, inv_map)
             return ucapi.StatusCodes.BAD_REQUEST
-        _LOG.debug("LG set sound output to %s", sound_output)
-        await self._tv.change_sound_output(sound_output)
+        try:
+            res = await self.select_sound_output_deferred(sound_output)
+            if res != ucapi.StatusCodes.OK:
+                raise WebOsTvCommandError
+            return res
+        except WebOsTvCommandError:
+            await self.power_on()
+            self._buffered_callbacks[time.time()] = {
+                "function": self.select_sound_output_deferred,
+                "args": [sound_output],
+            }
+            _LOG.info(
+                "Device is not ready to accept command, buffering it : %s",
+                self._buffered_callbacks,
+            )
+            self.event_loop.create_task(self.reconnect())
+            return ucapi.StatusCodes.OK
+        except WEBOSTV_EXCEPTIONS as ex:
+            _LOG.error("LG TV error select_sound_output %s", ex)
+        # pylint: disable = W0718
+        except Exception as ex:
+            _LOG.error("LG TV unknown error select_sound_output %s", ex)
+        return ucapi.StatusCodes.BAD_REQUEST
 
     @cmd_wrapper
     async def button(self, button: str):
