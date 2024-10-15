@@ -46,7 +46,7 @@ async def on_r2_connect_cmd() -> None:
         # TODO ? what is the connect event for (against exit from standby)
         # await _LOOP.create_task(device.power_on())
         try:
-            await _LOOP.create_task(device.connect())
+            _LOOP.create_task(device.connect())
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.debug(
                 "Could not connect to device, probably because it is starting with magic packet %s",

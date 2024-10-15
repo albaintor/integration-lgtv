@@ -196,10 +196,17 @@ class LGDevice:
             # _LOG.debug(f"Current channel: {client.current_channel}")
             # _LOG.debug(f"Muted: {client.muted}")
             # _LOG.debug(f"Volume: {client.volume}")
-            _LOG.debug(f"Sound output: {client.sound_output}")
+            # _LOG.debug(f"Sound output: {client.sound_output}")
+
+        async def _on_sound_output_changed(sound_output: str):
+            if sound_output:
+                if self._sound_output != sound_output:
+                    self._sound_output = sound_output
+                    self.events.emit(Events.UPDATE, self.id, {MediaAttr.SOUND_MODE: self.sound_output})
+
 
         await self._tv.register_state_update_callback(_on_state_changed)
-        await self._tv.subscribe_sound_output(_on_state_changed)
+        await self._tv.subscribe_sound_output(_on_sound_output_changed)
 
     def _update_sources(self, updated_data: any) -> None:
         """Update list of sources from current source, apps, inputs and configured list."""
@@ -332,13 +339,13 @@ class LGDevice:
             self._media_image_url = media_image_url
             updated_data[MediaAttr.MEDIA_IMAGE_URL] = self._media_image_url
 
-        if updated_data:
-            self.events.emit(Events.UPDATE, self.id, updated_data)
-
         _sound_output = self._sound_output
         self._sound_output = self._tv.sound_output
         if _sound_output != self._sound_output:
             updated_data[MediaAttr.SOUND_MODE] = self.sound_output
+
+        if updated_data:
+            self.events.emit(Events.UPDATE, self.id, updated_data)
 
     async def _connect_loop(self) -> None:
         """Connect loop.
