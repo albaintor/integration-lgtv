@@ -45,12 +45,6 @@ class LGTVMediaPlayer(MediaPlayer):
             Attributes.MEDIA_TYPE: device.media_type,
         }
         _LOG.debug("LGTVMediaPlayer init %s : %s", entity_id, attributes)
-
-        # # use sound mode support & name from configuration: receiver might not yet be connected
-        # if device.support_sound_mode:
-        #     features.append(Features.SELECT_SOUND_MODE)
-        #     attributes[Attributes.SOUND_MODE] = ""
-        #     attributes[Attributes.SOUND_MODE_LIST] = []
         options = {
             Options.SIMPLE_COMMANDS: LG_SIMPLE_COMMANDS
         }

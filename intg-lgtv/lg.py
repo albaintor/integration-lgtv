@@ -546,27 +546,11 @@ class LGDevice:
         return self._media_type
 
     async def power_toggle(self) -> ucapi.StatusCodes:
-        is_off = False
-        state = None
-        try:
-            async with asyncio.timeout(5):
-                state = await self._tv.get_power_state()
-                state_value = state.get("state", None)
-                if state_value == "Unknown":
-                    # fallback to current app id for some older webos versions
-                    # which don't support explicit power state
-                    if self._tv.current_app_id in [None, ""]:
-                        _LOG.debug("TV is already off [%s]", state)
-                        is_off = True
-                elif state_value in [None, "Power Off", "Suspend", "Active Standby"]:
-                    _LOG.debug("TV is already off [%s]", state)
-                    is_off = True
-        except Exception:
-            pass
-        if is_off:
-            await self.power_on()
-        else:
+        is_on = await self.check_connect()
+        if is_on:
             await self.power_off()
+        else:
+            await self.power_on()
         return ucapi.StatusCodes.OK
 
     def wakeonlan(self) -> None:
@@ -592,6 +576,27 @@ class LGDevice:
                 socket_instance.sendto(msg, (broadcast, self._device_config.wol_port))
             socket_instance.close()
 
+
+    async def check_connect(self) -> bool:
+        """Check power and connection state."""
+        is_on = True
+        try:
+            async with asyncio.timeout(5):
+                state = await self._tv.get_power_state()
+                state_value = state.get("state", None)
+                if state_value == "Unknown":
+                    if self._tv.current_app_id in [None, ""]:
+                        _LOG.debug("TV is already off [%s]", state)
+                        is_on = False
+                elif state_value in [None, "Power Off", "Suspend", "Active Standby"]:
+                    _LOG.debug("TV is already off [%s]", state)
+                    is_on = False
+        except Exception:
+            pass
+        if not is_on:
+            self.event_loop.create_task(self.connect())
+        return is_on
+
     async def power_on(self) -> ucapi.StatusCodes:
         """Send power-on command to LG TV."""
         try:
@@ -605,8 +610,8 @@ class LGDevice:
                 self._device_config.wol_port,
                 ip_address
             )
-
             self.wakeonlan()
+            self.event_loop.create_task(self.check_connect())
             return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("LG TV error power_on %s", ex)
