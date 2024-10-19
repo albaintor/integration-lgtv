@@ -384,7 +384,7 @@ class LGDevice:
             return
         try:
             await self._connect_lock.acquire()
-            # _LOG.debug("Connect %s", self._device_config.address)
+            _LOG.debug("Connect to %s", self._device_config.address)
             self._connecting = True
             self._tv: WebOsClient = WebOsClient(host=self._device_config.address, client_key=self._device_config.key)
             await self._tv.connect()
@@ -601,7 +601,10 @@ class LGDevice:
         except Exception:
             pass
         if not is_on:
+            _LOG.debug("TV is not connected, calling connect")
             self.event_loop.create_task(self.connect())
+        else:
+            _LOG.debug("TV is connected")
         return is_on
 
     async def power_on(self) -> ucapi.StatusCodes:
