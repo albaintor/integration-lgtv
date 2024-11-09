@@ -395,6 +395,7 @@ class LGDevice:
             self._attr_available = True
             # Handle awaiting commands to process
             if self._buffered_callbacks:
+                _LOG.debug("Connected, executing buffered commands")
                 while self._buffered_callbacks:
                     try:
                         items = self._buffered_callbacks.copy()
@@ -414,6 +415,7 @@ class LGDevice:
                         pass
         except WEBOSTV_EXCEPTIONS as ex:
             self._attr_available = False
+            _LOG.error("Unable to connect : %s", ex)
             if not self._connect_task:
                 _LOG.warning("Unable to update, LG TV probably off: %s, running connect task", ex)
                 self._connect_task = asyncio.create_task(self._connect_loop())

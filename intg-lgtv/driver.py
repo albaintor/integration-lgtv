@@ -268,16 +268,8 @@ async def on_device_update(device_id: str, update: dict[str, Any] | None) -> Non
     if update is None:
         if device_id not in _configured_devices:
             return
-        receiver = _configured_devices[device_id]
-        update = {
-            MediaAttr.STATE: receiver.state,
-            MediaAttr.MEDIA_IMAGE_URL: receiver.media_image_url,
-            MediaAttr.MEDIA_TITLE: receiver.media_title,
-            MediaAttr.MUTED: receiver.is_volume_muted,
-            MediaAttr.SOURCE: receiver.source,
-            MediaAttr.SOURCE_LIST: receiver.source_list,
-            MediaAttr.VOLUME: receiver.volume_level,
-        }
+        device = _configured_devices[device_id]
+        update = device.attributes
     else:
         _LOG.info("[%s] LG TV update: %s", device_id, update)
 
