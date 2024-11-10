@@ -43,6 +43,10 @@ CONNECTION_RETRIES = 10
 
 INIT_APPS_LAUNCH_DELAY = 10
 
+class LGState(IntEnum):
+    OFF = 0
+    STANDBY = 1
+    ON = 2
 
 class Events(IntEnum):
     """Internal driver events."""
@@ -370,6 +374,7 @@ class LGDevice:
                 self._connect_task = None
                 self._reconnect_retry = 0
                 break
+            self.wakeonlan()
             _LOG.debug(
                 "LG %s not connected, retry %s / %s",
                 self._device_config.address,
@@ -423,6 +428,7 @@ class LGDevice:
             # Always emit connected event even if the device is unreachable (off)
             self.events.emit(Events.CONNECTED, self.id)
             self._connecting = False
+            _LOG.debug("Connection task ends")
             self._connect_lock.release()
 
     async def reconnect(self):
@@ -555,8 +561,9 @@ class LGDevice:
         return self._media_type
 
     async def power_toggle(self) -> ucapi.StatusCodes:
-        is_on = await self.check_connect()
-        if is_on:
+        lg_state = await self.check_connect()
+        _LOG.debug("Power toggle power state : %s", lg_state)
+        if lg_state == LGState.ON:
             await self.power_off()
         else:
             await self.power_on()
@@ -565,12 +572,15 @@ class LGDevice:
     def wakeonlan(self) -> None:
         """Send WOL command. to known mac addresses."""
         messages = []
-        if self._device_config.mac_address:
+        wol_port = self._device_config.wol_port
+        if wol_port is None:
+            wol_port = 9
+        if self._device_config.mac_address is not None:
             _LOG.debug("LG TV power on : sending magic packet to %s (wired)",
                        self._device_config.mac_address)
             messages.append(create_magic_packet(self._device_config.mac_address))
 
-        if self._device_config.mac_address2:
+        if self._device_config.mac_address2 is not None:
             _LOG.debug("LG TV power on : sending magic packet to %s (wifi)",
                        self._device_config.mac_address2)
             messages.append(create_magic_packet(self._device_config.mac_address2))
@@ -582,32 +592,32 @@ class LGDevice:
             socket_instance = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             socket_instance.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             for msg in messages:
-                socket_instance.sendto(msg, (broadcast, self._device_config.wol_port))
+                socket_instance.sendto(msg, (broadcast, wol_port))
             socket_instance.close()
 
 
-    async def check_connect(self) -> bool:
+    async def check_connect(self) -> LGState:
         """Check power and connection state."""
-        is_on = True
+        lg_state: LGState = LGState.ON
         try:
             async with asyncio.timeout(5):
                 state = await self._tv.get_power_state()
                 state_value = state.get("state", None)
-                if state_value == "Unknown":
+                if state_value is None or state_value == "Unknown":
                     if self._tv.current_app_id in [None, ""]:
                         _LOG.debug("TV is already off [%s]", state)
-                        is_on = False
-                elif state_value in [None, "Power Off", "Suspend", "Active Standby"]:
-                    _LOG.debug("TV is already off [%s]", state)
-                    is_on = False
+                        lg_state = LGState.OFF
+                elif state_value in ["Power Off", "Suspend", "Active Standby"]:
+                    _LOG.debug("TV is in standby [%s]", state)
+                    lg_state = LGState.STANDBY
         except Exception:
-            pass
-        if not is_on:
+            lg_state = LGState.OFF
+        if lg_state == LGState.OFF:
             _LOG.debug("TV is not connected, calling connect")
             self.event_loop.create_task(self.connect())
         else:
             _LOG.debug("TV is connected")
-        return is_on
+        return lg_state
 
     async def power_on(self) -> ucapi.StatusCodes:
         """Send power-on command to LG TV."""
@@ -623,7 +633,16 @@ class LGDevice:
                 ip_address
             )
             self.wakeonlan()
+            self._buffered_callbacks[time.time()] = {
+                "function": self._tv.power_on,
+                "args": [],
+            }
             self.event_loop.create_task(self.check_connect())
+            try:
+                _LOG.debug("Sends power on command in case of TV is already connected")
+                await self._tv.power_on()
+            except Exception as ex:
+                _LOG.error("LG TV error power on command %s", ex)
             return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("LG TV error power_on %s", ex)
@@ -636,26 +655,9 @@ class LGDevice:
     @cmd_wrapper
     async def power_off(self):
         """Send power-off command to LG TV."""
-        is_off = False
-        state = None
-        try:
-            async with asyncio.timeout(5):
-                state = await self._tv.get_power_state()
-                state_value = state.get("state", None)
-                if state_value == "Unknown":
-                    # fallback to current app id for some older webos versions
-                    # which don't support explicit power state
-                    if self._tv.current_app_id in [None, ""]:
-                        _LOG.debug("TV is already off [%s]", state)
-                        is_off = True
-                elif state_value in [None, "Power Off", "Suspend", "Active Standby"]:
-                    _LOG.debug("TV is already off [%s]", state)
-                    is_off = True
-        except asyncio.TimeoutError:
-            _LOG.debug("Power off requested but could not get TV state")
-            is_off = True
-        if is_off is False:
-            _LOG.debug("TV is ON, powering off [%s]", state)
+        lg_state = await self.check_connect()
+        if lg_state == LGState.ON:
+            _LOG.debug("TV is ON, powering off [%s]", lg_state)
             await self._tv.command("request", endpoints.POWER_OFF)
 
     @cmd_wrapper
