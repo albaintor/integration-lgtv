@@ -171,6 +171,7 @@ class LGDevice:
         self._connect_lock = Lock()
         self._reconnect_retry = 0
         self._sound_output = None
+        self._retry_wakeonlan = False
 
         _LOG.debug("LG TV created: %s", device_config.address)
 
@@ -365,6 +366,7 @@ class LGDevice:
                     _LOG.debug("LG TV connection succeeded")
                     self._connect_task = None
                     self._reconnect_retry = 0
+                    self._retry_wakeonlan = False
                     break
             except WEBOSTV_EXCEPTIONS:
                 pass
@@ -374,7 +376,8 @@ class LGDevice:
                 self._connect_task = None
                 self._reconnect_retry = 0
                 break
-            self.wakeonlan()
+            if self._retry_wakeonlan:
+                self.wakeonlan()
             _LOG.debug(
                 "LG %s not connected, retry %s / %s",
                 self._device_config.address,
@@ -633,6 +636,7 @@ class LGDevice:
                 ip_address
             )
             self.wakeonlan()
+            self._retry_wakeonlan = True
             self._buffered_callbacks[time.time()] = {
                 "function": self._tv.power_on,
                 "args": [],
