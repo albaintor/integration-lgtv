@@ -401,6 +401,7 @@ class LGDevice:
                 await self._update_system()
             await self.async_activate_websocket()
             self._attr_available = True
+            self._retry_wakeonlan = False
             # Handle awaiting commands to process
             if self._buffered_callbacks:
                 _LOG.debug("Connected, executing buffered commands")
