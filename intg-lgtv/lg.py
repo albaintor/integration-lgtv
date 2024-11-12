@@ -614,7 +614,8 @@ class LGDevice:
                 elif state_value in ["Power Off", "Suspend", "Active Standby"]:
                     _LOG.debug("TV is in standby [%s]", state)
                     lg_state = LGState.STANDBY
-        except Exception:
+        except Exception as ex:
+            _LOG.debug("Could not get TV state, assuming off", ex)
             lg_state = LGState.OFF
         if lg_state == LGState.OFF:
             _LOG.debug("TV is not connected, calling connect")
