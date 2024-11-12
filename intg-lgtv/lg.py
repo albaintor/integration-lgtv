@@ -665,6 +665,12 @@ class LGDevice:
         if lg_state == LGState.ON:
             _LOG.debug("TV is ON, powering off [%s]", lg_state)
             await self._tv.command("request", endpoints.POWER_OFF)
+        else:
+            _LOG.debug("Power off command : TV seems to be off, adding power_off call to buffered commands if connection is reestablished")
+            self._buffered_callbacks[time.time()] = {
+                "function": self._tv.power_off(),
+                "args": [],
+            }
 
     @cmd_wrapper
     async def set_volume_level(self, volume: float | None):
