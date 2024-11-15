@@ -366,7 +366,6 @@ class LGDevice:
                     _LOG.debug("LG TV connection succeeded")
                     self._connect_task = None
                     self._reconnect_retry = 0
-                    self._retry_wakeonlan = False
                     break
             except WEBOSTV_EXCEPTIONS:
                 pass
@@ -384,6 +383,7 @@ class LGDevice:
                 self._reconnect_retry,
                 CONNECTION_RETRIES,
             )
+        self._retry_wakeonlan = False
 
     async def connect(self):
         """Connect to the device."""
@@ -661,6 +661,7 @@ class LGDevice:
     @cmd_wrapper
     async def power_off(self):
         """Send power-off command to LG TV."""
+        self._retry_wakeonlan = False
         lg_state = await self.check_connect()
         if lg_state == LGState.ON:
             _LOG.debug("TV is ON, powering off [%s]", lg_state)
