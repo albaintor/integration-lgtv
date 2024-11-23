@@ -669,7 +669,7 @@ class LGDevice:
         else:
             _LOG.debug("Power off command : TV seems to be off, adding power_off call to buffered commands if connection is reestablished")
             self._buffered_callbacks[time.time()] = {
-                "function": self._tv.power_off(),
+                "function": self._tv.power_off,
                 "args": [],
             }
 
@@ -762,7 +762,7 @@ class LGDevice:
             _LOG.debug("LG TV set input: %s succeeded", source)
             return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
-            _LOG.error("LG TV error select_source", ex)
+            _LOG.error("LG TV error select_source %s", ex)
         # pylint: disable = W0718
         except Exception as ex:
             _LOG.error("LG TV unknown error select_source %s", ex)
