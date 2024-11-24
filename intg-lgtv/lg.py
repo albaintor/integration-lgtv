@@ -415,8 +415,8 @@ class LGDevice:
                                     await value["function"](*value["args"])
                                     del self._buffered_callbacks[timestamp]
                                 # pylint: disable = W0718
-                                except Exception:
-                                    pass
+                                except Exception as ex:
+                                    _LOG.warning("Error while calling buffered %s", ex)
                             else:
                                 _LOG.debug("Buffered command too old %s, dropping it", value)
                         self._buffered_callbacks.clear()
@@ -626,6 +626,7 @@ class LGDevice:
 
     async def power_on(self) -> ucapi.StatusCodes:
         """Send power-on command to LG TV."""
+        _LOG.debug("Power on")
         try:
             ip_address = self._device_config.broadcast
             if ip_address is None:
@@ -661,6 +662,7 @@ class LGDevice:
     @cmd_wrapper
     async def power_off(self):
         """Send power-off command to LG TV."""
+        _LOG.debug("Power off")
         self._retry_wakeonlan = False
         lg_state = await self.check_connect()
         if lg_state == LGState.ON:
