@@ -671,8 +671,8 @@ class LGDevice:
         else:
             _LOG.debug("Power off command : TV seems to be off, adding power_off call to buffered commands if connection is reestablished")
             self._buffered_callbacks[time.time()] = {
-                "function": self._tv.power_off,
-                "args": [],
+                "function": self._tv.command,
+                "args": ["request", endpoints.POWER_OFF],
             }
 
     @cmd_wrapper
