@@ -366,6 +366,27 @@ class LGDevice:
                     _LOG.debug("LG TV connection succeeded")
                     self._connect_task = None
                     self._reconnect_retry = 0
+                    self._retry_wakeonlan = False
+                    # Handle awaiting commands to process
+                    if self._buffered_callbacks:
+                        _LOG.debug("Connected, executing buffered commands")
+                        while self._buffered_callbacks:
+                            try:
+                                items = self._buffered_callbacks.copy()
+                                for timestamp, value in items.items():
+                                    if time.time() - timestamp <= BUFFER_LIFETIME:
+                                        _LOG.debug("Calling buffered command %s", value)
+                                        try:
+                                            await value["function"](*value["args"])
+                                            del self._buffered_callbacks[timestamp]
+                                        # pylint: disable = W0718
+                                        except Exception as ex:
+                                            _LOG.warning("Error while calling buffered %s", ex)
+                                    else:
+                                        _LOG.debug("Buffered command too old %s, dropping it", value)
+                                self._buffered_callbacks.clear()
+                            except RuntimeError:
+                                pass
                     break
             except WEBOSTV_EXCEPTIONS:
                 pass
@@ -401,27 +422,6 @@ class LGDevice:
                 await self._update_system()
             await self.async_activate_websocket()
             self._attr_available = True
-            self._retry_wakeonlan = False
-            # Handle awaiting commands to process
-            if self._buffered_callbacks:
-                _LOG.debug("Connected, executing buffered commands")
-                while self._buffered_callbacks:
-                    try:
-                        items = self._buffered_callbacks.copy()
-                        for timestamp, value in items.items():
-                            if time.time() - timestamp <= BUFFER_LIFETIME:
-                                _LOG.debug("Calling buffered command %s", value)
-                                try:
-                                    await value["function"](*value["args"])
-                                    del self._buffered_callbacks[timestamp]
-                                # pylint: disable = W0718
-                                except Exception as ex:
-                                    _LOG.warning("Error while calling buffered %s", ex)
-                            else:
-                                _LOG.debug("Buffered command too old %s, dropping it", value)
-                        self._buffered_callbacks.clear()
-                    except RuntimeError:
-                        pass
         except WEBOSTV_EXCEPTIONS as ex:
             self._attr_available = False
             _LOG.error("Unable to connect : %s", ex)
@@ -619,7 +619,9 @@ class LGDevice:
             lg_state = LGState.OFF
         if lg_state == LGState.OFF:
             _LOG.debug("TV is not connected, calling connect")
-            self.event_loop.create_task(self.connect())
+            if not self._connect_task:
+                _LOG.warning("Unable to update, LG TV probably off: %s, running connect task", ex)
+                self._connect_task = asyncio.create_task(self._connect_loop())
         else:
             _LOG.debug("TV is connected")
         return lg_state
