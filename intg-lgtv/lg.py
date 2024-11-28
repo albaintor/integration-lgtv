@@ -661,6 +661,12 @@ class LGDevice:
         # return ucapi.StatusCodes.BAD_REQUEST
         return ucapi.StatusCodes.OK
 
+    async def power_off_deferred(self):
+        # Sleep time : sometimes the connection variable is not defined although the lib reports the TV as connected
+        if self._tv.connection is None:
+            await asyncio.sleep(2)
+        await self._tv.command("request", endpoints.POWER_OFF)
+
     @cmd_wrapper
     async def power_off(self):
         """Send power-off command to LG TV."""
@@ -673,8 +679,8 @@ class LGDevice:
         else:
             _LOG.debug("Power off command : TV seems to be off, adding power_off call to buffered commands if connection is reestablished")
             self._buffered_callbacks[time.time()] = {
-                "function": self._tv.command,
-                "args": ["request", endpoints.POWER_OFF],
+                "function": self.power_off_deferred,
+                "args": [],
             }
 
     @cmd_wrapper
