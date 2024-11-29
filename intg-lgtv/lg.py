@@ -352,6 +352,27 @@ class LGDevice:
         if updated_data:
             self.events.emit(Events.UPDATE, self.id, updated_data)
 
+    async def _run_buffered_commands(self):
+        # Handle awaiting commands to process
+        if self._buffered_callbacks:
+            _LOG.debug("Connected, executing buffered commands")
+            while self._buffered_callbacks:
+                items = dict(sorted(self._buffered_callbacks.items()))
+                try:
+                    for timestamp, value in items.items():
+                        del self._buffered_callbacks[timestamp]
+                        if time.time() - timestamp <= BUFFER_LIFETIME:
+                            _LOG.debug("Calling buffered command %s", value)
+                            try:
+                                await value["function"](*value["args"])
+                            # pylint: disable = W0718
+                            except Exception as ex:
+                                _LOG.warning("Error while calling buffered %s", ex)
+                        else:
+                            _LOG.debug("Buffered command too old %s, dropping it", value)
+                except RuntimeError:
+                    pass
+
     async def _connect_loop(self) -> None:
         """Connect loop.
 
@@ -368,25 +389,7 @@ class LGDevice:
                     self._reconnect_retry = 0
                     self._retry_wakeonlan = False
                     # Handle awaiting commands to process
-                    if self._buffered_callbacks:
-                        _LOG.debug("Connected, executing buffered commands")
-                        while self._buffered_callbacks:
-                            try:
-                                items = self._buffered_callbacks.copy()
-                                for timestamp, value in items.items():
-                                    if time.time() - timestamp <= BUFFER_LIFETIME:
-                                        _LOG.debug("Calling buffered command %s", value)
-                                        try:
-                                            await value["function"](*value["args"])
-                                            del self._buffered_callbacks[timestamp]
-                                        # pylint: disable = W0718
-                                        except Exception as ex:
-                                            _LOG.warning("Error while calling buffered %s", ex)
-                                    else:
-                                        _LOG.debug("Buffered command too old %s, dropping it", value)
-                                self._buffered_callbacks.clear()
-                            except RuntimeError:
-                                pass
+                    await self._run_buffered_commands()
                     break
             except WEBOSTV_EXCEPTIONS:
                 pass
@@ -422,6 +425,7 @@ class LGDevice:
                 await self._update_system()
             await self.async_activate_websocket()
             self._attr_available = True
+            await self._run_buffered_commands()
         except WEBOSTV_EXCEPTIONS as ex:
             self._attr_available = False
             _LOG.error("Unable to connect : %s", ex)
