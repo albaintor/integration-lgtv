@@ -106,7 +106,7 @@ def retry(*, timeout:float=5, bufferize=False
             """Wrap all command methods."""
             # pylint: disable = W0212
             try:
-                if obj._available:
+                if obj.available:
                     await func(obj, *args, **kwargs)
                     return ucapi.StatusCodes.OK
                 _LOG.debug("Device is unavailable, connecting before executing command...")
@@ -179,7 +179,7 @@ class LGDevice:
         self.event_loop = loop or asyncio.get_running_loop()
         self.events = AsyncIOEventEmitter(self.event_loop)
         self._tv: WebOsClient = WebOsClient(host=device_config.address, client_key=device_config.key)
-        self._attr_available: bool = True
+        self._available: bool = True
         self._volume = 0
         self._attr_is_volume_muted = False
         self._active_source = None
@@ -450,10 +450,10 @@ class LGDevice:
             if not self._device_config.mac_address:
                 await self._update_system()
             await self.register_websocket_events()
-            self._attr_available = True
+            self._available = True
             await self._run_buffered_commands()
         except WEBOSTV_EXCEPTIONS as ex:
-            self._attr_available = False
+            self._available = False
             _LOG.error("Unable to connect : %s", ex)
             if not self._connect_task:
                 _LOG.warning("Unable to update, LG TV probably off: %s, running connect task", ex)
@@ -488,7 +488,7 @@ class LGDevice:
                 self._connect_task.cancel()
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("Unable to update: %s", ex)
-            self._attr_available = False
+            self._available = False
         finally:
             self._connect_task = None
 
@@ -520,13 +520,13 @@ class LGDevice:
     @property
     def available(self) -> bool:
         """Return True if device is available."""
-        return self._attr_available
+        return self._available
 
     @available.setter
     def available(self, value: bool):
         """Set device availability and emit CONNECTED / DISCONNECTED event on change."""
-        if self._attr_available != value:
-            self._attr_available = value
+        if self._available != value:
+            self._available = value
             # self.events.emit(Events.CONNECTED if value else Events.DISCONNECTED, self.id)
 
     @property
