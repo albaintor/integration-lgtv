@@ -1,6 +1,6 @@
 {
   "driver_id": "lgwebos_driver",
-  "version": "1.3.13",
+  "version": "1.3.14",
   "min_core_api": "0.20.0",
   "name": {
     "en": "LG WebOS"

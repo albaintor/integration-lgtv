@@ -10,7 +10,7 @@ import logging
 import socket
 import struct
 import time
-from asyncio import AbstractEventLoop, Lock
+from asyncio import AbstractEventLoop, Lock, shield
 from enum import IntEnum
 from functools import wraps
 from typing import (
@@ -82,7 +82,7 @@ async def retry_call_command(timeout: float, bufferize: bool, func: Callable[Con
     try:
         # Else (no bufferize) wait (not more than "timeout" seconds) for the connection to complete
         async with asyncio.timeout(max(timeout - 1, 1)):
-            await obj._connect_task
+            await shield(obj._connect_task)
     except asyncio.TimeoutError:
         # (Re)connection failed at least at given time
         if obj.state == States.OFF:
