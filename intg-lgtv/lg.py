@@ -111,7 +111,7 @@ def retry(*, timeout:float=5, bufferize=False
                     return ucapi.StatusCodes.OK
                 _LOG.debug("Device is unavailable, connecting before executing command...")
                 return await retry_call_command(timeout, bufferize, func, obj, *args, **kwargs)
-            except (WEBOSTV_EXCEPTIONS, TransportError, ProtocolError, ServerTimeoutError) as ex:
+            except WEBOSTV_EXCEPTIONS as ex:
                 if obj.state == States.OFF:
                     log_function = _LOG.debug
                 else:
@@ -125,7 +125,7 @@ def retry(*, timeout:float=5, bufferize=False
                 )
                 try:
                     return await retry_call_command(timeout, bufferize, func, obj, *args, **kwargs)
-                except (WEBOSTV_EXCEPTIONS, TransportError, ProtocolError, ServerTimeoutError) as ex:
+                except WEBOSTV_EXCEPTIONS as ex:
                     log_function(
                         "Error calling %s on [%s(%s)]: %r",
                         func.__name__,
@@ -650,7 +650,7 @@ class LGDevice:
         if lg_state == LGState.OFF:
             _LOG.debug("TV is not connected, calling connect")
             if not self._connect_task:
-                _LOG.warning("Unable to update, LG TV probably off: %s, running connect task", ex)
+                _LOG.warning("Unable to update, LG TV probably off, running connect task")
                 self._connect_task = asyncio.create_task(self._connect_loop())
         else:
             _LOG.debug("TV is connected")
