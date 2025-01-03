@@ -389,7 +389,10 @@ class LGDevice:
                         if time.time() - timestamp <= BUFFER_LIFETIME:
                             _LOG.debug("Calling buffered command %s", value)
                             try:
-                                await value["function"](value["object"],*value["args"], **value["kwargs"])
+                                if "kwargs" in value:
+                                    await value["function"](value["object"], *value["args"], **value["kwargs"])
+                                else:
+                                    await value["function"](value["object"],*value["args"])
                             # pylint: disable = W0718
                             except Exception as ex:
                                 _LOG.warning("Error while calling buffered command %s", ex)
@@ -711,7 +714,7 @@ class LGDevice:
             _LOG.debug("Power off command : TV seems to be off, adding power_off call to buffered commands if connection is reestablished")
             self._buffered_callbacks[time.time()] = {
                 "object": self,
-                "function": self.power_off_deferred,
+                "function": LGDevice.power_off_deferred,
                 "args": [],
             }
 
@@ -852,14 +855,14 @@ class LGDevice:
             if launch_app:
                 self._buffered_callbacks[time.time()] = {
                     "object": self,
-                    "function": self.select_source_deferred,
+                    "function": LGDevice.select_source_deferred,
                     "args": [source, INIT_APPS_LAUNCH_DELAY],
                 }
             else:
                 self._buffered_callbacks[time.time()] = {
                     "object": self,
-                    "function": self.select_source_deferred,
-                    "args": [source],
+                    "function": LGDevice.select_source_deferred,
+                    "args": [source, 0],
                 }
             _LOG.info(
                 "Device is not ready to accept command, buffering it : %s",
@@ -899,7 +902,7 @@ class LGDevice:
             await self.power_on()
             self._buffered_callbacks[time.time()] = {
                 "object": self,
-                "function": self.select_sound_output_deferred,
+                "function": LGDevice.select_sound_output_deferred,
                 "args": [sound_output],
             }
             _LOG.info(
