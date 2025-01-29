@@ -53,6 +53,8 @@ class LGRemote(Remote):
 
     def getIntParam(self, param: str, params: dict[str, Any], default: int):
         # TODO bug to be fixed on UC Core : some params are sent as (empty) strings by remote (hold == "")
+        if params is None or param is None:
+            return default
         value = params.get(param, default)
         if isinstance(value, str) and len(value) > 0:
             return int(float(value))
