@@ -374,6 +374,22 @@ LG_REMOTE_UI_PAGES: [UiPage] = [
             {
                 "command": {
                     "cmd_id": "remote.send",
+                    "params": {"command": "ASPECT_RATIO", "repeat": 1}
+                },
+                "icon": "uc:arrows-maximize",
+                "location": {
+                    "x": 0,
+                    "y": 4
+                },
+                "size": {
+                    "height": 1,
+                    "width": 1
+                },
+                "type": "icon"
+            },
+            {
+                "command": {
+                    "cmd_id": "remote.send",
                     "params": {"command": "MUTE", "repeat": 1}
                 },
                 "icon": "uc:mute",
