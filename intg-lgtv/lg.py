@@ -23,14 +23,11 @@ from typing import (
     TypeVar,
     cast,
 )
-from xmlrpc.client import ProtocolError
 
 import ucapi
-from aiohttp import ServerTimeoutError
-from aiowebostv import WebOsClient, WebOsTvCommandError, endpoints
+from aiowebostv import WebOsClient, WebOsTvCommandError, endpoints, WebOsTvState
 from config import LGConfigDevice
 from const import LG_FEATURES, LIVE_TV_APP_ID, WEBOSTV_EXCEPTIONS, LG_SOUND_OUTPUTS
-from httpx import TransportError
 from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr, States
 from ucapi.media_player import Features, MediaType
@@ -207,10 +204,11 @@ class LGDevice:
         """Activate websocket for listening if wanted. the websocket has to be recreated when the device goes off."""
         _LOG.info("LG TV Register websocket events")
 
-        async def _on_state_changed(client: WebOsClient):
+        async def _on_state_changed(state: WebOsTvState):
             """State changed callback."""
-            await self._update_states(client)
-            if not client.power_state:
+            await self._update_states(self._tv)
+
+            if not state.power_state:
                 self._attr_state = States.OFF
 
             # _LOG.debug("State changed:")
@@ -234,7 +232,6 @@ class LGDevice:
                     self._sound_output = sound_output
                     self.events.emit(Events.UPDATE, self.id, {MediaAttr.SOUND_MODE: self.sound_output})
 
-
         await self._tv.register_state_update_callback(_on_state_changed)
         await self._tv.subscribe_sound_output(_on_sound_output_changed)
 
@@ -244,19 +241,19 @@ class LGDevice:
         self._sources = {}
         active_source = None
         found_live_tv = False
-        for app in self._tv.apps.values():
+        for app in self._tv.tv_state.apps.values():
             if app["id"] == LIVE_TV_APP_ID:
                 found_live_tv = True
-            if app["id"] == self._tv.current_app_id:
+            if app["id"] == self._tv.tv_state.current_app_id:
                 active_source = app["title"]
                 self._sources[app["title"]] = app
             else:
                 self._sources[app["title"]] = app
 
-        for source in self._tv.inputs.values():
+        for source in self._tv.tv_state.inputs.values():
             if source["appId"] == LIVE_TV_APP_ID:
                 found_live_tv = True
-            if source["appId"] == self._tv.current_app_id:
+            if source["appId"] == self._tv.tv_state.current_app_id:
                 active_source = source["id"]
                 self._sources[source["id"]] = source
             else:
@@ -269,7 +266,7 @@ class LGDevice:
         # not appear in the app or input lists in some cases
         elif not found_live_tv:
             app = {"id": LIVE_TV_APP_ID, "title": "Live TV"}
-            if self._tv.current_app_id == LIVE_TV_APP_ID:
+            if self._tv.tv_state.current_app_id == LIVE_TV_APP_ID:
                 active_source = app["title"]
                 self._sources["Live TV"] = app
             else:
@@ -294,9 +291,10 @@ class LGDevice:
             try:
                 sources = await self._tv.get_inputs()
                 _LOG.info("Empty sources, retrieve them %s", sources)
-                await self._tv.set_inputs_state(sources)
+                # TODO don't understand why this is a list now. Check after regression
+                await self._tv.set_inputs_state([sources])
                 await self._tv.set_apps_state(await self._tv.get_apps())
-                await self._tv.set_current_app_state(await self._tv.get_current_app())
+                await self._tv.set_current_app_state(await self._tv.tv_info.get_current_app())
             # pylint: disable = W0718
             except Exception:
                 pass
@@ -307,14 +305,14 @@ class LGDevice:
         try:
             # pylint: disable = W0212
             self._tv._power_state = await self._tv.get_power_state()
-            is_on = self._tv.is_on
+            is_on = self._tv.tv_info.is_on
         # pylint: disable = W0718
         except Exception:
             is_on = False
 
-        if data and data.sound_output:
-            if self._sound_output != data.sound_output:
-                self._sound_output = data.sound_output
+        if data and data.tv_state.sound_output:
+            if self._sound_output != data.tv_state.sound_output:
+                self._sound_output = data.tv_state.sound_output
                 updated_data[MediaAttr.SOUND_MODE] = self.sound_output
         elif self._sound_output is None:
             try:
@@ -331,19 +329,19 @@ class LGDevice:
             self._attr_state = state
             updated_data[MediaAttr.STATE] = self.state
 
-        muted = cast(bool, self._tv.muted)
+        muted = cast(bool, self._tv.tv_state.muted)
         if muted != self._attr_is_volume_muted:
             self._attr_is_volume_muted = muted
             updated_data[MediaAttr.MUTED] = self._attr_is_volume_muted
 
-        if self._tv.volume is not None:
-            volume = cast(float, self._tv.volume)
+        if self._tv.tv_state.volume is not None:
+            volume = cast(float, self._tv.tv_state.volume)
             if volume != self._volume:
                 self._volume = volume
                 updated_data[MediaAttr.VOLUME] = self._volume
 
         media_type = MediaType.VIDEO
-        if self._tv.current_app_id == LIVE_TV_APP_ID:
+        if self._tv.tv_state.current_app_id == LIVE_TV_APP_ID:
             media_type = MediaType.TVSHOW
 
         if media_type != self._media_type:
@@ -351,8 +349,8 @@ class LGDevice:
             updated_data[MediaAttr.MEDIA_TYPE] = self._media_type
 
         media_title = ""
-        if self._tv.current_app_id == LIVE_TV_APP_ID and self._tv.current_channel is not None:
-            media_title = cast(str, self._tv.current_channel.get("channelName"))
+        if self._tv.tv_state.current_app_id == LIVE_TV_APP_ID and self._tv.tv_state.current_channel is not None:
+            media_title = cast(str, self._tv.tv_state.current_channel.get("channelName"))
 
         if media_title != self._media_title:
             self._media_title = media_title
@@ -360,17 +358,17 @@ class LGDevice:
 
         # TODO playing / paused state to update
         media_image_url = ""
-        if self._tv.current_app_id in self._tv.apps:
-            icon: str = self._tv.apps[self._tv.current_app_id]["largeIcon"]
+        if self._tv.tv_state.current_app_id in self._tv.tv_state.apps:
+            icon: str = self._tv.tv_state.apps[self._tv.tv_state.current_app_id]["largeIcon"]
             if not icon.startswith("http"):
-                icon = self._tv.apps[self._tv.current_app_id]["icon"]
+                icon = self._tv.tv_state.apps[self._tv.tv_state.current_app_id]["icon"]
             media_image_url = icon
         if media_image_url != self._media_image_url:
             self._media_image_url = media_image_url
             updated_data[MediaAttr.MEDIA_IMAGE_URL] = self._media_image_url
 
         _sound_output = self._sound_output
-        self._sound_output = self._tv.sound_output
+        self._sound_output = self._tv.tv_state.sound_output
         if _sound_output != self._sound_output:
             updated_data[MediaAttr.SOUND_MODE] = self.sound_output
 
@@ -411,7 +409,7 @@ class LGDevice:
             await asyncio.sleep(DEFAULT_TIMEOUT)
             try:
                 await self.connect()
-                if self._tv.is_on:
+                if self._tv.tv_state.is_on:
                     _LOG.debug("LG TV connection succeeded")
                     self._connect_task = None
                     self._reconnect_retry = 0
@@ -632,7 +630,6 @@ class LGDevice:
                 socket_instance.sendto(msg, (broadcast, wol_port))
             socket_instance.close()
 
-
     async def check_connect(self) -> LGState:
         """Check power and connection state."""
         lg_state: LGState = LGState.ON
@@ -641,7 +638,7 @@ class LGDevice:
                 state = await self._tv.get_power_state()
                 state_value = state.get("state", None)
                 if state_value is None or state_value == "Unknown":
-                    if self._tv.current_app_id in [None, ""]:
+                    if self._tv.tv_state.current_app_id in [None, ""]:
                         _LOG.debug("TV is already off [%s]", state)
                         lg_state = LGState.OFF
                 elif state_value in ["Power Off", "Suspend", "Active Standby"]:
@@ -771,7 +768,7 @@ class LGDevice:
     @retry()
     async def next(self):
         """Send next-track command to LG TV."""
-        if self._tv.current_app_id == LIVE_TV_APP_ID:
+        if self._tv.tv_state.current_app_id == LIVE_TV_APP_ID:
             await self._tv.channel_up()
         else:
             await self._tv.fast_forward()
@@ -779,7 +776,7 @@ class LGDevice:
     @retry()
     async def previous(self):
         """Send previous-track command to LG TV."""
-        if self._tv.current_app_id == LIVE_TV_APP_ID:
+        if self._tv.tv_state.current_app_id == LIVE_TV_APP_ID:
             await self._tv.channel_down()
         else:
             await self._tv.rewind()
@@ -792,7 +789,7 @@ class LGDevice:
         try:
             if delay > 0:
                 await asyncio.sleep(delay)
-            if not self._tv.is_on:
+            if not self._tv.tv_state.is_on:
                 raise WebOsTvCommandError
             # If sources is empty, device is not connected so raise error to trigger connection
             if not self._sources:
@@ -816,7 +813,7 @@ class LGDevice:
     async def select_source_next(self) -> ucapi.StatusCodes:
         if self._tv is None:
             return ucapi.StatusCodes.SERVICE_UNAVAILABLE
-        sources:list[dict] = list(self._tv.inputs.values())
+        sources:list[dict] = list(self._tv.tv_state.inputs.values())
         current_source = self.source
         if not sources or len(sources) == 0:
             _LOG.error("LG TV next input command : sources list is not feed yet")
