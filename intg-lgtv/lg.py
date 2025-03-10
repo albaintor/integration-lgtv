@@ -291,8 +291,7 @@ class LGDevice:
             try:
                 sources = await self._tv.get_inputs()
                 _LOG.info("Empty sources, retrieve them %s", sources)
-                # TODO don't understand why this is a list now. Check after regression
-                await self._tv.set_inputs_state([sources])
+                await self._tv.set_inputs_state(list(sources.values()))
                 await self._tv.set_apps_state(await self._tv.get_apps())
                 await self._tv.set_current_app_state(await self._tv.tv_info.get_current_app())
             # pylint: disable = W0718
