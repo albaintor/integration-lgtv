@@ -337,7 +337,7 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
 
     if not dropdown_items:
         _LOG.warning("No LG TVs found")
-        return SetupError(error_type=IntegrationSetupError.NOT_FOUND)
+        return SetupError(error_type=IntegrationSetupError.OTHER)
 
     _setup_step = SetupSteps.DEVICE_CHOICE
     return RequestUserInput(
