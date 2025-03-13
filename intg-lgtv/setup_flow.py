@@ -644,7 +644,6 @@ async def handle_additional_settings(msg: UserDataResponse) -> RequestUserConfir
     _LOG.info("Setup updated settings %s", _config_device)
     config.devices.add_or_update(_config_device)
     # triggers LG TV instance creation
-    config.devices.store()
 
     if _pairing_lg_tv:
         await _pairing_lg_tv.disconnect()

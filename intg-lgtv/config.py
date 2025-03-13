@@ -101,6 +101,7 @@ class Devices:
         else:
             _LOG.debug("Adding new config %s", atv)
             self._config.append(atv)
+            self.store()
         if self._add_handler is not None:
             self._add_handler(atv)
 
