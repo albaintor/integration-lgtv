@@ -33,7 +33,6 @@ _LOOP = asyncio.get_event_loop()
 api = ucapi.IntegrationAPI(_LOOP)
 # Map of id -> LG instance
 _configured_devices: dict[str, lg.LGDevice] = {}
-_R2_IN_STANDBY = False
 
 
 @api.listens_to(ucapi.Events.CONNECT)
@@ -58,11 +57,9 @@ async def on_r2_connect_cmd() -> None:
 @api.listens_to(ucapi.Events.DISCONNECT)
 async def on_r2_disconnect_cmd():
     """Disconnect all configured TVs when the Remote Two sends the disconnect command."""
-    # pylint: disable = W0212
-    if len(api._clients) == 0:
-        for device in _configured_devices.values():
-            # start background task
-            await _LOOP.create_task(device.disconnect())
+    for device in _configured_devices.values():
+        # start background task
+        await _LOOP.create_task(device.disconnect())
 
 
 @api.listens_to(ucapi.Events.ENTER_STANDBY)
@@ -72,9 +69,6 @@ async def on_r2_enter_standby() -> None:
 
     Disconnect every LG TV instances.
     """
-    global _R2_IN_STANDBY
-
-    _R2_IN_STANDBY = True
     _LOG.debug("Enter standby event: disconnecting device(s)")
     for configured in _configured_devices.values():
         await configured.disconnect()
@@ -87,11 +81,7 @@ async def on_r2_exit_standby() -> None:
 
     Connect all LG TV instances.
     """
-    global _R2_IN_STANDBY
-
-    _R2_IN_STANDBY = False
     _LOG.debug("Exit standby event: connecting device(s)")
-
     for configured in _configured_devices.values():
         # start background task
         try:
@@ -108,11 +98,7 @@ async def on_subscribe_entities(entity_ids: list[str]) -> None:
 
     :param entity_ids: entity identifiers.
     """
-    global _R2_IN_STANDBY
-
-    _R2_IN_STANDBY = False
     _LOG.debug("Subscribe entities event: %s", entity_ids)
-
     for entity_id in entity_ids:
         entity = api.configured_entities.get(entity_id)
         device_id = device_from_entity_id(entity_id)
@@ -173,12 +159,10 @@ async def on_device_connected(device_id: str):
         _LOG.warning("LG TV %s is not configured", device_id)
         return
 
-    # TODO #20 when multiple devices are supported, the device state logic isn't that simple anymore!
-    await api.set_device_state(ucapi.DeviceStates.CONNECTED)
-
     for entity_id in _entities_from_device_id(device_id):
         configured_entity = api.configured_entities.get(entity_id)
         if configured_entity is None:
+            _LOG.debug("Device connected : entity %s is not configured, ignoring it", entity_id)
             continue
 
         if configured_entity.entity_type == ucapi.EntityTypes.MEDIA_PLAYER:
