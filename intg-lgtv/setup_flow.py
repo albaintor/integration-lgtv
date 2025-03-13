@@ -94,6 +94,8 @@ async def driver_setup_handler(msg: SetupDriver) -> SetupAction:
     global _cfg_add_device
     global _config_device
 
+    _LOG.debug("driver_setup_handler")
+
     if isinstance(msg, DriverSetupRequest):
         _setup_step = SetupSteps.INIT
         _cfg_add_device = False
@@ -337,7 +339,7 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
 
     if not dropdown_items:
         _LOG.warning("No LG TVs found")
-        return SetupError(error_type=IntegrationSetupError.OTHER)
+        return SetupError(error_type=IntegrationSetupError.NOT_FOUND)
 
     _setup_step = SetupSteps.DEVICE_CHOICE
     return RequestUserInput(

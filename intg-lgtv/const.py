@@ -6,6 +6,7 @@ from xmlrpc.client import ProtocolError
 
 from aiohttp import ServerTimeoutError
 from aiowebostv import WebOsTvCommandError
+from aiowebostv.exceptions import WebOsTvError
 from httpx import TransportError
 from ucapi.media_player import Features
 from ucapi.ui import DeviceButtonMapping, Buttons, UiPage
@@ -53,6 +54,7 @@ WEBOSTV_EXCEPTIONS = (
     ConnectionClosedOK,
     ConnectionRefusedError,
     WebOsTvCommandError,
+    WebOsTvError,
     TimeoutError,
     asyncio.CancelledError,
     TransportError,

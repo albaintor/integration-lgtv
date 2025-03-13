@@ -386,10 +386,12 @@ class LGDevice:
                         if time.time() - timestamp <= BUFFER_LIFETIME:
                             _LOG.debug("Calling buffered command %s", value)
                             try:
-                                if "kwargs" in value:
+                                if "kwargs" in value and len(value["kwargs"]) > 0:
                                     await value["function"](value["object"], *value["args"], **value["kwargs"])
+                                elif "args" in value and len(value["args"]) > 0:
+                                    await value["function"](value["object"], *value["args"])
                                 else:
-                                    await value["function"](value["object"],*value["args"])
+                                    await value["function"](value["object"])
                             # pylint: disable = W0718
                             except Exception as ex:
                                 _LOG.warning("Error while calling buffered command %s", ex)

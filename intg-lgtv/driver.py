@@ -387,11 +387,6 @@ async def main():
     for device_config in config.devices.all():
         _configure_new_device(device_config, connect=False)
 
-    # _LOOP.create_task(receiver_status_poller())
-    for device in _configured_devices.values():
-        if not device.available:
-            continue
-
     await api.init("driver.json", setup_flow.driver_setup_handler)
 
 
