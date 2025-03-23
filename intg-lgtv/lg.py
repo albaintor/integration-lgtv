@@ -40,10 +40,12 @@ CONNECTION_RETRIES = 10
 
 INIT_APPS_LAUNCH_DELAY = 10
 
+
 class LGState(IntEnum):
     OFF = 0
     STANDBY = 1
     ON = 2
+
 
 class Events(IntEnum):
     """Internal driver events."""
@@ -59,8 +61,10 @@ class Events(IntEnum):
 _LGDeviceT = TypeVar("_LGDeviceT", bound="LGDevice")
 _P = ParamSpec("_P")
 
-async def retry_call_command(timeout: float, bufferize: bool, func: Callable[Concatenate[_LGDeviceT, _P], Awaitable[ucapi.StatusCodes | None]],
-                 obj: _LGDeviceT, *args: _P.args, **kwargs: _P.kwargs) -> ucapi.StatusCodes:
+
+async def retry_call_command(timeout: float, bufferize: bool,
+                             func: Callable[Concatenate[_LGDeviceT, _P], Awaitable[ucapi.StatusCodes | None]],
+                             obj: _LGDeviceT, *args: _P.args, **kwargs: _P.kwargs) -> ucapi.StatusCodes:
     """Retry call command when failed"""
     # Launch reconnection task if not active
     if not obj._connect_task:
@@ -92,12 +96,12 @@ async def retry_call_command(timeout: float, bufferize: bool, func: Callable[Con
     await func(obj, *args, **kwargs)
     return ucapi.StatusCodes.OK
 
-def retry(*, timeout:float=5, bufferize=False
-          ) -> Callable[[Callable[_P, Awaitable[ucapi.StatusCodes]]],
-        Callable[Concatenate[_LGDeviceT, _P], Coroutine[Any, Any, ucapi.StatusCodes | None]]]:
 
+def retry(*, timeout: float = 5, bufferize=False
+          ) -> Callable[[Callable[_P, Awaitable[ucapi.StatusCodes]]],
+Callable[Concatenate[_LGDeviceT, _P], Coroutine[Any, Any, ucapi.StatusCodes | None]]]:
     def decorator(func: Callable[Concatenate[_LGDeviceT, _P], Awaitable[ucapi.StatusCodes | None]]
-        ) -> Callable[Concatenate[_LGDeviceT, _P], Coroutine[Any, Any, ucapi.StatusCodes | None]]:
+                  ) -> Callable[Concatenate[_LGDeviceT, _P], Coroutine[Any, Any, ucapi.StatusCodes | None]]:
         @wraps(func)
         async def wrapper(obj: _LGDeviceT, *args: _P.args, **kwargs: _P.kwargs) -> ucapi.StatusCodes:
             """Wrap all command methods."""
@@ -106,7 +110,8 @@ def retry(*, timeout:float=5, bufferize=False
                 if obj.available:
                     await func(obj, *args, **kwargs)
                     return ucapi.StatusCodes.OK
-                _LOG.debug("[%s] Device is unavailable, connecting before executing command...", obj._device_config.address)
+                _LOG.debug("[%s] Device is unavailable, connecting before executing command...",
+                           obj._device_config.address)
                 return await retry_call_command(timeout, bufferize, func, obj, *args, **kwargs)
             except WEBOSTV_EXCEPTIONS as ex:
                 if obj.state == States.OFF:
@@ -394,9 +399,11 @@ class LGDevice:
                                     await value["function"](value["object"])
                             # pylint: disable = W0718
                             except Exception as ex:
-                                _LOG.warning("[%s] Error while calling buffered command %s", self._device_config.address, ex)
+                                _LOG.warning("[%s] Error while calling buffered command %s",
+                                             self._device_config.address, ex)
                         else:
-                            _LOG.debug("[%s] Buffered command too old %s, dropping it", self._device_config.address, value)
+                            _LOG.debug("[%s] Buffered command too old %s, dropping it", self._device_config.address,
+                                       value)
                 except RuntimeError:
                     pass
 
@@ -419,6 +426,7 @@ class LGDevice:
             except WEBOSTV_EXCEPTIONS:
                 pass
             self._reconnect_retry += 1
+            self._attr_state = States.OFF
             if self._reconnect_retry > CONNECTION_RETRIES:
                 _LOG.debug("[%s] LG not connected abort retries", self._device_config.address)
                 self._connect_task = None
@@ -658,7 +666,8 @@ class LGDevice:
         if lg_state == LGState.OFF:
             _LOG.debug("[%s] TV is not connected, calling connect", self._device_config.address)
             if not self._connect_task:
-                _LOG.warning("[%s] Unable to update, LG TV probably off, running connect task", self._device_config.address)
+                _LOG.warning("[%s] Unable to update, LG TV probably off, running connect task",
+                             self._device_config.address)
                 self._connect_task = asyncio.create_task(self._connect_loop())
         else:
             _LOG.debug("[%s] TV is connected", self._device_config.address)
@@ -683,8 +692,7 @@ class LGDevice:
             self._retry_wakeonlan = True
             self._buffered_callbacks[time.time()] = {
                 "object": self,
-                "function": self._tv.power_on,
-                "args": [],
+                "function": self._tv.power_on
             }
             self.event_loop.create_task(self.check_connect())
             try:
@@ -709,6 +717,7 @@ class LGDevice:
         if self._tv.connection is None:
             await asyncio.sleep(2)
         await self._tv.command("request", endpoints.POWER_OFF)
+        self._attr_state = States.OFF
 
     @retry()
     async def power_off(self):
@@ -719,13 +728,14 @@ class LGDevice:
         if lg_state == LGState.ON:
             _LOG.debug("[%s] TV is ON, powering off [%s]", self._device_config.address, lg_state)
             await self._tv.command("request", endpoints.POWER_OFF)
+            self._attr_state = States.OFF
         else:
-            _LOG.debug("[%s] Power off command : TV seems to be off, adding power_off call to buffered commands if connection is reestablished",
-                       self._device_config.address)
+            _LOG.debug(
+                "[%s] Power off command : TV seems to be off, adding power_off call to buffered commands if connection is reestablished",
+                self._device_config.address)
             self._buffered_callbacks[time.time()] = {
                 "object": self,
-                "function": LGDevice.power_off_deferred,
-                "args": [],
+                "function": LGDevice.power_off_deferred
             }
 
     @retry()
@@ -827,7 +837,7 @@ class LGDevice:
     async def select_source_next(self) -> ucapi.StatusCodes:
         if self._tv is None:
             return ucapi.StatusCodes.SERVICE_UNAVAILABLE
-        sources:list[dict] = list(self._tv.tv_state.inputs.values())
+        sources: list[dict] = list(self._tv.tv_state.inputs.values())
         current_source = self.source
         if not sources or len(sources) == 0:
             _LOG.error("[%s] LG TV next input command : sources list is not feed yet",
