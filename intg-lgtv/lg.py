@@ -309,7 +309,8 @@ class LGDevice:
         try:
             # pylint: disable = W0212
             self._tv._power_state = await self._tv.get_power_state()
-            is_on = self._tv.tv_info.is_on
+            #is_on = self._tv.tv_info.is_on
+            is_on = self._tv._power_state.get("state", "") == "Active"
         # pylint: disable = W0718
         except Exception:
             is_on = False
@@ -377,6 +378,7 @@ class LGDevice:
             updated_data[MediaAttr.SOUND_MODE] = self.sound_output
 
         if updated_data:
+            _LOG.debug("Updated data %s", updated_data)
             self.events.emit(Events.UPDATE, self.id, updated_data)
 
     async def _run_buffered_commands(self):
@@ -458,7 +460,7 @@ class LGDevice:
                            self._device_config.address)
                 raise WebOsTvCommandError("Connection process done but the connection is not available")
             else:
-                _LOG.debug("[%s] Connection to succeeded", self._device_config.address)
+                _LOG.debug("[%s] Connection succeeded", self._device_config.address)
             await self._update_states(None)
             if not self._device_config.mac_address:
                 await self._update_system()
