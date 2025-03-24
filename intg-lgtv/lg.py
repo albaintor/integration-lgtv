@@ -693,8 +693,8 @@ class LGDevice:
             self.wakeonlan()
             self._retry_wakeonlan = True
             self._buffered_callbacks[time.time()] = {
-                "object": self,
-                "function": self._tv.power_on
+                "object": self._tv,
+                "function": WebOsClient.power_on
             }
             self.event_loop.create_task(self.check_connect())
             try:

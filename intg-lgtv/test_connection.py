@@ -36,11 +36,16 @@ async def main():
                       LGConfigDevice(id="deviceid", name="LG Soundbar", address=address,
                                      mac_address=mac_address, mac_address2=None,
                                      key=pairing_key, interface="0.0.0.0", broadcast=None, wol_port=9))
+    # await client.power_on()
     await client.connect()
-    power_state = await client._tv.get_power_state()
-    _LOG.debug("Power state %s", power_state)
-    tv_info = client._tv.tv_info
-    _LOG.debug("TV Info %s", tv_info)
+    # power_state = await client._tv.get_power_state()
+    # _LOG.debug("Power state %s", power_state)
+    # tv_info = client._tv.tv_info
+    # _LOG.debug("TV Info %s", tv_info)
+
+    # Validate pairing key (55)
+    await client.button("RIGHT")
+    await client.button("ENTER")
 
 if __name__ == "__main__":
     _LOG = logging.getLogger(__name__)
