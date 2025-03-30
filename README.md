@@ -1,4 +1,4 @@
-# LG TV integration for Remote Two
+# LG TV integration for Remote Two/3
 
 Using [AioWebOSTV](https://github.com/home-assistant-libs/aiowebostv)
 and [uc-integration-api](https://github.com/aitatoi/integration-python-library)
