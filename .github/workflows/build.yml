@@ -56,7 +56,7 @@ jobs:
             bash -c \
             "cd /workspace && \
               python -m pip install -r requirements.txt && \
-              pyinstaller --clean --onedir --name driver intg-lgtv/driver.py"
+              pyinstaller --clean --onedir --name driver src/driver.py"
 
       - name: Add version
         run: |
