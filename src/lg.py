@@ -32,6 +32,8 @@ from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr, States
 from ucapi.media_player import Features, MediaType
 
+from src.const import LG_ADDITIONAL_ENDPOINTS
+
 _LOG = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 5
@@ -956,3 +958,31 @@ class LGDevice:
     async def button(self, button: str):
         """Send a button command."""
         await self._tv.button(button)
+
+    async def turn_screen_off(self, webos_ver=""):
+        """Turn TV Screen off. standbyMode values: 'active' or 'passive',
+        passive cannot turn screen back on, need to pull TV plug.
+        """
+        epname = f"TURN_OFF_SCREEN_WO{webos_ver}" if webos_ver else "TURN_OFF_SCREEN"
+        endpoint = getattr(endpoints, epname, None)
+        if endpoint is None:
+            endpoint = LG_ADDITIONAL_ENDPOINTS.get(epname, None)
+
+        if endpoint is None:
+            raise ValueError(f"there's no {epname} endpoint")
+
+        return await self._tv.request(endpoint, {"standbyMode": "active"})
+
+    async def turn_screen_on(self, webos_ver=""):
+        """Turn TV Screen on. standbyMode values: 'active' or 'passive',
+        passive cannot turn screen back on, need to pull TV plug.
+        """
+        epname = f"TURN_ON_SCREEN_WO{webos_ver}" if webos_ver else "TURN_ON_SCREEN"
+        endpoint = getattr(endpoints, epname, None)
+        if endpoint is None:
+            endpoint = LG_ADDITIONAL_ENDPOINTS.get(epname, None)
+
+        if endpoint is None:
+            raise ValueError(f"there's no {epname} endpoint")
+
+        return await self._tv.request(endpoint, {"standbyMode": "active"})

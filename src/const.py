@@ -14,6 +14,20 @@ from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 
 LIVE_TV_APP_ID = "com.webos.app.livetv"
 
+LG_ADDITIONAL_ENDPOINTS = {
+    "TAKE_SCREENSHOT": "tv/executeOneShot",
+    "TURN_OFF_SCREEN_WO4": "com.webos.service.tv.power/turnOffScreen",
+    "TURN_ON_SCREEN_WO4": "com.webos.service.tv.power/turnOnScreen",
+    "LIST_DEVICES": "com.webos.service.attachedstoragemanager/listDevices",
+    "LUNA_REBOOT_TV": "com.webos.service.tvpower/power/reboot",
+    "LUNA_REBOOT_TV_WO4": "com.webos.service.tv.power/reboot",
+    "LUNA_SET_DEVICE_INFO": "com.webos.service.eim/setDeviceInfo",
+    "LUNA_EJECT_DEVICE": "com.webos.service.attachedstoragemanager/ejectDevice",
+    "LUNA_SET_TPC": "com.webos.service.oledepl/setTemporalPeakControl",
+    "LUNA_SET_GSR": "com.webos.service.oledepl/setGlobalStressReduction",
+    "LUNA_SET_WHITE_BALANCE": "com.webos.service.pqcontroller/setWhiteBalance"
+}
+
 LG_FEATURES = [
     Features.ON_OFF,
     Features.TOGGLE,
@@ -78,6 +92,10 @@ LG_SOUND_OUTPUTS: dict[str, str] = {
 # Custom commands to be handled specifically
 LG_SIMPLE_COMMANDS_CUSTOM = [
     "INPUT_SOURCE"  # Next input source
+    "TURN_SCREEN_ON", # Turn screen On
+    "TURN_SCREEN_OFF", # Turn screen Off
+    "TURN_SCREEN_ON4",  # Turn screen On WebOS4
+    "TURN_SCREEN_OFF4",  # Turn screen Off WebOS4
 ]
 
 # Simple commands for both media and remote entities

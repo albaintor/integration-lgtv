@@ -18,7 +18,7 @@ mac_address = "04:4e:af:00:85:92"
 pairing_key = "4843d0b3a3ded816bcba7fce3f3a5ce1"
 
 # 77
-# address = "192.168.1.118"
+# address = "192.168.1.67"
 # mac_address = "4c:ba:d7:64:8c:b0"
 # pairing_key = "88de3f23b5cc6bf5d8c8c37086cdad6d"
 

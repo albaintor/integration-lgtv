@@ -177,6 +177,14 @@ class LGTVMediaPlayer(MediaPlayer):
             if cmd_id in LG_SIMPLE_COMMANDS_CUSTOM:
                 if cmd_id == "INPUT_SOURCE":
                     res = await self._device.select_source_next()
+                elif cmd_id == "TURN_SCREEN_ON":
+                    res = await self._device.turn_screen_on()
+                elif cmd_id == "TURN_SCREEN_OFF":
+                    res = await self._device.turn_screen_off()
+                elif cmd_id == "TURN_SCREEN_ON4":
+                    res = await self._device.turn_screen_on(webos_ver="4")
+                elif cmd_id == "TURN_SCREEN_OFF4":
+                    res = await self._device.turn_screen_off(webos_ver="4")
             else:
                 res = await self._device.button(cmd_id)
         else:
