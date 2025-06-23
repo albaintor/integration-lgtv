@@ -27,12 +27,10 @@ from typing import (
 import ucapi
 from aiowebostv import WebOsClient, WebOsTvCommandError, endpoints, WebOsTvState
 from config import LGConfigDevice
-from const import LG_FEATURES, LIVE_TV_APP_ID, WEBOSTV_EXCEPTIONS, LG_SOUND_OUTPUTS
+from const import LG_FEATURES, LIVE_TV_APP_ID, WEBOSTV_EXCEPTIONS, LG_SOUND_OUTPUTS, LG_ADDITIONAL_ENDPOINTS
 from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr, States
 from ucapi.media_player import Features, MediaType
-
-from src.const import LG_ADDITIONAL_ENDPOINTS
 
 _LOG = logging.getLogger(__name__)
 
