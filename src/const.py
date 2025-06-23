@@ -91,7 +91,7 @@ LG_SOUND_OUTPUTS: dict[str, str] = {
 
 # Custom commands to be handled specifically
 LG_SIMPLE_COMMANDS_CUSTOM = [
-    "INPUT_SOURCE"  # Next input source
+    "INPUT_SOURCE",  # Next input source
     "TURN_SCREEN_ON", # Turn screen On
     "TURN_SCREEN_OFF", # Turn screen Off
     "TURN_SCREEN_ON4",  # Turn screen On WebOS4
