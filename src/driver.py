@@ -114,6 +114,11 @@ async def on_subscribe_entities(entity_ids: list[str]) -> None:
                     entity_id, {ucapi.remote.Attributes.STATE:
                                     remote.LG_REMOTE_STATE_MAPPING.get(attributes.get(MediaAttr.STATE, States.UNKNOWN))}
                 )
+            try:
+                if not device_config.available:
+                    await _LOOP.create_task(device_config.connect())
+            except WEBOSTV_EXCEPTIONS as ex:
+                _LOG.error("Error while reconnecting to the LG TV %s", ex)
             continue
 
         device_config = config.devices.get(device_id)

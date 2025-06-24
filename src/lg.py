@@ -117,7 +117,7 @@ def retry(*, timeout: float = 5, bufferize=False) -> Callable[
                 )
                 return await retry_call_command(timeout, bufferize, func, obj, *args, **kwargs)
             # New bug "Received message 8:1008 is not WSMsgType.TEXT" for some commands (power_off at least)
-            except (WEBOSTV_EXCEPTIONS, Exception) as ex:
+            except Exception as ex:
                 if obj.state == States.OFF:
                     log_function = _LOG.debug
                 else:
