@@ -734,7 +734,7 @@ class LGDevice:
         self._attr_state = States.OFF
 
     @retry()
-    async def power_off(self):
+    async def power_off(self) -> ucapi.StatusCodes:
         """Send power-off command to LG TV."""
         _LOG.debug("[%s] Power off", self._device_config.address)
         self._retry_wakeonlan = False
@@ -749,72 +749,83 @@ class LGDevice:
                 self._device_config.address,
             )
             self._buffered_callbacks[time.time()] = {"object": self, "function": LGDevice.power_off_deferred}
+        return ucapi.StatusCodes.OK
 
     @retry()
-    async def set_volume_level(self, volume: float | None):
+    async def set_volume_level(self, volume: float | None) -> ucapi.StatusCodes:
         """Set volume level, range 0..100."""
         if volume is None:
             return ucapi.StatusCodes.BAD_REQUEST
         _LOG.debug("[%s] LG TV setting volume to %s", self._device_config.address, volume)
         await self._tv.set_volume(int(round(volume)))
         self.events.emit(Events.UPDATE, self.id, {MediaAttr.VOLUME: volume})
+        return ucapi.StatusCodes.OK
 
     @retry()
-    async def volume_up(self):
+    async def volume_up(self) -> ucapi.StatusCodes:
         """Send volume-up command to LG TV."""
         await self._tv.volume_up()
+        return ucapi.StatusCodes.OK
 
     @retry()
-    async def volume_down(self):
+    async def volume_down(self) -> ucapi.StatusCodes:
         """Send volume-down command to LG TV."""
         await self._tv.volume_down()
+        return ucapi.StatusCodes.OK
 
     @retry()
-    async def mute(self, muted: bool):
+    async def mute(self, muted: bool) -> ucapi.StatusCodes:
         """Send mute command to LG TV."""
         _LOG.debug("[%s] Sending mute: %s", self._device_config.address, muted)
         await self._tv.set_mute(muted)
+        return ucapi.StatusCodes.OK
 
     @retry()
-    async def async_media_play(self) -> None:
+    async def async_media_play(self) -> ucapi.StatusCodes:
         """Send play command."""
         self._paused = False
         await self._tv.play()
+        return ucapi.StatusCodes.OK
 
     @retry()
-    async def async_media_pause(self) -> None:
+    async def async_media_pause(self) -> ucapi.StatusCodes:
         """Send media pause command to media player."""
         self._paused = True
         await self._tv.pause()
+        return ucapi.StatusCodes.OK
 
     @retry()
-    async def play_pause(self):
+    async def play_pause(self) -> ucapi.StatusCodes:
         """Send toggle-play-pause command to LG TV."""
         if self._paused:
             await self.async_media_play()
         else:
             await self.async_media_pause()
+        return ucapi.StatusCodes.OK
 
     @retry()
-    async def stop(self):
+    async def stop(self) -> ucapi.StatusCodes:
         """Send toggle-play-pause command to LG TV."""
         await self._tv.stop()
+        return ucapi.StatusCodes.OK
 
     @retry()
-    async def next(self):
+    async def next(self) -> ucapi.StatusCodes:
         """Send next-track command to LG TV."""
         if self._tv.tv_state.current_app_id == LIVE_TV_APP_ID:
             await self._tv.channel_up()
         else:
             await self._tv.fast_forward()
+        return ucapi.StatusCodes.OK
 
     @retry()
-    async def previous(self):
+    async def previous(self) -> ucapi.StatusCodes:
         """Send previous-track command to LG TV."""
         if self._tv.tv_state.current_app_id == LIVE_TV_APP_ID:
             await self._tv.channel_down()
         else:
             await self._tv.rewind()
+        return ucapi.StatusCodes.OK
 
     async def select_source_deferred(self, source: str | None, delay: int = 0) -> ucapi.StatusCodes:
         """Send input_source command to LG TV."""
@@ -953,11 +964,13 @@ class LGDevice:
         return ucapi.StatusCodes.BAD_REQUEST
 
     @retry()
-    async def button(self, button: str):
+    async def button(self, button: str) -> ucapi.StatusCodes:
         """Send a button command."""
         await self._tv.button(button)
+        return ucapi.StatusCodes.OK
 
-    async def turn_screen_off(self, webos_ver=""):
+    @retry()
+    async def turn_screen_off(self, webos_ver="") -> ucapi.StatusCodes:
         """Turn TV Screen off. standbyMode values: 'active' or 'passive',
         passive cannot turn screen back on, need to pull TV plug.
         """
@@ -969,9 +982,11 @@ class LGDevice:
         if endpoint is None:
             raise ValueError(f"there's no {epname} endpoint")
 
-        return await self._tv.request(endpoint, {"standbyMode": "active"})
+        await self._tv.request(endpoint, {"standbyMode": "active"})
+        return ucapi.StatusCodes.OK
 
-    async def turn_screen_on(self, webos_ver=""):
+    @retry()
+    async def turn_screen_on(self, webos_ver="") -> ucapi.StatusCodes:
         """Turn TV Screen on. standbyMode values: 'active' or 'passive',
         passive cannot turn screen back on, need to pull TV plug.
         """
@@ -983,4 +998,5 @@ class LGDevice:
         if endpoint is None:
             raise ValueError(f"there's no {epname} endpoint")
 
-        return await self._tv.request(endpoint, {"standbyMode": "active"})
+        await self._tv.request(endpoint, {"standbyMode": "active"})
+        return ucapi.StatusCodes.OK

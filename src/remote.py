@@ -51,6 +51,7 @@ class LGRemote(Remote):
             ui_pages=LG_REMOTE_UI_PAGES
         )
 
+    @staticmethod
     def getIntParam(self, param: str, params: dict[str, Any], default: int):
         # TODO bug to be fixed on UC Core : some params are sent as (empty) strings by remote (hold == "")
         if params is None or param is None:
@@ -77,15 +78,15 @@ class LGRemote(Remote):
             _LOG.warning("No Kodi instance for entity: %s", self.id)
             return StatusCodes.SERVICE_UNAVAILABLE
 
-        repeat = self.getIntParam("repeat", params, 1)
+        repeat = LGRemote.getIntParam("repeat", params, 1)
         res = StatusCodes.OK
         for i in range(0, repeat):
             res = await self.handle_command(cmd_id, params)
         return res
 
     async def handle_command(self, cmd_id: str, params: dict[str, Any] | None = None) -> StatusCodes:
-        hold = self.getIntParam("hold", params, 0)
-        delay = self.getIntParam("delay", params, 0)
+        #hold = LGRemote.getIntParam("hold", params, 0)
+        delay = LGRemote.getIntParam("delay", params, 0)
         command = params.get("command", "")
         res = None
 

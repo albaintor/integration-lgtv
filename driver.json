@@ -1,6 +1,6 @@
 {
   "driver_id": "lgwebos_driver",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "min_core_api": "0.20.0",
   "name": {
     "en": "LG WebOS"
@@ -43,5 +43,5 @@
       }
     ]
   },
-  "release_date": "2025-06-24"
+  "release_date": "2025-06-25"
 }
