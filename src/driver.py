@@ -7,7 +7,6 @@ This module implements a Remote Two integration driver for LG TV receivers.
 """
 
 import asyncio
-import json
 import logging
 import os
 from typing import Any
@@ -18,12 +17,8 @@ import media_player
 import remote
 import setup_flow
 import ucapi
-import ucapi.api_definitions as uc
-import websockets
 from config import device_from_entity_id
 from const import WEBOSTV_EXCEPTIONS
-from ucapi import IntegrationAPI
-from ucapi.api import filter_log_msg_data
 from ucapi.media_player import Attributes as MediaAttr, States
 
 _LOG = logging.getLogger("driver")  # avoid having __main__ in log messages
@@ -33,7 +28,6 @@ _LOOP = asyncio.get_event_loop()
 api = ucapi.IntegrationAPI(_LOOP)
 # Map of id -> LG instance
 _configured_devices: dict[str, lg.LGDevice] = {}
-
 
 @api.listens_to(ucapi.Events.CONNECT)
 async def on_r2_connect_cmd() -> None:
@@ -351,6 +345,12 @@ def on_device_added(device: config.LGConfigDevice) -> None:
     _configure_new_device(device, connect=False)
 
 
+def on_device_updated(device: config.LGConfigDevice) -> None:
+    """Handle an updated device in the configuration."""
+    _LOG.debug("Device config updated: %s, reconnect with new configuration", device)
+    _configure_new_device(device, connect=True)
+
+
 def on_device_removed(device: config.LGConfigDevice | None) -> None:
     """Handle a removed device in the configuration."""
     if device is None:
@@ -382,15 +382,17 @@ async def main():
 
     level = os.getenv("UC_LOG_LEVEL", "DEBUG").upper()
     logging.getLogger("lg").setLevel(level)
-    logging.getLogger("discover").setLevel(level)
+    #logging.getLogger("discover").setLevel(level)
     logging.getLogger("driver").setLevel(level)
     logging.getLogger("media_player").setLevel(level)
     logging.getLogger("config").setLevel(level)
     logging.getLogger("setup_flow").setLevel(level)
 
-    config.devices = config.Devices(api.config_dir_path, on_device_added, on_device_removed)
+    config.devices = config.Devices(api.config_dir_path, on_device_added, on_device_removed, on_device_updated)
     for device_config in config.devices.all():
         _configure_new_device(device_config, connect=False)
+
+    await _LOOP.create_task(config.devices.handle_address_change())
 
     await api.init("driver.json", setup_flow.driver_setup_handler)
 

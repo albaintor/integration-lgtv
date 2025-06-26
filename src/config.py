@@ -6,13 +6,16 @@ Configuration handling of the integration driver.
 """
 
 import dataclasses
+import discover
 import json
 import logging
 import os
+from asyncio import Lock
 from dataclasses import dataclass
-from typing import Iterator
+from typing import Iterator, Callable
 
 from ucapi import EntityTypes
+
 
 _LOG = logging.getLogger(__name__)
 
@@ -63,7 +66,10 @@ class _EnhancedJSONEncoder(json.JSONEncoder):
 class Devices:
     """Integration driver configuration class. Manages all configured devices."""
 
-    def __init__(self, data_path: str, add_handler, remove_handler):
+    def __init__(self, data_path: str,
+                 add_handler: Callable[[LGConfigDevice], None],
+                 remove_handler: Callable[[LGConfigDevice | None], None],
+                 update_handler: Callable[[LGConfigDevice], None]):
         """
         Create a configuration instance for the given configuration path.
 
@@ -74,8 +80,9 @@ class Devices:
         self._config: list[LGConfigDevice] = []
         self._add_handler = add_handler
         self._remove_handler = remove_handler
-
+        self._update_handler = update_handler
         self.load()
+        self._config_lock = Lock()
 
     @property
     def data_path(self) -> str:
@@ -98,6 +105,8 @@ class Devices:
         if self.contains(atv.id):
             _LOG.debug("Existing config %s, updating it %s", atv.id, atv)
             self.update(atv)
+            if self._update_handler is not None:
+                self._update_handler(atv)
         else:
             _LOG.debug("Adding new config %s", atv)
             self._config.append(atv)
@@ -188,6 +197,53 @@ class Devices:
             _LOG.error("Empty or invalid config file")
 
         return False
+
+    async def handle_address_change(self):
+        """Check for address change and update configuration"""
+        if self._config_lock.locked():
+            _LOG.debug("Check device change already in progress")
+            return False
+
+        # Only one instance of devices change
+        await self._config_lock.acquire()
+        _discovered_devices = await discover.async_identify_lg_devices()
+        _devices_changed: [LGConfigDevice] = []
+
+        for device_config in devices.all():
+            found = False
+            for device in _discovered_devices:
+                wired_mac = device.get("wiredMac", None)
+                wifi_mac = device.get("wifiMac", None)
+                host = device.get("host", None)
+                name = device.get("friendlyName", host)
+
+                if device_config.mac_address and (device_config.mac_address == wired_mac
+                                                  or device_config.mac_address == wifi_mac):
+                    found = True
+                elif device_config.mac_address2 and (device_config.mac_address2 == wired_mac
+                                                     or device_config.mac_address2 == wifi_mac):
+                    found = True
+
+                if found:
+                    if device_config.address == host:
+                        _LOG.debug("Found device %s with unchanged address %s", name, host)
+                    elif host:
+                        _LOG.debug("Found device %s with new address %s -> %s", name, device_config.address,
+                                   host)
+                        device_config.address = host
+                        _configuration_changed = True
+                    break
+            if not found:
+                _LOG.debug("Device %s (%s) not found, probably off", device_config.name, device_config.address)
+
+            if len(_devices_changed) > 0:
+                self.store()
+                _LOG.debug("Configuration updated")
+                if self._update_handler is not None:
+                    for device in _devices_changed:
+                        self._update_handler(device)
+
+            self._config_lock.release()
 
 
 devices: Devices | None = None
