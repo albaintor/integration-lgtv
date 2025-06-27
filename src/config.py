@@ -198,8 +198,14 @@ class Devices:
 
         return False
 
+    def empty(self) -> bool:
+        """Return true if no devices configured."""
+        return len(self._config) == 0
+
     async def handle_address_change(self):
         """Check for address change and update configuration"""
+        if devices.empty():
+            return
         if self._config_lock.locked():
             _LOG.debug("Check device change already in progress")
             return False
