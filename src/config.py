@@ -236,14 +236,14 @@ class Devices:
             if not found:
                 _LOG.debug("Device %s (%s) not found, probably off", device_config.name, device_config.address)
 
-            if len(_devices_changed) > 0:
-                self.store()
-                _LOG.debug("Configuration updated")
-                if self._update_handler is not None:
-                    for device in _devices_changed:
-                        self._update_handler(device)
+        if len(_devices_changed) > 0:
+            self.store()
+            _LOG.debug("Configuration updated")
+            if self._update_handler is not None:
+                for device in _devices_changed:
+                    self._update_handler(device)
 
-            self._config_lock.release()
+        self._config_lock.release()
 
 
 devices: Devices | None = None
