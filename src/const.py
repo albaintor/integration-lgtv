@@ -1,7 +1,6 @@
 """Constants used for LG webOS Smart TV."""
 
 import asyncio
-from enum import IntEnum
 from xmlrpc.client import ProtocolError
 
 from aiohttp import ServerTimeoutError
@@ -9,7 +8,7 @@ from aiowebostv import WebOsTvCommandError
 from aiowebostv.exceptions import WebOsTvError
 from httpx import TransportError
 from ucapi.media_player import Features
-from ucapi.ui import DeviceButtonMapping, Buttons, UiPage
+from ucapi.ui import Buttons, DeviceButtonMapping, UiPage
 from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 
 LIVE_TV_APP_ID = "com.webos.app.livetv"
@@ -25,7 +24,7 @@ LG_ADDITIONAL_ENDPOINTS = {
     "LUNA_EJECT_DEVICE": "com.webos.service.attachedstoragemanager/ejectDevice",
     "LUNA_SET_TPC": "com.webos.service.oledepl/setTemporalPeakControl",
     "LUNA_SET_GSR": "com.webos.service.oledepl/setGlobalStressReduction",
-    "LUNA_SET_WHITE_BALANCE": "com.webos.service.pqcontroller/setWhiteBalance"
+    "LUNA_SET_WHITE_BALANCE": "com.webos.service.pqcontroller/setWhiteBalance",
 }
 
 LG_FEATURES = [
@@ -59,7 +58,7 @@ LG_FEATURES = [
     Features.SUBTITLE,
     Features.RECORD,
     Features.SETTINGS,
-    Features.SELECT_SOUND_MODE
+    Features.SELECT_SOUND_MODE,
 ]
 
 WEBOSTV_EXCEPTIONS = (
@@ -77,23 +76,23 @@ WEBOSTV_EXCEPTIONS = (
 )
 
 LG_SOUND_OUTPUTS: dict[str, str] = {
-    "tv_speaker":"Internal TV speaker",
-    "external_optical":"Optical",
-    "external_arc":"HDMI Arc",
-    "lineout":"Line out",
-    "headphone":"Headphones",
-    "external_speaker":"Audio out (optical/hdmi arc)",
-    "tv_external_speaker":"TV speaker and optical",
-    "tv_speaker_headphone":"TV speaker and headphones",
-    "bt_soundbar":"Bluetooth soundbar and bluetooth devices",
-    "soundbar":"Soundbar optical"
+    "tv_speaker": "Internal TV speaker",
+    "external_optical": "Optical",
+    "external_arc": "HDMI Arc",
+    "lineout": "Line out",
+    "headphone": "Headphones",
+    "external_speaker": "Audio out (optical/hdmi arc)",
+    "tv_external_speaker": "TV speaker and optical",
+    "tv_speaker_headphone": "TV speaker and headphones",
+    "bt_soundbar": "Bluetooth soundbar and bluetooth devices",
+    "soundbar": "Soundbar optical",
 }
 
 # Custom commands to be handled specifically
 LG_SIMPLE_COMMANDS_CUSTOM = [
     "INPUT_SOURCE",  # Next input source
-    "TURN_SCREEN_ON", # Turn screen On
-    "TURN_SCREEN_OFF", # Turn screen Off
+    "TURN_SCREEN_ON",  # Turn screen On
+    "TURN_SCREEN_OFF",  # Turn screen Off
     "TURN_SCREEN_ON4",  # Turn screen On WebOS4
     "TURN_SCREEN_OFF4",  # Turn screen Off WebOS4
 ]
@@ -124,7 +123,7 @@ LG_SIMPLE_COMMANDS = [
     "SCREEN_REMOTE",  # Screen Remote
     "TELETEXT",
     "TEXTOPTION",
-    *LG_SIMPLE_COMMANDS_CUSTOM
+    *LG_SIMPLE_COMMANDS_CUSTOM,
 ]
 
 LG_REMOTE_BUTTONS_MAPPING: [DeviceButtonMapping] = [
@@ -152,599 +151,278 @@ LG_REMOTE_UI_PAGES: [UiPage] = [
         "grid": {"width": 4, "height": 6},
         "items": [
             {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "toggle", "repeat": 1}
-                },
+                "command": {"cmd_id": "remote.send", "params": {"command": "toggle", "repeat": 1}},
                 "icon": "uc:power-on",
-                "location": {
-                    "x": 0,
-                    "y": 0
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "icon"
+                "location": {"x": 0, "y": 0},
+                "size": {"height": 1, "width": 1},
+                "type": "icon",
             },
             {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "INFO", "repeat": 1}
-                },
+                "command": {"cmd_id": "remote.send", "params": {"command": "INFO", "repeat": 1}},
                 "icon": "uc:info",
-                "location": {
-                    "x": 1,
-                    "y": 0
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "icon"
+                "location": {"x": 1, "y": 0},
+                "size": {"height": 1, "width": 1},
+                "type": "icon",
             },
             {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "AD", "repeat": 1}
-                },
+                "command": {"cmd_id": "remote.send", "params": {"command": "AD", "repeat": 1}},
                 "icon": "uc:language",
-                "location": {
-                    "x": 2,
-                    "y": 0
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "icon"
+                "location": {"x": 2, "y": 0},
+                "size": {"height": 1, "width": 1},
+                "type": "icon",
             },
             {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "CC", "repeat": 1}
-                },
+                "command": {"cmd_id": "remote.send", "params": {"command": "CC", "repeat": 1}},
                 "icon": "uc:cc",
-                "location": {
-                    "x": 3,
-                    "y": 0
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "icon"
+                "location": {"x": 3, "y": 0},
+                "size": {"height": 1, "width": 1},
+                "type": "icon",
             },
             {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "MYAPPS", "repeat": 1}
-                },
+                "command": {"cmd_id": "remote.send", "params": {"command": "MYAPPS", "repeat": 1}},
                 "icon": "uc:home",
-                "location": {
-                    "x": 0,
-                    "y": 1
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "icon"
+                "location": {"x": 0, "y": 1},
+                "size": {"height": 1, "width": 1},
+                "type": "icon",
             },
             {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "MENU", "repeat": 1}
-                },
+                "command": {"cmd_id": "remote.send", "params": {"command": "MENU", "repeat": 1}},
                 "text": "Settings",
-                "location": {
-                    "x": 1,
-                    "y": 1
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "text"
+                "location": {"x": 1, "y": 1},
+                "size": {"height": 1, "width": 1},
+                "type": "text",
             },
             {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "INPUT_SOURCE", "repeat": 1}
-                },
+                "command": {"cmd_id": "remote.send", "params": {"command": "INPUT_SOURCE", "repeat": 1}},
                 "text": "Input",
-                "location": {
-                    "x": 2,
-                    "y": 1
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "text"
+                "location": {"x": 2, "y": 1},
+                "size": {"height": 1, "width": 1},
+                "type": "text",
             },
             {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "3D_MODE", "repeat": 1}
-                },
+                "command": {"cmd_id": "remote.send", "params": {"command": "3D_MODE", "repeat": 1}},
                 "text": "3D",
-                "location": {
-                    "x": 3,
-                    "y": 1
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "text"
+                "location": {"x": 3, "y": 1},
+                "size": {"height": 1, "width": 1},
+                "type": "text",
             },
             {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "REWIND", "repeat": 1}
-                },
+                "command": {"cmd_id": "remote.send", "params": {"command": "REWIND", "repeat": 1}},
                 "icon": "uc:bw",
-                "location": {
-                    "x": 0,
-                    "y": 2
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "icon"
+                "location": {"x": 0, "y": 2},
+                "size": {"height": 1, "width": 1},
+                "type": "icon",
             },
             {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "PLAY", "repeat": 1}
-                },
+                "command": {"cmd_id": "remote.send", "params": {"command": "PLAY", "repeat": 1}},
                 "icon": "uc:play",
-                "location": {
-                    "x": 1,
-                    "y": 2
-                },
-                "size": {
-                    "height": 1,
-                    "width": 2
-                },
-                "type": "icon"
+                "location": {"x": 1, "y": 2},
+                "size": {"height": 1, "width": 2},
+                "type": "icon",
             },
             {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "FASTFORWARD", "repeat": 1}
-                },
+                "command": {"cmd_id": "remote.send", "params": {"command": "FASTFORWARD", "repeat": 1}},
                 "icon": "uc:ff",
-                "location": {
-                    "x": 3,
-                    "y": 2
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "icon"
+                "location": {"x": 3, "y": 2},
+                "size": {"height": 1, "width": 1},
+                "type": "icon",
             },
             {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "STOP", "repeat": 1}
-                },
+                "command": {"cmd_id": "remote.send", "params": {"command": "STOP", "repeat": 1}},
                 "icon": "uc:stop",
-                "location": {
-                    "x": 0,
-                    "y": 3
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "icon"
+                "location": {"x": 0, "y": 3},
+                "size": {"height": 1, "width": 1},
+                "type": "icon",
             },
             {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "PAUSE", "repeat": 1}
-                },
+                "command": {"cmd_id": "remote.send", "params": {"command": "PAUSE", "repeat": 1}},
                 "icon": "uc:pause",
-                "location": {
-                    "x": 1,
-                    "y": 3
-                },
-                "size": {
-                    "height": 1,
-                    "width": 2
-                },
-                "type": "icon"
+                "location": {"x": 1, "y": 3},
+                "size": {"height": 1, "width": 2},
+                "type": "icon",
             },
             {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "CHANNELUP", "repeat": 1}
-                },
+                "command": {"cmd_id": "remote.send", "params": {"command": "CHANNELUP", "repeat": 1}},
                 "icon": "uc:up-arrow",
-                "location": {
-                    "x": 3,
-                    "y": 3
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "icon"
+                "location": {"x": 3, "y": 3},
+                "size": {"height": 1, "width": 1},
+                "type": "icon",
             },
             {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "CHANNELDOWN", "repeat": 1}
-                },
+                "command": {"cmd_id": "remote.send", "params": {"command": "CHANNELDOWN", "repeat": 1}},
                 "icon": "uc:down-arrow",
-                "location": {
-                    "x": 3,
-                    "y": 4
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "icon"
+                "location": {"x": 3, "y": 4},
+                "size": {"height": 1, "width": 1},
+                "type": "icon",
             },
             {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "ASPECT_RATIO", "repeat": 1}
-                },
+                "command": {"cmd_id": "remote.send", "params": {"command": "ASPECT_RATIO", "repeat": 1}},
                 "icon": "uc:arrows-maximize",
-                "location": {
-                    "x": 0,
-                    "y": 4
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "icon"
+                "location": {"x": 0, "y": 4},
+                "size": {"height": 1, "width": 1},
+                "type": "icon",
             },
             {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "MUTE", "repeat": 1}
-                },
+                "command": {"cmd_id": "remote.send", "params": {"command": "MUTE", "repeat": 1}},
                 "icon": "uc:mute",
-                "location": {
-                    "x": 0,
-                    "y": 5
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "icon"
+                "location": {"x": 0, "y": 5},
+                "size": {"height": 1, "width": 1},
+                "type": "icon",
             },
             {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "VOLUMEDOWN", "repeat": 1}
-                },
+                "command": {"cmd_id": "remote.send", "params": {"command": "VOLUMEDOWN", "repeat": 1}},
                 "icon": "uc:minus",
-                "location": {
-                    "x": 1,
-                    "y": 5
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "icon"
+                "location": {"x": 1, "y": 5},
+                "size": {"height": 1, "width": 1},
+                "type": "icon",
             },
             {
-                "command": {
-                    "cmd_id": "remote.send",
-                    "params": {"command": "VOLUMEUP", "repeat": 1}
-                },
+                "command": {"cmd_id": "remote.send", "params": {"command": "VOLUMEUP", "repeat": 1}},
                 "icon": "uc:plus",
-                "location": {
-                    "x": 2,
-                    "y": 5
-                },
-                "size": {
-                    "height": 1,
-                    "width": 1
-                },
-                "type": "icon"
+                "location": {"x": 2, "y": 5},
+                "size": {"height": 1, "width": 1},
+                "type": "icon",
             },
-        ]
+        ],
     },
     {
         "page_id": "LG numbers",
         "name": "LG numbers",
         "grid": {"height": 4, "width": 3},
-        "items": [{
-            "command": {
-                "cmd_id": "remote.send",
-                "params": {"command": "1", "repeat": 1}
+        "items": [
+            {
+                "command": {"cmd_id": "remote.send", "params": {"command": "1", "repeat": 1}},
+                "location": {"x": 0, "y": 0},
+                "size": {"height": 1, "width": 1},
+                "text": "1",
+                "type": "text",
             },
-            "location": {
-                "x": 0,
-                "y": 0
+            {
+                "command": {"cmd_id": "remote.send", "params": {"command": "2", "repeat": 1}},
+                "location": {"x": 1, "y": 0},
+                "size": {"height": 1, "width": 1},
+                "text": "2",
+                "type": "text",
             },
-            "size": {
-                "height": 1,
-                "width": 1
+            {
+                "command": {"cmd_id": "remote.send", "params": {"command": "3", "repeat": 1}},
+                "location": {"x": 2, "y": 0},
+                "size": {"height": 1, "width": 1},
+                "text": "3",
+                "type": "text",
             },
-            "text": "1",
-            "type": "text"
-        }, {
-            "command": {
-                "cmd_id": "remote.send",
-                "params": {"command": "2", "repeat": 1}
+            {
+                "command": {"cmd_id": "remote.send", "params": {"command": "4", "repeat": 1}},
+                "location": {"x": 0, "y": 1},
+                "size": {"height": 1, "width": 1},
+                "text": "4",
+                "type": "text",
             },
-            "location": {
-                "x": 1,
-                "y": 0
+            {
+                "command": {"cmd_id": "remote.send", "params": {"command": "5", "repeat": 1}},
+                "location": {"x": 1, "y": 1},
+                "size": {"height": 1, "width": 1},
+                "text": "5",
+                "type": "text",
             },
-            "size": {
-                "height": 1,
-                "width": 1
+            {
+                "command": {"cmd_id": "remote.send", "params": {"command": "6", "repeat": 1}},
+                "location": {"x": 2, "y": 1},
+                "size": {"height": 1, "width": 1},
+                "text": "6",
+                "type": "text",
             },
-            "text": "2",
-            "type": "text"
-        }, {
-            "command": {
-                "cmd_id": "remote.send",
-                "params": {"command": "3", "repeat": 1}
+            {
+                "command": {"cmd_id": "remote.send", "params": {"command": "7", "repeat": 1}},
+                "location": {"x": 0, "y": 2},
+                "size": {"height": 1, "width": 1},
+                "text": "7",
+                "type": "text",
             },
-            "location": {
-                "x": 2,
-                "y": 0
+            {
+                "command": {"cmd_id": "remote.send", "params": {"command": "8", "repeat": 1}},
+                "location": {"x": 1, "y": 2},
+                "size": {"height": 1, "width": 1},
+                "text": "8",
+                "type": "text",
             },
-            "size": {
-                "height": 1,
-                "width": 1
+            {
+                "command": {"cmd_id": "remote.send", "params": {"command": "9", "repeat": 1}},
+                "location": {"x": 2, "y": 2},
+                "size": {"height": 1, "width": 1},
+                "text": "9",
+                "type": "text",
             },
-            "text": "3",
-            "type": "text"
-        }, {
-            "command": {
-                "cmd_id": "remote.send",
-                "params": {"command": "4", "repeat": 1}
+            {
+                "command": {"cmd_id": "remote.send", "params": {"command": "0", "repeat": 1}},
+                "location": {"x": 1, "y": 3},
+                "size": {"height": 1, "width": 1},
+                "text": "0",
+                "type": "text",
             },
-            "location": {
-                "x": 0,
-                "y": 1
-            },
-            "size": {
-                "height": 1,
-                "width": 1
-            },
-            "text": "4",
-            "type": "text"
-        }, {
-            "command": {
-                "cmd_id": "remote.send",
-                "params": {"command": "5", "repeat": 1}
-            },
-            "location": {
-                "x": 1,
-                "y": 1
-            },
-            "size": {
-                "height": 1,
-                "width": 1
-            },
-            "text": "5",
-            "type": "text"
-        }, {
-            "command": {
-                "cmd_id": "remote.send",
-                "params": {"command": "6", "repeat": 1}
-            },
-            "location": {
-                "x": 2,
-                "y": 1
-            },
-            "size": {
-                "height": 1,
-                "width": 1
-            },
-            "text": "6",
-            "type": "text"
-        }, {
-            "command": {
-                "cmd_id": "remote.send",
-                "params": {"command": "7", "repeat": 1}
-            },
-            "location": {
-                "x": 0,
-                "y": 2
-            },
-            "size": {
-                "height": 1,
-                "width": 1
-            },
-            "text": "7",
-            "type": "text"
-        }, {
-            "command": {
-                "cmd_id": "remote.send",
-                "params": {"command": "8", "repeat": 1}
-            },
-            "location": {
-                "x": 1,
-                "y": 2
-            },
-            "size": {
-                "height": 1,
-                "width": 1
-            },
-            "text": "8",
-            "type": "text"
-        }, {
-            "command": {
-                "cmd_id": "remote.send",
-                "params": {"command": "9", "repeat": 1}
-            },
-            "location": {
-                "x": 2,
-                "y": 2
-            },
-            "size": {
-                "height": 1,
-                "width": 1
-            },
-            "text": "9",
-            "type": "text"
-        }, {
-            "command": {
-                "cmd_id": "remote.send",
-                "params": {"command": "0", "repeat": 1}
-            },
-            "location": {
-                "x": 1,
-                "y": 3
-            },
-            "size": {
-                "height": 1,
-                "width": 1
-            },
-            "text": "0",
-            "type": "text"
-        }
-        ]
+        ],
     },
     {
         "page_id": "LG direction pad",
         "name": "LG direction pad",
         "grid": {"height": 3, "width": 3},
-        "items": [{
-            "command": {
-                "cmd_id": "remote.send",
-                "params": {"command": "BACK", "repeat": 1}
+        "items": [
+            {
+                "command": {"cmd_id": "remote.send", "params": {"command": "BACK", "repeat": 1}},
+                "location": {"x": 0, "y": 0},
+                "size": {"height": 1, "width": 1},
+                "icon": "uc:back",
+                "type": "icon",
             },
-            "location": {
-                "x": 0,
-                "y": 0
+            {
+                "command": {"cmd_id": "remote.send", "params": {"command": "UP", "repeat": 1}},
+                "location": {"x": 1, "y": 0},
+                "size": {"height": 1, "width": 1},
+                "icon": "uc:up-arrow",
+                "type": "icon",
             },
-            "size": {
-                "height": 1,
-                "width": 1
+            {
+                "command": {"cmd_id": "remote.send", "params": {"command": "HOME", "repeat": 1}},
+                "location": {"x": 2, "y": 0},
+                "size": {"height": 1, "width": 1},
+                "icon": "uc:home",
+                "type": "icon",
             },
-            "icon": "uc:back",
-            "type": "icon"
-        },{
-            "command": {
-                "cmd_id": "remote.send",
-                "params": {"command": "UP", "repeat": 1}
+            {
+                "command": {"cmd_id": "remote.send", "params": {"command": "LEFT", "repeat": 1}},
+                "location": {"x": 0, "y": 1},
+                "size": {"height": 1, "width": 1},
+                "icon": "uc:left-arrow",
+                "type": "icon",
             },
-            "location": {
-                "x": 1,
-                "y": 0
+            {
+                "command": {"cmd_id": "remote.send", "params": {"command": "ENTER", "repeat": 1}},
+                "location": {"x": 1, "y": 1},
+                "size": {"height": 1, "width": 1},
+                "text": "OK",
+                "type": "text",
             },
-            "size": {
-                "height": 1,
-                "width": 1
+            {
+                "command": {"cmd_id": "remote.send", "params": {"command": "RIGHT", "repeat": 1}},
+                "location": {"x": 2, "y": 1},
+                "size": {"height": 1, "width": 1},
+                "icon": "uc:right-arrow",
+                "type": "icon",
             },
-            "icon": "uc:up-arrow",
-            "type": "icon"
-        },
-        {
-            "command": {
-                "cmd_id": "remote.send",
-                "params": {"command": "HOME", "repeat": 1}
+            {
+                "command": {"cmd_id": "remote.send", "params": {"command": "DOWN", "repeat": 1}},
+                "location": {"x": 1, "y": 2},
+                "size": {"height": 1, "width": 1},
+                "icon": "uc:down-arrow",
+                "type": "icon",
             },
-            "location": {
-                "x": 2,
-                "y": 0
+            {
+                "command": {"cmd_id": "remote.send", "params": {"command": "EXIT", "repeat": 1}},
+                "location": {"x": 2, "y": 2},
+                "size": {"height": 1, "width": 1},
+                "text": "Exit",
+                "type": "text",
             },
-            "size": {
-                "height": 1,
-                "width": 1
-            },
-            "icon": "uc:home",
-            "type": "icon"
-        },
-        {
-            "command": {
-                "cmd_id": "remote.send",
-                "params": {"command": "LEFT", "repeat": 1}
-            },
-            "location": {
-                "x": 0,
-                "y": 1
-            },
-            "size": {
-                "height": 1,
-                "width": 1
-            },
-            "icon": "uc:left-arrow",
-            "type": "icon"
-        },
-        {
-            "command": {
-                "cmd_id": "remote.send",
-                "params": {"command": "ENTER", "repeat": 1}
-            },
-            "location": {
-                "x": 1,
-                "y": 1
-            },
-            "size": {
-                "height": 1,
-                "width": 1
-            },
-            "text": "OK",
-            "type": "text"
-        },
-        {
-            "command": {
-                "cmd_id": "remote.send",
-                "params": {"command": "RIGHT", "repeat": 1}
-            },
-            "location": {
-                "x": 2,
-                "y": 1
-            },
-            "size": {
-                "height": 1,
-                "width": 1
-            },
-            "icon": "uc:right-arrow",
-            "type": "icon"
-        },
-        {
-            "command": {
-                "cmd_id": "remote.send",
-                "params": {"command": "DOWN", "repeat": 1}
-            },
-            "location": {
-                "x": 1,
-                "y": 2
-            },
-            "size": {
-                "height": 1,
-                "width": 1
-            },
-            "icon": "uc:down-arrow",
-            "type": "icon"
-        },
-        {
-            "command": {
-                "cmd_id": "remote.send",
-                "params": {"command": "EXIT", "repeat": 1}
-            },
-            "location": {
-                "x": 2,
-                "y": 2
-            },
-            "size": {
-                "height": 1,
-                "width": 1
-            },
-            "text": "Exit",
-            "type": "text"
-        },
-        ]
-    }
+        ],
+    },
 ]

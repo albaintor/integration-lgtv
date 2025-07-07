@@ -8,8 +8,6 @@ Media-player entity functions.
 import logging
 from typing import Any
 
-import lg
-from config import LGConfigDevice, create_entity_id
 from ucapi import EntityTypes, MediaPlayer, StatusCodes
 from ucapi.media_player import (
     Attributes,
@@ -19,7 +17,12 @@ from ucapi.media_player import (
     Options,
     States,
 )
+
+import lg
+from config import LGConfigDevice, create_entity_id
 from const import LG_SIMPLE_COMMANDS, LG_SIMPLE_COMMANDS_CUSTOM
+
+# pylint: disable = R0801
 
 _LOG = logging.getLogger(__name__)
 
@@ -45,9 +48,7 @@ class LGTVMediaPlayer(MediaPlayer):
             Attributes.MEDIA_TYPE: device.media_type,
         }
         _LOG.debug("LGTVMediaPlayer init %s : %s", entity_id, attributes)
-        options = {
-            Options.SIMPLE_COMMANDS: LG_SIMPLE_COMMANDS
-        }
+        options = {Options.SIMPLE_COMMANDS: LG_SIMPLE_COMMANDS}
         super().__init__(
             entity_id,
             config_device.name,
@@ -212,7 +213,7 @@ class LGTVMediaPlayer(MediaPlayer):
             Attributes.SOURCE,
             Attributes.VOLUME,
             Attributes.SOUND_MODE,
-            Attributes.SOUND_MODE_LIST
+            Attributes.SOUND_MODE_LIST,
         ]:
             if attr in update:
                 attributes = self._key_update_helper(attr, update[attr], attributes)

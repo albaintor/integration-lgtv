@@ -7,15 +7,11 @@ import logging
 import re
 import socket
 import sys
-import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
 
 import httpx
-
-# import netifaces
-from defusedxml import DefusedXmlException
-from defusedxml.ElementTree import ParseError, fromstring
+from defusedxml.ElementTree import fromstring
 from httpx import Response
 
 _LOGGER = logging.getLogger(__name__)
@@ -45,10 +41,12 @@ SCPD_PRESENTATIONURL = f"{SCPD_XMLNS}presentationURL"
 SCPD_WIFIMAC = f"{SCPD_XMLNS}wifiMac"
 SCPD_WIREDMAC = f"{SCPD_XMLNS}wiredMac"
 
-SUPPORTED_DEVICETYPES = ["urn:schemas-upnp-org:device:Basic:1",
-                         "urn:dial-multiscreen-org:service:dial:1",
-                         "urn:lge:device:tv:1",
-                         "urn:schemas-upnp-org:device:MediaRenderer:1"]
+SUPPORTED_DEVICETYPES = [
+    "urn:schemas-upnp-org:device:Basic:1",
+    "urn:dial-multiscreen-org:service:dial:1",
+    "urn:lge:device:tv:1",
+    "urn:schemas-upnp-org:device:MediaRenderer:1",
+]
 
 SUPPORTED_MANUFACTURERS = ["LG Electronics", "LG"]
 
@@ -192,6 +190,7 @@ def evaluate_scpd_xml(url: str, response: Response) -> Optional[Dict]:
     Returns dictionary with keys "host", "modelName", "friendlyName" and
     "presentationURL" if a Orange TV device was found and "None" if not.
     """
+    # pylint: disable=W0718
     try:
         root = fromstring(response.text)
         # Look for manufacturer "SoftAtHome" in response.

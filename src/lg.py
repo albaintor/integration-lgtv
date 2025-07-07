@@ -5,6 +5,7 @@ This module implements the AVR AVR receiver communication of the Remote Two inte
 :license: Mozilla Public License Version 2.0, see LICENSE for more details.
 """
 
+# pylint: disable = C0302
 import asyncio
 import logging
 import socket
@@ -25,12 +26,19 @@ from typing import (
 )
 
 import ucapi
-from aiowebostv import WebOsClient, WebOsTvCommandError, endpoints, WebOsTvState
-from config import LGConfigDevice
-from const import LG_FEATURES, LIVE_TV_APP_ID, WEBOSTV_EXCEPTIONS, LG_SOUND_OUTPUTS, LG_ADDITIONAL_ENDPOINTS
+from aiowebostv import WebOsClient, WebOsTvCommandError, WebOsTvState, endpoints
 from pyee.asyncio import AsyncIOEventEmitter
-from ucapi.media_player import Attributes as MediaAttr, States
-from ucapi.media_player import Features, MediaType
+from ucapi.media_player import Attributes as MediaAttr
+from ucapi.media_player import Features, MediaType, States
+
+from config import LGConfigDevice
+from const import (
+    LG_ADDITIONAL_ENDPOINTS,
+    LG_FEATURES,
+    LG_SOUND_OUTPUTS,
+    LIVE_TV_APP_ID,
+    WEBOSTV_EXCEPTIONS,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -42,6 +50,8 @@ INIT_APPS_LAUNCH_DELAY = 10
 
 
 class LGState(IntEnum):
+    """State of device."""
+
     OFF = 0
     STANDBY = 1
     ON = 2
@@ -72,6 +82,7 @@ async def retry_call_command(
 ) -> ucapi.StatusCodes:
     """Retry call command when failed"""
     # Launch reconnection task if not active
+    # pylint: disable = W0212
     if not obj._connect_task:
         obj._connect_task = asyncio.create_task(obj._connect_loop())
         await asyncio.sleep(0)
@@ -101,6 +112,8 @@ def retry(*, timeout: float = 5, bufferize=False) -> Callable[
     [Callable[_P, Awaitable[ucapi.StatusCodes]]],
     Callable[Concatenate[_LGDeviceT, _P], Coroutine[Any, Any, ucapi.StatusCodes | None]],
 ]:
+    """Retry command"""
+
     def decorator(
         func: Callable[Concatenate[_LGDeviceT, _P], Awaitable[ucapi.StatusCodes | None]],
     ) -> Callable[Concatenate[_LGDeviceT, _P], Coroutine[Any, Any, ucapi.StatusCodes | None]]:
@@ -117,6 +130,7 @@ def retry(*, timeout: float = 5, bufferize=False) -> Callable[
                 )
                 return await retry_call_command(timeout, bufferize, func, obj, *args, **kwargs)
             # New bug "Received message 8:1008 is not WSMsgType.TEXT" for some commands (power_off at least)
+            # pylint: disable = W0718
             except Exception as ex:
                 if obj.state == States.OFF:
                     log_function = _LOG.debug
@@ -131,13 +145,13 @@ def retry(*, timeout: float = 5, bufferize=False) -> Callable[
                 )
                 try:
                     return await retry_call_command(timeout, bufferize, func, obj, *args, **kwargs)
-                except WEBOSTV_EXCEPTIONS as ex:
+                except WEBOSTV_EXCEPTIONS as wex:
                     log_function(
                         "[%s] Error calling %s on [%s]: %r",
                         obj._device_config.address,
                         func.__name__,
                         obj._name,
-                        ex,
+                        wex,
                     )
                     return ucapi.StatusCodes.BAD_REQUEST
             # pylint: disable = W0718
@@ -207,6 +221,7 @@ class LGDevice:
         _LOG.debug("[%s] LG TV created", device_config.address)
 
     def update_config(self, device_config: LGConfigDevice):
+        """Update existing configuration."""
         self._device_config = device_config
 
     async def register_websocket_events(self):
@@ -302,6 +317,7 @@ class LGDevice:
                 _LOG.info("[%s] Empty sources, retrieve them %s", self._device_config.address, sources)
                 await self._tv.set_inputs_state(list(sources.values()))
                 await self._tv.set_apps_state(await self._tv.get_apps())
+                # pylint: disable = E1101
                 await self._tv.set_current_app_state(await self._tv.tv_info.get_current_app())
             # pylint: disable = W0718
             except Exception:
@@ -318,7 +334,7 @@ class LGDevice:
         # pylint: disable = W0718
         except Exception:
             is_on = False
-
+        # pylint: disable = W0718
         if data and data.tv_state.sound_output:
             if self._sound_output != data.tv_state.sound_output:
                 self._sound_output = data.tv_state.sound_output
@@ -330,8 +346,7 @@ class LGDevice:
                     updated_data[MediaAttr.SOUND_MODE] = self.sound_output
                 _LOG.debug("[%s] Sound output %s", self._device_config.address, self._sound_output)
             except Exception as ex:
-                _LOG.warning("[%s] Error extraction of sound output", self._device_config.address, ex)
-                pass
+                _LOG.warning("[%s] Error extraction of sound output %s", self._device_config.address, ex)
 
         state = States.ON if is_on else States.OFF
         if state != self.state:
@@ -387,6 +402,7 @@ class LGDevice:
 
     async def _run_buffered_commands(self):
         # Handle awaiting commands to process
+        # pylint: disable = R1702
         if self._buffered_callbacks:
             _LOG.debug("[%s] Connected, executing buffered commands", self._device_config.address)
             while self._buffered_callbacks:
@@ -466,8 +482,8 @@ class LGDevice:
                     "[%s] Connection process done but the connection is not available", self._device_config.address
                 )
                 raise WebOsTvCommandError("Connection process done but the connection is not available")
-            else:
-                _LOG.debug("[%s] Connection succeeded", self._device_config.address)
+
+            _LOG.debug("[%s] Connection succeeded", self._device_config.address)
             await self._update_states(None)
             if not self._device_config.mac_address:
                 await self._update_system()
@@ -623,6 +639,7 @@ class LGDevice:
         return self._media_type
 
     async def power_toggle(self) -> ucapi.StatusCodes:
+        """Toggle power."""
         lg_state = await self.check_connect()
         _LOG.debug("[%s] Power toggle power state : %s", self._device_config.address, lg_state)
         if lg_state == LGState.ON:
@@ -666,6 +683,7 @@ class LGDevice:
     async def check_connect(self) -> LGState:
         """Check power and connection state."""
         lg_state: LGState = LGState.ON
+        # pylint: disable = W0718
         try:
             async with asyncio.timeout(5):
                 state = await self._tv.get_power_state()
@@ -693,6 +711,7 @@ class LGDevice:
 
     async def power_on(self) -> ucapi.StatusCodes:
         """Send power-on command to LG TV."""
+        # pylint: disable = W0718
         _LOG.debug("[%s] Power on", self._device_config.address)
         try:
             ip_address = self._device_config.broadcast
@@ -720,13 +739,13 @@ class LGDevice:
             return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("[%s] LG TV error power_on %s", self._device_config.address, ex)
-        # pylint: disable = W0718
         except Exception as ex:
             _LOG.error("[%s] LG TV error power_on %s", self._device_config.address, ex)
         # return ucapi.StatusCodes.BAD_REQUEST
         return ucapi.StatusCodes.OK
 
     async def power_off_deferred(self):
+        """Power off deferred."""
         # Sleep time : sometimes the connection variable is not defined although the lib reports the TV as connected
         if self._tv.connection is None:
             await asyncio.sleep(2)
@@ -745,7 +764,8 @@ class LGDevice:
             self._attr_state = States.OFF
         else:
             _LOG.debug(
-                "[%s] Power off command : TV seems to be off, adding power_off call to buffered commands if connection is reestablished",
+                "[%s] Power off command : TV seems to be off, adding power_off call to buffered commands if "
+                "connection is reestablished",
                 self._device_config.address,
             )
             self._buffered_callbacks[time.time()] = {"object": self, "function": LGDevice.power_off_deferred}
@@ -857,6 +877,7 @@ class LGDevice:
         return ucapi.StatusCodes.BAD_REQUEST
 
     async def select_source_next(self) -> ucapi.StatusCodes:
+        """Switch to next source."""
         if self._tv is None:
             return ucapi.StatusCodes.SERVICE_UNAVAILABLE
         sources: list[dict] = list(self._tv.tv_state.inputs.values())

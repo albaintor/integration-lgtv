@@ -6,16 +6,16 @@ Configuration handling of the integration driver.
 """
 
 import dataclasses
-import discover
 import json
 import logging
 import os
 from asyncio import Lock
 from dataclasses import dataclass
-from typing import Iterator, Callable
+from typing import Callable, Iterator
 
 from ucapi import EntityTypes
 
+import discover
 
 _LOG = logging.getLogger(__name__)
 
@@ -66,10 +66,13 @@ class _EnhancedJSONEncoder(json.JSONEncoder):
 class Devices:
     """Integration driver configuration class. Manages all configured devices."""
 
-    def __init__(self, data_path: str,
-                 add_handler: Callable[[LGConfigDevice], None],
-                 remove_handler: Callable[[LGConfigDevice | None], None],
-                 update_handler: Callable[[LGConfigDevice], None]):
+    def __init__(
+        self,
+        data_path: str,
+        add_handler: Callable[[LGConfigDevice], None],
+        remove_handler: Callable[[LGConfigDevice | None], None],
+        update_handler: Callable[[LGConfigDevice], None],
+    ):
         """
         Create a configuration instance for the given configuration path.
 
@@ -223,21 +226,18 @@ class Devices:
                 host = device.get("host", None)
                 name = device.get("friendlyName", host)
 
-                if device_config.mac_address and (device_config.mac_address == wired_mac
-                                                  or device_config.mac_address == wifi_mac):
+                if device_config.mac_address and (device_config.mac_address in [wired_mac, wifi_mac]):
                     found = True
-                elif device_config.mac_address2 and (device_config.mac_address2 == wired_mac
-                                                     or device_config.mac_address2 == wifi_mac):
+                elif device_config.mac_address2 and (device_config.mac_address2 in [wired_mac, wifi_mac]):
                     found = True
 
                 if found:
                     if device_config.address == host:
                         _LOG.debug("Found device %s with unchanged address %s", name, host)
                     elif host:
-                        _LOG.debug("Found device %s with new address %s -> %s", name, device_config.address,
-                                   host)
+                        _LOG.debug("Found device %s with new address %s -> %s", name, device_config.address, host)
                         device_config.address = host
-                        _configuration_changed = True
+                        _devices_changed.append(device_config)
                     break
             if not found:
                 _LOG.debug("Device %s (%s) not found, probably off", device_config.name, device_config.address)

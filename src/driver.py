@@ -12,15 +12,17 @@ import os
 import sys
 from typing import Any
 
+import ucapi
+from ucapi.media_player import Attributes as MediaAttr
+from ucapi.media_player import States
+
 import config
 import lg
 import media_player
 import remote
 import setup_flow
-import ucapi
 from config import device_from_entity_id
 from const import WEBOSTV_EXCEPTIONS
-from ucapi.media_player import Attributes as MediaAttr, States
 
 _LOG = logging.getLogger("driver")  # avoid having __main__ in log messages
 if sys.platform == "win32":
@@ -32,6 +34,7 @@ asyncio.set_event_loop(_LOOP)
 api = ucapi.IntegrationAPI(_LOOP)
 # Map of id -> LG instance
 _configured_devices: dict[str, lg.LGDevice] = {}
+
 
 @api.listens_to(ucapi.Events.CONNECT)
 async def on_r2_connect_cmd() -> None:
@@ -104,13 +107,15 @@ async def on_subscribe_entities(entity_ids: list[str]) -> None:
             device_config = _configured_devices[device_id]
             attributes = device_config.attributes
             if isinstance(entity, media_player.LGTVMediaPlayer):
-                api.configured_entities.update_attributes(
-                    entity_id, attributes
-                )
+                api.configured_entities.update_attributes(entity_id, attributes)
             if isinstance(entity, remote.LGRemote):
                 api.configured_entities.update_attributes(
-                    entity_id, {ucapi.remote.Attributes.STATE:
-                                    remote.LG_REMOTE_STATE_MAPPING.get(attributes.get(MediaAttr.STATE, States.UNKNOWN))}
+                    entity_id,
+                    {
+                        ucapi.remote.Attributes.STATE: remote.LG_REMOTE_STATE_MAPPING.get(
+                            attributes.get(MediaAttr.STATE, States.UNKNOWN)
+                        )
+                    },
                 )
             try:
                 if not device_config.available:
@@ -170,8 +175,8 @@ async def on_device_connected(device_id: str):
 
         if configured_entity.entity_type == ucapi.EntityTypes.MEDIA_PLAYER:
             if (
-                    configured_entity.attributes[ucapi.media_player.Attributes.STATE]
-                    == ucapi.media_player.States.UNAVAILABLE
+                configured_entity.attributes[ucapi.media_player.Attributes.STATE]
+                == ucapi.media_player.States.UNAVAILABLE
             ):
                 api.configured_entities.update_attributes(
                     entity_id,
@@ -386,7 +391,7 @@ async def main():
 
     level = os.getenv("UC_LOG_LEVEL", "DEBUG").upper()
     logging.getLogger("lg").setLevel(level)
-    #logging.getLogger("discover").setLevel(level)
+    # logging.getLogger("discover").setLevel(level)
     logging.getLogger("driver").setLevel(level)
     logging.getLogger("media_player").setLevel(level)
     logging.getLogger("config").setLevel(level)

@@ -12,22 +12,25 @@ import os
 import socket
 from enum import IntEnum
 
-import config
-import discover
 from aiowebostv import WebOsClient
-from config import LGConfigDevice
-from const import WEBOSTV_EXCEPTIONS
 from ucapi import (
     AbortDriverSetup,
     DriverSetupRequest,
     IntegrationSetupError,
+    RequestUserConfirmation,
     RequestUserInput,
     SetupAction,
     SetupComplete,
     SetupDriver,
     SetupError,
-    UserDataResponse, RequestUserConfirmation, UserConfirmationResponse,
+    UserConfirmationResponse,
+    UserDataResponse,
 )
+
+import config
+import discover
+from config import LGConfigDevice
+from const import WEBOSTV_EXCEPTIONS
 from lg import LGDevice
 
 _LOG = logging.getLogger(__name__)
@@ -81,6 +84,7 @@ _user_input_discovery = RequestUserInput(
 )
 
 
+# pylint: disable=R0911
 async def driver_setup_handler(msg: SetupDriver) -> SetupAction:
     """
     Dispatch driver setup requests to corresponding handlers.
@@ -92,7 +96,6 @@ async def driver_setup_handler(msg: SetupDriver) -> SetupAction:
     """
     global _setup_step
     global _cfg_add_device
-    global _config_device
 
     _LOG.debug("driver_setup_handler")
 
@@ -117,8 +120,7 @@ async def driver_setup_handler(msg: SetupDriver) -> SetupAction:
         if _setup_step == SetupSteps.TEST_WAKEONLAN:
             if msg.confirm:
                 return get_wakeonlan_settings()
-            else:
-                return get_additional_settings(_config_device)
+            return get_additional_settings(_config_device)
 
     elif isinstance(msg, AbortDriverSetup):
         _LOG.info("Setup was aborted with code: %s", msg.error)
@@ -359,7 +361,8 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
                     "label": {
                         "value": {
                             "en": "After clicking next you may be prompted to confirm pairing on your TV",
-                            "fr": "Après avoir cliqué sur suivant, un message de confirmation d'apparairage peut s'afficher sur la TV",
+                            "fr": "Après avoir cliqué sur suivant, un message de confirmation d'apparairage peut "
+                            "s'afficher sur la TV",
                         }
                     }
                 },
@@ -377,7 +380,7 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
                     "de": "Wähle deinen LG TV",
                     "fr": "Choisissez votre LG TV",
                 },
-            }
+            },
         ],
     )
 
@@ -391,10 +394,8 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
     :param msg: response data from the requested user data
     :return: the setup action on how to continue: SetupComplete if a valid LG TV device was chosen.
     """
-    global _discovered_devices
     global _pairing_lg_tv
     global _config_device
-    global _setup_step
     discovered_device = None
     host = msg.input_values["choice"]
     mac_address = None
@@ -409,8 +410,12 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
                 if device.get("wifiMac"):
                     mac_address2 = device.get("wifiMac")
 
-    _LOG.debug("Chosen LG TV: %s (wired mac %s, wifi mac %s). Trying to connect and retrieve device information...",
-               host, mac_address, mac_address2)
+    _LOG.debug(
+        "Chosen LG TV: %s (wired mac %s, wifi mac %s). Trying to connect and retrieve device information...",
+        host,
+        mac_address,
+        mac_address2,
+    )
     try:
         # simple connection check
         _pairing_lg_tv = WebOsClient(host)
@@ -430,14 +435,23 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
         _LOG.error("Cannot connect to %s: %s", host, ex)
         return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
 
-    _config_device = LGConfigDevice(id=unique_id, name=model_name, address=host, key=key,
-                                    mac_address=mac_address, mac_address2=mac_address2,
-                                    interface="0.0.0.0", broadcast=None, wol_port=9)
+    _config_device = LGConfigDevice(
+        id=unique_id,
+        name=model_name,
+        address=host,
+        key=key,
+        mac_address=mac_address,
+        mac_address2=mac_address2,
+        interface="0.0.0.0",
+        broadcast=None,
+        wol_port=9,
+    )
 
     return get_additional_settings(_config_device)
 
 
 def get_additional_settings(config_device: LGConfigDevice) -> RequestUserInput:
+    """Extract additional settings for device registration."""
     global _setup_step
     _setup_step = SetupSteps.ADDITIONAL_SETTINGS
     if config_device.mac_address2 is None:
@@ -478,12 +492,15 @@ def get_additional_settings(config_device: LGConfigDevice) -> RequestUserInput:
         {
             "field": {"text": {"value": config_device.interface}},
             "id": "interface",
-            "label": {"en": "Interface to use for magic packet", "fr": "Interface à utiliser pour le \"magic packet\""},
+            "label": {"en": "Interface to use for magic packet", "fr": 'Interface à utiliser pour le "magic packet"'},
         },
         {
             "field": {"text": {"value": config_device.broadcast}},
             "id": "broadcast",
-            "label": {"en": "Broadcast address to use for magic packet (blank by default)", "fr": "Plage d'adresse à utiliser pour le magic packet (vide par défaut)"},
+            "label": {
+                "en": "Broadcast address to use for magic packet (blank by default)",
+                "fr": "Plage d'adresse à utiliser pour le magic packet (vide par défaut)",
+            },
         },
         {
             "id": "wolport",
@@ -491,15 +508,15 @@ def get_additional_settings(config_device: LGConfigDevice) -> RequestUserInput:
                 "en": "Wake on lan port",
                 "fr": "Numéro de port pour wake on lan",
             },
-            "field": {
-                "number": {"value": config_device.wol_port, "min": 1, "max": 65535, "steps": 1, "decimals": 0}
-            },
+            "field": {"number": {"value": config_device.wol_port, "min": 1, "max": 65535, "steps": 1, "decimals": 0}},
         },
         {
             "id": "test_wakeonlan",
             "label": {
-                "en": "Test turn on your configured TV (through wake on lan, TV should be off since 15 minutes at least)",
-                "fr": "Tester la mise en marche de votre TV (via wake on lan, votre TV doit être éteinte depuis au moins 15 minutes)",
+                "en": "Test turn on your configured TV (through wake on lan, TV should be off since 15 minutes at "
+                "least)",
+                "fr": "Tester la mise en marche de votre TV (via wake on lan, votre TV doit être éteinte depuis au "
+                "moins 15 minutes)",
             },
             "field": {"checkbox": {"value": False}},
         },
@@ -518,11 +535,12 @@ def get_additional_settings(config_device: LGConfigDevice) -> RequestUserInput:
             "en": "Additional settings",
             "fr": "Paramètres supplémentaires",
         },
-        settings=additional_fields
+        settings=additional_fields,
     )
 
 
 def _is_ipv6_address(ip_address: str) -> bool:
+    """Check if this is an IPV6 address."""
     try:
         return isinstance(ipaddress.ip_address(ip_address), ipaddress.IPv6Address)
     except ValueError:
@@ -530,8 +548,8 @@ def _is_ipv6_address(ip_address: str) -> bool:
 
 
 def get_wakeonlan_settings() -> RequestUserInput:
-    global _config_device
-
+    """Set settings for wake on lan."""
+    # pylint: disable = W0718
     broadcast = ""
     try:
         interface = os.getenv("UC_INTEGRATION_INTERFACE")
@@ -544,7 +562,7 @@ def get_wakeonlan_settings() -> RequestUserInput:
                 interface = ip_addr
                 break
         if interface is not None:
-            broadcast = interface[:interface.rfind('.') + 1] + '255'
+            broadcast = interface[: interface.rfind(".") + 1] + "255"
     except Exception:
         pass
 
@@ -553,21 +571,22 @@ def get_wakeonlan_settings() -> RequestUserInput:
             "en": "Test switching on your LG TV",
             "fr": "Test de mise en marche de votre TV LG",
         },
-        settings=[{
-            "id": "info",
-            "label": {
-                "en": "Test switching on your LG TV",
-                "fr": "Test de mise en marche de votre TV LG",
-            },
-            "field": {
+        settings=[
+            {
+                "id": "info",
                 "label": {
-                    "value": {
-                        "en": f"Remote interface {interface} : suggested broadcast {broadcast}",
-                        "fr": f"Adresse de la télécommande {interface} : broadcast suggéré {broadcast}",
+                    "en": "Test switching on your LG TV",
+                    "fr": "Test de mise en marche de votre TV LG",
+                },
+                "field": {
+                    "label": {
+                        "value": {
+                            "en": f"Remote interface {interface} : suggested broadcast {broadcast}",
+                            "fr": f"Adresse de la télécommande {interface} : broadcast suggéré {broadcast}",
+                        }
                     }
-                }
+                },
             },
-        },
             {
                 "field": {"text": {"value": _config_device.mac_address}},
                 "id": "mac_address",
@@ -598,19 +617,18 @@ def get_wakeonlan_settings() -> RequestUserInput:
                     "number": {"value": _config_device.wol_port, "min": 1, "max": 65535, "steps": 1, "decimals": 0}
                 },
             },
-        ]
+        ],
     )
 
 
 async def handle_additional_settings(msg: UserDataResponse) -> RequestUserConfirmation | SetupComplete | SetupError:
-
-    global _config_device
+    """Handle setup flow for additional settings."""
     global _pairing_lg_tv
     global _setup_step
     address = msg.input_values.get("address", "")
     mac_address = msg.input_values.get("mac_address", "")
     mac_address2 = msg.input_values.get("mac_address2", "")
-    interface  = msg.input_values.get("interface", "")
+    interface = msg.input_values.get("interface", "")
     broadcast = msg.input_values.get("broadcast", "")
     test_wakeonlan = msg.input_values.get("test_wakeonlan", "false") == "true"
     pairing = msg.input_values.get("pairing", "false") == "true"
@@ -642,7 +660,6 @@ async def handle_additional_settings(msg: UserDataResponse) -> RequestUserConfir
         _config_device.key = client.client_key
         await client.disconnect()
 
-
     _LOG.info("Setup updated settings %s", _config_device)
     config.devices.add_or_update(_config_device)
     # triggers LG TV instance creation
@@ -662,14 +679,12 @@ async def handle_additional_settings(msg: UserDataResponse) -> RequestUserConfir
 
 
 async def handle_wake_on_lan(msg: UserDataResponse) -> RequestUserConfirmation | SetupError:
-
-    global _config_device
-    global _pairing_lg_tv
+    """Handle wake on lan test."""
     mac_address = msg.input_values.get("mac_address", "")
     mac_address2 = msg.input_values.get("mac_address2", "")
     interface = msg.input_values.get("interface", "")
     broadcast = msg.input_values.get("broadcast", "")
-    test_wakeonlan = msg.input_values.get("test_wakeonlan", False)
+    # test_wakeonlan = msg.input_values.get("test_wakeonlan", False)
     wolport = 9
     try:
         wolport = int(msg.input_values.get("wolport", wolport))
@@ -705,12 +720,13 @@ async def handle_wake_on_lan(msg: UserDataResponse) -> RequestUserConfirmation |
     device = LGDevice(device_config=_config_device)
     device.wakeonlan()
 
-    return RequestUserConfirmation(title={
+    return RequestUserConfirmation(
+        title={
             "en": f"{requests} requests sent to the TV",
             "fr": f"{requests} requêtes envoyées au téléviseur",
         },
         header={
             "en": "Do you want to try another configuration ?",
             "fr": "Voulez-vous essayer une autre configuration ?",
-        }
+        },
     )

@@ -1,5 +1,5 @@
 pyee~=13.0.0
-aiowebostv~=0.7.3
+aiowebostv~=0.7.4
 ucapi~=0.3.1
 httpx~=0.28.1
 defusedxml~=0.7.1

@@ -4,18 +4,24 @@ Media-player entity functions.
 :copyright: (c) 2023 by Unfolded Circle ApS.
 :license: Mozilla Public License Version 2.0, see LICENSE for more details.
 """
+
 import asyncio
 import logging
 from typing import Any
 
 from aiowebostv.buttons import BUTTONS
-from ucapi.media_player import States
-
-from config import create_entity_id, LGConfigDevice
-from lg import LGDevice
 from ucapi import EntityTypes, Remote, StatusCodes
-from ucapi.remote import Attributes, Commands, States as RemoteStates, Options, Features
-from const import LG_REMOTE_BUTTONS_MAPPING, LG_REMOTE_UI_PAGES, LG_SIMPLE_COMMANDS_CUSTOM
+from ucapi.media_player import States
+from ucapi.remote import Attributes, Commands, Features, Options
+from ucapi.remote import States as RemoteStates
+
+from config import LGConfigDevice, create_entity_id
+from const import (
+    LG_REMOTE_BUTTONS_MAPPING,
+    LG_REMOTE_UI_PAGES,
+    LG_SIMPLE_COMMANDS_CUSTOM,
+)
+from lg import LGDevice
 
 _LOG = logging.getLogger(__name__)
 
@@ -48,19 +54,19 @@ class LGRemote(Remote):
             attributes,
             simple_commands=BUTTONS,
             button_mapping=LG_REMOTE_BUTTONS_MAPPING,
-            ui_pages=LG_REMOTE_UI_PAGES
+            ui_pages=LG_REMOTE_UI_PAGES,
         )
 
     @staticmethod
-    def getIntParam(self, param: str, params: dict[str, Any], default: int):
+    def get_int_param(param: str, params: dict[str, Any], default: int):
+        """Get integer parameter."""
         # TODO bug to be fixed on UC Core : some params are sent as (empty) strings by remote (hold == "")
         if params is None or param is None:
             return default
         value = params.get(param, default)
         if isinstance(value, str) and len(value) > 0:
             return int(float(value))
-        else:
-            return default
+        return default
 
     async def command(self, cmd_id: str, params: dict[str, Any] | None = None) -> StatusCodes:
         """
@@ -78,15 +84,17 @@ class LGRemote(Remote):
             _LOG.warning("No Kodi instance for entity: %s", self.id)
             return StatusCodes.SERVICE_UNAVAILABLE
 
-        repeat = LGRemote.getIntParam("repeat", params, 1)
+        repeat = LGRemote.get_int_param("repeat", params, 1)
         res = StatusCodes.OK
-        for i in range(0, repeat):
+        for _ in range(0, repeat):
             res = await self.handle_command(cmd_id, params)
         return res
 
     async def handle_command(self, cmd_id: str, params: dict[str, Any] | None = None) -> StatusCodes:
-        #hold = LGRemote.getIntParam("hold", params, 0)
-        delay = LGRemote.getIntParam("delay", params, 0)
+        """Handle command from command ID and optional parameters."""
+        # pylint: disable=R1705,R0911
+        # hold = LGRemote.getIntParam("hold", params, 0)
+        delay = LGRemote.get_int_param("delay", params, 0)
         command = params.get("command", "")
         res = None
 
@@ -105,13 +113,13 @@ class LGRemote(Remote):
         elif cmd_id == Commands.SEND_CMD:
             if command == Commands.ON:
                 return await self._device.power_on()
-            elif command == Commands.OFF:
+            if command == Commands.OFF:
                 return await self._device.power_off()
-            elif command == Commands.TOGGLE:
+            if command == Commands.TOGGLE:
                 return await self._device.power_toggle()
             return await self._device.button(command)
         elif cmd_id == Commands.SEND_CMD_SEQUENCE:
-            commands = params.get("sequence", [])  #.split(",")
+            commands = params.get("sequence", [])  # .split(",")
             res = StatusCodes.OK
             for command in commands:
                 res = await self.handle_command(Commands.SEND_CMD, {"command": command, "params": params})

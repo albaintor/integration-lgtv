@@ -1,11 +1,12 @@
+# pylint: skip-file
 import asyncio
 import logging
 import sys
 
 from aiowebostv import WebOsClient
 
-from lg import LGDevice
 from config import LGConfigDevice
+from lg import LGDevice
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
