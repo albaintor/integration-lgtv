@@ -80,7 +80,7 @@ async def retry_call_command(
     *args: _P.args,
     **kwargs: _P.kwargs,
 ) -> ucapi.StatusCodes:
-    """Retry call command when failed"""
+    """Retry call command when failed."""
     # Launch reconnection task if not active
     # pylint: disable = W0212
     if not obj._connect_task:
@@ -992,9 +992,7 @@ class LGDevice:
 
     @retry()
     async def turn_screen_off(self, webos_ver="") -> ucapi.StatusCodes:
-        """Turn TV Screen off. standbyMode values: 'active' or 'passive',
-        passive cannot turn screen back on, need to pull TV plug.
-        """
+        """Turn TV Screen off."""
         epname = f"TURN_OFF_SCREEN_WO{webos_ver}" if webos_ver else "TURN_OFF_SCREEN"
         endpoint = getattr(endpoints, epname, None)
         if endpoint is None:
@@ -1008,9 +1006,7 @@ class LGDevice:
 
     @retry()
     async def turn_screen_on(self, webos_ver="") -> ucapi.StatusCodes:
-        """Turn TV Screen on. standbyMode values: 'active' or 'passive',
-        passive cannot turn screen back on, need to pull TV plug.
-        """
+        """Turn TV Screen on."""
         epname = f"TURN_ON_SCREEN_WO{webos_ver}" if webos_ver else "TURN_ON_SCREEN"
         endpoint = getattr(endpoints, epname, None)
         if endpoint is None:

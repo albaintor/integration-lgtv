@@ -1,4 +1,5 @@
 # pylint: skip-file
+# flake8: noqa
 import asyncio
 import logging
 import sys

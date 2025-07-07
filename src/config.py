@@ -206,7 +206,7 @@ class Devices:
         return len(self._config) == 0
 
     async def handle_address_change(self):
-        """Check for address change and update configuration"""
+        """Check for address change and update configuration."""
         if devices.empty():
             return
         if self._config_lock.locked():

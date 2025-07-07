@@ -6,5 +6,5 @@
     <option name="enabledOnSave" value="true" />
     <option name="sdkName" value="Python 3.11 (integration-denonavr)" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.13 (integration-lgtv)" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.13" project-jdk-type="Python SDK" />
 </project>
