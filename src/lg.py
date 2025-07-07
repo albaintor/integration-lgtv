@@ -112,7 +112,7 @@ def retry(*, timeout: float = 5, bufferize=False) -> Callable[
     [Callable[_P, Awaitable[ucapi.StatusCodes]]],
     Callable[Concatenate[_LGDeviceT, _P], Coroutine[Any, Any, ucapi.StatusCodes | None]],
 ]:
-    """Retry command"""
+    """Retry command."""
 
     def decorator(
         func: Callable[Concatenate[_LGDeviceT, _P], Awaitable[ucapi.StatusCodes | None]],
