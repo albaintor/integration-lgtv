@@ -31,11 +31,20 @@ Supported commands:
 
 ## Usage
 
-### Setup
+### Installation on the Remote (recommended)
+
+- Enable always on on your LG TV to be able to power on lan (see https://www.home-assistant.io/integrations/webostv/)
+- Download the release from the release section : file ending with `.tar.gz`
+- Navigate into the Web Configurator of the remote, go into the `Integrations` tab, click on `Add new` and select : `Install custom`
+- Select the downloaded `.tar.gz` file and click on upload
+- Once uploaded, the new integration should appear in the list : click on it and select `Start setup`
+
+### Setup as external integration
 
 - Requires Python 3.11
 - Under a virtual environment : the driver has to be run in host mode and not bridge mode, otherwise the turn on function won't work (a magic packet has to be sent through network and it won't reach it under bridge mode)
-- Enable always on on your LG TV to be able to power on lan
+- Enable always on on your LG TV to be able to power on lan (see https://www.home-assistant.io/integrations/webostv/)
+- When using this integration as external (docker...), set this environment variable to avoid errors : `UC_EXTERNAL`
 - Install required libraries:  
   (using a [virtual environment](https://docs.python.org/3/library/venv.html) is highly recommended)
 
@@ -43,10 +52,10 @@ Supported commands:
 pip3 install -r requirements.txt
 ```
 
-For running a separate integration driver on your network for Remote Two, the configuration in file
+For running a separate integration driver on your network for Remote Two/3, the configuration in file
 [driver.json](driver.json) needs to be changed:
 
-- Set `driver_id` to a unique value, `uc_lg_driver` is already used for the embedded driver in the firmware.
+- Set `driver_id` to a unique value, `lgwebos_driver` is already used for the embedded driver in the firmware.
 - Change `name` to easily identify the driver for discovery & setup with Remote Two or the web-configurator.
 - Optionally add a `"port": 8090` field for the WebSocket server listening port.
     - Default port: `9090`
@@ -55,7 +64,7 @@ For running a separate integration driver on your network for Remote Two, the co
 ### Run
 
 ```shell
-python3 intg-lgtv/driver.py
+python3 src/driver.py
 ```
 
 See
@@ -63,7 +72,7 @@ available [environment variables](https://github.com/unfoldedcircle/integration-
 in the Python integration library to control certain runtime features like listening interface and configuration
 directory.
 
-## Build self-contained binary for Remote Two
+## Build self-contained binary for Remote Two/3
 
 After some tests, turns out python stuff on embedded is a nightmare. So we're better off creating a single binary file
 that has everything in it.
@@ -89,7 +98,7 @@ docker run --rm --name builder \
     docker.io/unfoldedcircle/r2-pyinstaller:3.11.6  \
     bash -c \
       "python -m pip install -r requirements.txt && \
-      pyinstaller --clean --onefile --name intg-lgtv intg-lgtv/driver.py"
+      pyinstaller --clean --onedir --name driver src/driver.py"
 ```
 
 ### aarch64 Linux / Mac
@@ -103,7 +112,7 @@ docker run --rm --name builder \
     docker.io/unfoldedcircle/r2-pyinstaller:3.11.6  \
     bash -c \
       "python -m pip install -r requirements.txt && \
-      pyinstaller --clean --onefile --name intg-lgtv intg-lgtv/driver.py"
+      pyinstaller --clean --onedir --name driver src/driver.py"
 ```
 
 ## Versioning
