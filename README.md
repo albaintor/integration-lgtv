@@ -38,6 +38,7 @@ Supported commands:
 - Navigate into the Web Configurator of the remote, go into the `Integrations` tab, click on `Add new` and select : `Install custom`
 - Select the downloaded `.tar.gz` file and click on upload
 - Once uploaded, the new integration should appear in the list : click on it and select `Start setup`
+- Your TV must be running and connected to the network before proceed
 
 ### Setup as external integration
 
