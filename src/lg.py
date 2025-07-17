@@ -26,6 +26,7 @@ from typing import (
 )
 
 import ucapi
+from aiohttp import WSMessageTypeError
 from aiowebostv import WebOsClient, WebOsTvCommandError, WebOsTvState, endpoints
 from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr
@@ -42,9 +43,9 @@ from const import (
 
 _LOG = logging.getLogger(__name__)
 
-DEFAULT_TIMEOUT = 5
+DEFAULT_TIMEOUT = 2
 BUFFER_LIFETIME = 30
-CONNECTION_RETRIES = 10
+CONNECTION_RETRIES = 20
 
 INIT_APPS_LAUNCH_DELAY = 10
 
@@ -145,7 +146,7 @@ def retry(*, timeout: float = 5, bufferize=False) -> Callable[
                 )
                 try:
                     return await retry_call_command(timeout, bufferize, func, obj, *args, **kwargs)
-                except WEBOSTV_EXCEPTIONS as wex:
+                except (WEBOSTV_EXCEPTIONS, WSMessageTypeError) as wex:
                     log_function(
                         "[%s] Error calling %s on [%s]: %r",
                         obj._device_config.address,
@@ -438,7 +439,6 @@ class LGDevice:
         device has shutdown by itself.
         """
         while True:
-            await asyncio.sleep(DEFAULT_TIMEOUT)
             try:
                 await self.connect()
                 if self._tv.tv_state.is_on:
@@ -464,6 +464,7 @@ class LGDevice:
                 self._reconnect_retry,
                 CONNECTION_RETRIES,
             )
+            await asyncio.sleep(DEFAULT_TIMEOUT)
         self._retry_wakeonlan = False
 
     async def connect(self):
