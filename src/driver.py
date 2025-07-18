@@ -16,7 +16,7 @@ from typing import Any
 import ucapi
 import ucapi.api_definitions as uc
 import websockets
-from ucapi.api import filter_log_msg_data, IntegrationAPI
+from ucapi.api import IntegrationAPI, filter_log_msg_data
 from ucapi.media_player import Attributes as MediaAttr
 from ucapi.media_player import States
 

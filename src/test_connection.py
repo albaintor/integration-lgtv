@@ -1,6 +1,7 @@
 # pylint: skip-file
 # flake8: noqa
 import asyncio
+import json
 import logging
 import sys
 
@@ -15,12 +16,12 @@ _LOOP = asyncio.new_event_loop()
 asyncio.set_event_loop(_LOOP)
 
 # 55
-address = "192.168.1.85"
+address = "192.168.1.41"
 mac_address = "04:4e:af:00:85:92"
 pairing_key = "4843d0b3a3ded816bcba7fce3f3a5ce1"
 
 # 77
-# address = "192.168.1.67"
+# address = "192.168.1.118"
 # mac_address = "4c:ba:d7:64:8c:b0"
 # pairing_key = "88de3f23b5cc6bf5d8c8c37086cdad6d"
 
@@ -51,6 +52,15 @@ async def main():
     )
     # await client.power_on()
     await client.connect()
+    sources = client.source_list
+    print(sources)
+
+    await client.select_source("HDMI1")
+    # for app in client._tv.tv_state.apps.values():
+    #     print(json.dumps(app, indent=3))
+    # for source in client._tv.tv_state.inputs.values():
+    #     print(json.dumps(source, indent=3))
+
     # power_state = await client._tv.get_power_state()
     # _LOG.debug("Power state %s", power_state)
     # tv_info = client._tv.tv_info
@@ -60,8 +70,8 @@ async def main():
     # await client.button("ENTER")
 
     # Validate pairing key (55)
-    await client.button("RIGHT")
-    await client.button("ENTER")
+    # await client.button("RIGHT")
+    # await client.button("ENTER")
 
 
 if __name__ == "__main__":

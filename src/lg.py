@@ -49,6 +49,8 @@ CONNECTION_RETRIES = 20
 
 INIT_APPS_LAUNCH_DELAY = 10
 
+SOURCE_IS_APP = "isApp"
+
 
 class LGState(IntEnum):
     """State of device."""
@@ -271,18 +273,16 @@ class LGDevice:
                 found_live_tv = True
             if app["id"] == self._tv.tv_state.current_app_id:
                 active_source = app["title"]
-                self._sources[app["title"]] = app
-            else:
-                self._sources[app["title"]] = app
+            self._sources[app["title"]] = app
+            self._sources[app["title"]][SOURCE_IS_APP] = True
 
         for source in self._tv.tv_state.inputs.values():
             if source["appId"] == LIVE_TV_APP_ID:
                 found_live_tv = True
             if source["appId"] == self._tv.tv_state.current_app_id:
                 active_source = source["id"]
-                self._sources[source["id"]] = source
-            else:
-                self._sources[source["id"]] = source
+            self._sources[source["id"]] = source
+            self._sources[source["id"]][SOURCE_IS_APP] = False
 
         # empty list, TV may be off, keep previous list
         if not self._sources and current_source_list:
@@ -293,15 +293,14 @@ class LGDevice:
             app = {"id": LIVE_TV_APP_ID, "title": "Live TV"}
             if self._tv.tv_state.current_app_id == LIVE_TV_APP_ID:
                 active_source = app["title"]
-                self._sources["Live TV"] = app
-            else:
-                self._sources["Live TV"] = app
+            self._sources["Live TV"] = app
+            self._sources[app["title"]][SOURCE_IS_APP] = True
 
         if (
             not current_source_list and self._sources
         ):  # or (self._sources and list(self._sources.keys()).sort() != list(current_source_list).sort()):
             _LOG.debug("[%s] Source list %s", self._device_config.address, self._sources)
-            updated_data[MediaAttr.SOURCE_LIST] = sorted(self._sources)
+            updated_data[MediaAttr.SOURCE_LIST] = self.source_list
 
         if active_source != self._active_source:
             _LOG.debug("[%s] Active source %s", self._device_config.address, active_source)
@@ -590,7 +589,13 @@ class LGDevice:
     @property
     def source_list(self) -> list[str]:
         """Return a list of available input sources."""
-        return sorted(self._sources)
+        sources_list = sorted(
+            [source_name for (source_name, source) in self._sources.items() if source[SOURCE_IS_APP] is False]
+        )
+        sources_list.extend(
+            sorted([source_name for (source_name, source) in self._sources.items() if source[SOURCE_IS_APP] is True])
+        )
+        return sources_list
 
     @property
     def source(self) -> str:
