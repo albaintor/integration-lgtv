@@ -515,10 +515,9 @@ class LGDevice:
             pass
 
     async def _update_system(self) -> None:
-        info = await self._tv.get_system_info()
+        info = await self._tv.tv_info
         self._model_name = info.get("modelName")
         self._serial_number = info.get("serialNumber")
-        info = await self._tv.get_software_info()
         self._device_config.mac_address = info.get("device_id")
 
     async def disconnect(self):
