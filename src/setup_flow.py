@@ -421,14 +421,21 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
         _pairing_lg_tv = WebOsClient(host)
         await _pairing_lg_tv.connect()
         key = _pairing_lg_tv.client_key
-        info = await _pairing_lg_tv.get_system_info()
-        model_name = info.get("modelName")
+        try:
+            info = await _pairing_lg_tv.get_system_info()
+            model_name = info.get("modelName")
+            # serial_number = info.get("serialNumber")
+            info = await _pairing_lg_tv.get_software_info()
+            unique_id = info.get("device_id")
+        except WEBOSTV_EXCEPTIONS as ex:
+            _LOG.info("Cannot get system info, trying to retrieve the model name either way %s: %s", host, ex)
+            info = await _pairing_lg_tv.tv_info
+            model_name = info.get("modelName")
+            unique_id = info.get("device_id")
+
         if discovered_device and discovered_device.get("friendlyName"):
             model_name = discovered_device.get("friendlyName")
 
-        # serial_number = info.get("serialNumber")
-        info = await _pairing_lg_tv.get_software_info()
-        unique_id = info.get("device_id")
         if mac_address is None:
             mac_address = unique_id
     except WEBOSTV_EXCEPTIONS as ex:

@@ -51,11 +51,11 @@ async def main():
         )
     )
     # await client.power_on()
-    await client.connect()
-    sources = client.source_list
-    print(sources)
-
-    await client.select_source("HDMI1")
+    # await client.connect()
+    # sources = client.source_list
+    # print(sources)
+    #
+    # await client.select_source("HDMI1")
     # for app in client._tv.tv_state.apps.values():
     #     print(json.dumps(app, indent=3))
     # for source in client._tv.tv_state.inputs.values():
@@ -70,8 +70,8 @@ async def main():
     # await client.button("ENTER")
 
     # Validate pairing key (55)
-    # await client.button("RIGHT")
-    # await client.button("ENTER")
+    await client.button("RIGHT")
+    await client.button("ENTER")
 
 
 if __name__ == "__main__":
