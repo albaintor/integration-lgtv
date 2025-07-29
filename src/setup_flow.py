@@ -429,7 +429,7 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
             unique_id = info.get("device_id")
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.info("Cannot get system info, trying to retrieve the model name either way %s: %s", host, ex)
-            info = await _pairing_lg_tv.tv_info
+            info = _pairing_lg_tv.tv_info
             model_name = info.get("modelName")
             unique_id = info.get("device_id")
 
