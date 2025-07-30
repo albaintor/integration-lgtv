@@ -318,7 +318,7 @@ class LGDevice:
                 await self._tv.set_inputs_state(list(sources.values()))
                 await self._tv.set_apps_state(await self._tv.get_apps())
                 # pylint: disable = E1101
-                await self._tv.set_current_app_state(await self._tv.tv_info.get_current_app())
+                await self._tv.set_current_app_state(await self._tv.get_current_app())
             # pylint: disable = W0718
             except Exception:
                 pass
@@ -516,9 +516,9 @@ class LGDevice:
 
     async def _update_system(self) -> None:
         info = self._tv.tv_info
-        self._model_name = info.get("modelName")
-        self._serial_number = info.get("serialNumber")
-        self._device_config.mac_address = info.get("device_id")
+        self._model_name = info.system.get("modelName", "LG")
+        self._serial_number = info.system.get("serialNumber")
+        self._device_config.mac_address = info.software.get("device_id")
 
     async def disconnect(self):
         """Disconnect from TV."""

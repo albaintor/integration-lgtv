@@ -322,8 +322,15 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
             # simple connection check
             device = WebOsClient(address)
             await device.connect()
-            info = await device.get_system_info()
-            model_name = info.get("modelName")
+            try:
+                info = await device.get_system_info()
+                model_name = info.get("modelName")
+            except Exception as exc:
+                _LOG.info("Cannot get system info, trying to retrieve the model name either way %s: %s", address, exc)
+                info = _pairing_lg_tv.tv_info
+                model_name = info.system.get("modelName", "LG")
+                # unique_id = info.software.get("device_id")
+
             dropdown_items.append({"id": address, "label": {"en": f"{model_name} [{address}]"}})
             await device.disconnect()
         except WEBOSTV_EXCEPTIONS as ex:
@@ -427,11 +434,11 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
             # serial_number = info.get("serialNumber")
             info = await _pairing_lg_tv.get_software_info()
             unique_id = info.get("device_id")
-        except WEBOSTV_EXCEPTIONS as ex:
+        except Exception as ex:
             _LOG.info("Cannot get system info, trying to retrieve the model name either way %s: %s", host, ex)
             info = _pairing_lg_tv.tv_info
-            model_name = info.get("modelName")
-            unique_id = info.get("device_id")
+            model_name = info.system.get("modelName", "LG")
+            unique_id = info.software.get("device_id")
 
         if discovered_device and discovered_device.get("friendlyName"):
             model_name = discovered_device.get("friendlyName")
@@ -558,6 +565,7 @@ def get_wakeonlan_settings() -> RequestUserInput:
     """Set settings for wake on lan."""
     # pylint: disable = W0718
     broadcast = ""
+    interface = ""
     try:
         interface = os.getenv("UC_INTEGRATION_INTERFACE")
         if interface is None or interface == "127.0.0.1":
