@@ -43,18 +43,20 @@ class SetupSteps(IntEnum):
     """Enumeration of setup steps to keep track of user data responses."""
 
     INIT = 0
-    CONFIGURATION_MODE = 1
-    DISCOVER = 2
-    DEVICE_CHOICE = 3
-    ADDITIONAL_SETTINGS = 4
-    TEST_WAKEONLAN = 5
+    WORKFLOW_MODE = 1
+    DEVICE_CONFIGURATION_MODE = 2
+    DISCOVER = 3
+    DEVICE_CHOICE = 4
+    ADDITIONAL_SETTINGS = 5
+    TEST_WAKEONLAN = 6
+    BACKUP_RESTORE = 7
 
 
 _setup_step = SetupSteps.INIT
 _cfg_add_device: bool = False
 _discovered_devices: list[dict[str, str]] = []
 _pairing_lg_tv: WebOsClient | None = None
-_config_device: LGConfigDevice | None = None
+_reconfigured_device: LGConfigDevice | None = None
 _user_input_discovery = RequestUserInput(
     {"en": "Setup mode", "de": "Setup Modus"},
     [
@@ -97,16 +99,30 @@ async def driver_setup_handler(msg: SetupDriver) -> SetupAction:
     global _setup_step
     global _cfg_add_device
 
-    _LOG.debug("driver_setup_handler")
 
     if isinstance(msg, DriverSetupRequest):
         _setup_step = SetupSteps.INIT
         _cfg_add_device = False
         return await handle_driver_setup(msg)
     if isinstance(msg, UserDataResponse):
-        _LOG.debug(msg)
-        if _setup_step == SetupSteps.CONFIGURATION_MODE and "action" in msg.input_values:
-            return await handle_configuration_mode(msg)
+        _LOG.debug("Setup handler message : step %s, message : %s", _setup_step, msg)
+        if _setup_step == SetupSteps.WORKFLOW_MODE:
+            if msg.input_values.get("configuration_mode", "") == "normal":
+                _setup_step = SetupSteps.DEVICE_CONFIGURATION_MODE
+                _LOG.debug("Starting normal setup workflow")
+                return _user_input_discovery
+            else:
+                _LOG.debug("User requested backup/restore of configuration")
+                return await _handle_backup_restore_step()
+        if _setup_step == SetupSteps.DEVICE_CONFIGURATION_MODE:
+            if "action" in msg.input_values:
+                _LOG.debug("Setup flow starts with existing configuration")
+                return await handle_configuration_mode(msg)
+            else:
+                _LOG.debug("Setup flow configuration mode")
+                return await _handle_discovery(msg)
+        # if _setup_step == SetupSteps.DEVICE_CONFIGURATION_MODE and "action" in msg.input_values:
+        #     return await handle_configuration_mode(msg)
         if _setup_step == SetupSteps.DISCOVER and "address" in msg.input_values:
             return await _handle_discovery(msg)
         if _setup_step == SetupSteps.DEVICE_CHOICE and "choice" in msg.input_values:
@@ -115,12 +131,14 @@ async def driver_setup_handler(msg: SetupDriver) -> SetupAction:
             return await handle_additional_settings(msg)
         if _setup_step == SetupSteps.TEST_WAKEONLAN and "mac_address" in msg.input_values:
             return await handle_wake_on_lan(msg)
+        if _setup_step == SetupSteps.BACKUP_RESTORE:
+            return await _handle_backup_restore(msg)
         _LOG.error("No or invalid user response was received: %s", msg)
     elif isinstance(msg, UserConfirmationResponse):
         if _setup_step == SetupSteps.TEST_WAKEONLAN:
             if msg.confirm:
                 return get_wakeonlan_settings()
-            return get_additional_settings(_config_device)
+            return get_additional_settings(_reconfigured_device)
 
     elif isinstance(msg, AbortDriverSetup):
         _LOG.info("Setup was aborted with code: %s", msg.error)
@@ -151,9 +169,9 @@ async def handle_driver_setup(msg: DriverSetupRequest) -> RequestUserInput | Set
     await asyncio.sleep(1)
 
     reconfigure = msg.reconfigure
-    _LOG.debug("Starting driver setup, reconfigure=%s", reconfigure)
+    _LOG.debug("Handle driver setup, reconfigure=%s", reconfigure)
     if reconfigure:
-        _setup_step = SetupSteps.CONFIGURATION_MODE
+        _setup_step = SetupSteps.DEVICE_CONFIGURATION_MODE
 
         # get all configured devices for the user to choose from
         dropdown_devices = []
@@ -208,6 +226,16 @@ async def handle_driver_setup(msg: DriverSetupRequest) -> RequestUserInput | Set
             # dummy entry if no devices are available
             dropdown_devices.append({"id": "", "label": {"en": "---"}})
 
+        dropdown_actions.append(
+            {
+                "id": "backup_restore",
+                "label": {
+                    "en": "Backup or restore devices configuration",
+                    "fr": "Sauvegarder ou restaurer la configuration des appareils",
+                },
+            },
+        )
+
         return RequestUserInput(
             {"en": "Configuration mode", "de": "Konfigurations-Modus"},
             [
@@ -241,11 +269,43 @@ async def handle_driver_setup(msg: DriverSetupRequest) -> RequestUserInput | Set
                 },
             ],
         )
-
-    # Initial setup, make sure we have a clean configuration
-    config.devices.clear()  # triggers device instance removal
-    _setup_step = SetupSteps.DISCOVER
-    return _user_input_discovery
+    else:
+        # Initial setup, make sure we have a clean configuration
+        config.devices.clear()  # triggers device instance removal
+        _setup_step = SetupSteps.WORKFLOW_MODE
+        return RequestUserInput(
+            {"en": "Configuration mode", "de": "Konfigurations-Modus"},
+            [
+                {
+                    "field": {
+                        "dropdown": {
+                            "value": "normal",
+                            "items": [
+                                {
+                                    "id": "normal",
+                                    "label": {
+                                        "en": "Start the configuration of the integration",
+                                        "fr": "Démarrer la configuration de l'intégration",
+                                    },
+                                },
+                                {
+                                    "id": "backup_restore",
+                                    "label": {
+                                        "en": "Backup or restore devices configuration",
+                                        "fr": "Sauvegarder ou restaurer la configuration des appareils",
+                                    },
+                                },
+                            ],
+                        }
+                    },
+                    "id": "configuration_mode",
+                    "label": {
+                        "en": "Configuration mode",
+                        "fr": "Mode de configuration",
+                    },
+                }
+            ],
+        )
 
 
 async def handle_configuration_mode(msg: UserDataResponse) -> RequestUserInput | SetupComplete | SetupError:
@@ -260,9 +320,11 @@ async def handle_configuration_mode(msg: UserDataResponse) -> RequestUserInput |
     """
     global _setup_step
     global _cfg_add_device
-    global _config_device
+    global _reconfigured_device
 
     action = msg.input_values["action"]
+
+    _LOG.debug("Handle configuration mode")
 
     # workaround for web-configurator not picking up first response
     await asyncio.sleep(1)
@@ -282,10 +344,12 @@ async def handle_configuration_mode(msg: UserDataResponse) -> RequestUserInput |
             if not config.devices.contains(choice):
                 _LOG.warning("Could not configure existing device from configuration: %s", choice)
                 return SetupError(error_type=IntegrationSetupError.OTHER)
-            _config_device = config.devices.get(choice)
-            return get_additional_settings(_config_device)
+            _reconfigured_device = config.devices.get(choice)
+            return get_additional_settings(_reconfigured_device)
         case "reset":
             config.devices.clear()  # triggers device instance removal
+        case "backup_restore":
+            return await _handle_backup_restore_step()
         case _:
             _LOG.error("Invalid configuration action: %s", action)
             return SetupError(error_type=IntegrationSetupError.OTHER)
@@ -314,8 +378,9 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
         _pairing_lg_tv = None
 
     dropdown_items = []
-    address = msg.input_values["address"]
+    _LOG.debug("Handle driver setup with discovery")
 
+    address = msg.input_values["address"]
     if address:
         _LOG.debug("Starting manual driver setup for %s", address)
         try:
@@ -402,7 +467,7 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
     :return: the setup action on how to continue: SetupComplete if a valid LG TV device was chosen.
     """
     global _pairing_lg_tv
-    global _config_device
+    global _reconfigured_device
     discovered_device = None
     host = msg.input_values["choice"]
     mac_address = None
@@ -449,7 +514,7 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
         _LOG.error("Cannot connect to %s: %s", host, ex)
         return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
 
-    _config_device = LGConfigDevice(
+    _reconfigured_device = LGConfigDevice(
         id=unique_id,
         name=model_name,
         address=host,
@@ -461,7 +526,7 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
         wol_port=9,
     )
 
-    return get_additional_settings(_config_device)
+    return get_additional_settings(_reconfigured_device)
 
 
 def get_additional_settings(config_device: LGConfigDevice) -> RequestUserInput:
@@ -552,6 +617,34 @@ def get_additional_settings(config_device: LGConfigDevice) -> RequestUserInput:
         settings=additional_fields,
     )
 
+async def _handle_backup_restore_step() -> RequestUserInput:
+    global _setup_step
+
+    _setup_step = SetupSteps.BACKUP_RESTORE
+    current_config = config.devices.export()
+
+    _LOG.debug("Handle backup/restore step")
+
+    return RequestUserInput(
+        {
+            "en": "Backup or restore devices configuration (all existing devices will be removed)",
+            "fr": "Sauvegarder ou restaurer la configuration des appareils (tous les appareils existants seront supprimés)",
+        },
+        [
+            {
+                "field": {
+                    "textarea": {
+                        "value": current_config,
+                    }
+                },
+                "id": "config",
+                "label": {
+                    "en": "Devices configuration",
+                    "fr": "Configuration des appareils",
+                },
+            },
+        ],
+    )
 
 def _is_ipv6_address(ip_address: str) -> bool:
     """Check if this is an IPV6 address."""
@@ -603,22 +696,22 @@ def get_wakeonlan_settings() -> RequestUserInput:
                 },
             },
             {
-                "field": {"text": {"value": _config_device.mac_address}},
+                "field": {"text": {"value": _reconfigured_device.mac_address}},
                 "id": "mac_address",
                 "label": {"en": "First mac address", "fr": "Première adresse Mac"},
             },
             {
-                "field": {"text": {"value": _config_device.mac_address2}},
+                "field": {"text": {"value": _reconfigured_device.mac_address2}},
                 "id": "mac_address2",
                 "label": {"en": "Second mac address", "fr": "Deuxième adresse Mac"},
             },
             {
-                "field": {"text": {"value": _config_device.interface}},
+                "field": {"text": {"value": _reconfigured_device.interface}},
                 "id": "interface",
                 "label": {"en": "Interface (optional)", "fr": "Interface (optionnel)"},
             },
             {
-                "field": {"text": {"value": _config_device.broadcast}},
+                "field": {"text": {"value": _reconfigured_device.broadcast}},
                 "id": "broadcast",
                 "label": {"en": "Broadcast (optional)", "fr": "Broadcast (optionnel)"},
             },
@@ -629,7 +722,7 @@ def get_wakeonlan_settings() -> RequestUserInput:
                     "fr": "Numéro de port pour wake on lan",
                 },
                 "field": {
-                    "number": {"value": _config_device.wol_port, "min": 1, "max": 65535, "steps": 1, "decimals": 0}
+                    "number": {"value": _reconfigured_device.wol_port, "min": 1, "max": 65535, "steps": 1, "decimals": 0}
                 },
             },
         ],
@@ -647,13 +740,15 @@ async def handle_additional_settings(msg: UserDataResponse) -> RequestUserConfir
     broadcast = msg.input_values.get("broadcast", "")
     test_wakeonlan = msg.input_values.get("test_wakeonlan", "false") == "true"
     pairing = msg.input_values.get("pairing", "false") == "true"
+    _LOG.debug("Handle additional settings")
+
     try:
         wolport = int(msg.input_values.get("wolport", 9))
     except ValueError:
         return SetupError(error_type=IntegrationSetupError.OTHER)
 
     if address != "":
-        _config_device.address = address
+        _reconfigured_device.address = address
     if mac_address == "":
         mac_address = None
     if mac_address2 == "":
@@ -663,20 +758,20 @@ async def handle_additional_settings(msg: UserDataResponse) -> RequestUserConfir
     if interface == "":
         interface = None
 
-    _config_device.mac_address = mac_address
-    _config_device.mac_address2 = mac_address2
-    _config_device.interface = interface
-    _config_device.broadcast = broadcast
-    _config_device.wol_port = wolport
+    _reconfigured_device.mac_address = mac_address
+    _reconfigured_device.mac_address2 = mac_address2
+    _reconfigured_device.interface = interface
+    _reconfigured_device.broadcast = broadcast
+    _reconfigured_device.wol_port = wolport
 
     if pairing:
-        client = WebOsClient(_config_device.address)
+        client = WebOsClient(_reconfigured_device.address)
         await client.connect()
-        _config_device.key = client.client_key
+        _reconfigured_device.key = client.client_key
         await client.disconnect()
 
-    _LOG.info("Setup updated settings %s", _config_device)
-    config.devices.add_or_update(_config_device)
+    _LOG.info("Setup updated settings %s", _reconfigured_device)
+    config.devices.add_or_update(_reconfigured_device)
     # triggers LG TV instance creation
 
     if _pairing_lg_tv:
@@ -689,7 +784,7 @@ async def handle_additional_settings(msg: UserDataResponse) -> RequestUserConfir
 
     # LG TV device connection will be triggered with subscribe_entities request
     await asyncio.sleep(1)
-    _LOG.info("Setup successfully completed for %s (%s)", _config_device.name, _config_device.id)
+    _LOG.info("Setup successfully completed for %s (%s)", _reconfigured_device.name, _reconfigured_device.id)
     return SetupComplete()
 
 
@@ -700,6 +795,7 @@ async def handle_wake_on_lan(msg: UserDataResponse) -> RequestUserConfirmation |
     interface = msg.input_values.get("interface", "")
     broadcast = msg.input_values.get("broadcast", "")
     # test_wakeonlan = msg.input_values.get("test_wakeonlan", False)
+    _LOG.debug("Handle wake on lan")
     wolport = 9
     try:
         wolport = int(msg.input_values.get("wolport", wolport))
@@ -715,24 +811,24 @@ async def handle_wake_on_lan(msg: UserDataResponse) -> RequestUserConfirmation |
     if interface == "":
         interface = None
 
-    _config_device.mac_address = mac_address
-    _config_device.mac_address2 = mac_address2
-    _config_device.interface = interface
-    _config_device.broadcast = broadcast
-    _config_device.wol_port = wolport
+    _reconfigured_device.mac_address = mac_address
+    _reconfigured_device.mac_address2 = mac_address2
+    _reconfigured_device.interface = interface
+    _reconfigured_device.broadcast = broadcast
+    _reconfigured_device.wol_port = wolport
 
-    _LOG.info("Setup updated settings %s", _config_device)
-    config.devices.add_or_update(_config_device)
+    _LOG.info("Setup updated settings %s", _reconfigured_device)
+    config.devices.add_or_update(_reconfigured_device)
     # triggers LG TV instance creation
     config.devices.store()
 
     requests = 0
-    if _config_device.mac_address:
+    if _reconfigured_device.mac_address:
         requests += 1
-    if _config_device.mac_address2:
+    if _reconfigured_device.mac_address2:
         requests += 1
 
-    device = LGDevice(device_config=_config_device)
+    device = LGDevice(device_config=_reconfigured_device)
     device.wakeonlan()
 
     return RequestUserConfirmation(
@@ -745,3 +841,26 @@ async def handle_wake_on_lan(msg: UserDataResponse) -> RequestUserConfirmation |
             "fr": "Voulez-vous essayer une autre configuration ?",
         },
     )
+
+
+async def _handle_backup_restore(msg: UserDataResponse) -> SetupComplete | SetupError:
+    """
+    Process import of configuration
+
+    :param msg: response data from the requested user data
+    :return: the setup action on how to continue: SetupComplete after updating configuration
+    """
+    # flake8: noqa:F824
+    # pylint: disable=W0602
+    global _reconfigured_device
+
+    _LOG.debug("Handle backup/restore")
+    updated_config = msg.input_values["config"]
+    _LOG.info("Replacing configuration with : %s", updated_config)
+    if not config.devices.import_config(updated_config):
+        _LOG.error("Setup error : unable to import updated configuration", updated_config)
+        return SetupError(error_type=IntegrationSetupError.OTHER)
+    _LOG.debug("Configuration imported successfully")
+
+    await asyncio.sleep(1)
+    return SetupComplete()

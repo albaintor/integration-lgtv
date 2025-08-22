@@ -40,6 +40,14 @@ Supported commands:
 - Once uploaded, the new integration should appear in the list : click on it and select `Start setup`
 - Your TV must be running and connected to the network before proceed
 
+### Backup or restore configuration
+
+The integration lets backup or restore the devices configuration (in JSON format).
+To use this functionality, select the "Backup or restore" option in the setup flow, then you will have a text field which will be empty if no devices are configured. 
+- Backup : just save the content of the text field in a file for later restore and abort the setup flow (clicking next will apply this configuration)
+- Restore : just replace the content by the previously saved configuration and click on next to apply it. Beware while using this functionality : the expected format should be respected and could change in the future.
+If the format is not recognized, the import will be aborted and existing configuration will remain unchanged.
+
 ### Setup as external integration
 
 - Requires Python 3.11
