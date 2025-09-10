@@ -48,6 +48,79 @@ To use this functionality, select the "Backup or restore" option in the setup fl
 - Restore : just replace the content by the previously saved configuration and click on next to apply it. Beware while using this functionality : the expected format should be respected and could change in the future.
 If the format is not recognized, the import will be aborted and existing configuration will remain unchanged.
 
+
+### Available commands
+
+After setting up the integration, you should add and use the `Media Player` entity, which should suit all needs with all its predefined commands.
+For custom commands, or to create commands sequence you can also use the `Remote` entity.
+This entity exposes 3 commands : turn On/Off, power toggle, send a (custom) command and send a command sequence.
+
+Here are the available commmands :
+
+| Command        | Description                        |
+|----------------|------------------------------------|
+| LEFT           | Pad left                           |
+| RIGHT          | Pad right                          |
+| UP             | Pad Up                             |
+| DOWN           | Pad down                           |
+| RED            | Red function                       |
+| GREEN          | Green function                     |
+| YELLOW         | Yellow function                    |
+| BLUE           | Blue function                      |
+| CHANNELUP      | Channel Up                         |
+| CHANNELDOWN    | Channel Down                       |
+| VOLUMEUP       | Volume Up                          |
+| VOLUMEDOWN     | Volume Down                        |
+| PLAY           | Play                               |
+| PAUSE          | Pause                              |
+| STOP           | Stop                               |
+| REWIND         | Rewind                             |
+| FASTFORWARD    | Fast forward                       |
+| ASTERISK       | *                                  |
+| BACK           | Back                               |
+| EXIT           | Exit                               |
+| ENTER          | Enter                              |
+| AMAZON         | Amazon                             |
+| NETFLIX        | NETFLIX                            |
+| 3D_MODE        | 3D mode                            |
+| AD             | Audio description                  |
+| ASPECT_RATIO   | Quick Settings Menu - Aspect Ratio |
+| CC             | Closed Captions                    |
+| DASH           | Live TV                            |
+| GUIDE          | Guide                              |
+| HOME           | Home Dashboard                     |
+| INFO           | Info button                        |
+| INPUT_HUB      | Home Dashboard                     |
+| LIST           | Live TV                            |
+| LIVE_ZOOM      | Live Zoom                          |
+| MAGNIFIER_ZOOM | Focus Zoom                         |
+| MENU           | Quick Settings Menu                |
+| MUTE           | Myte                               |
+| MYAPPS         | Home Dashboard                     |
+| POWER          | Power button                       |
+| PROGRAM        | TV Guide                           |
+| QMENU          | Quick Settings Men                 |
+| RECENT         | Home Dashboard - Recent Apps       |
+| RECORD         | Record                             |
+| SAP            | Multi Audio Setting                |
+| SCREEN_REMOTE  | Screen Remote                      |
+| TELETEXT       | Teletext                           |
+| TEXTOPTION     | Text option                        |
+| 0              | 0                                  |
+| 1              | 1                                  |
+| 2              | 2                                  |
+| 3              | 3                                  |
+| 4              | 4                                  |
+| 5              | 5                                  |
+| 6              | 6                                  |
+| 7              | 7                                  |
+| 8              | 8                                  |
+| 9              | 9                                  |
+
+
+
+## Advanced usage
+
 ### Setup as external integration
 
 - Requires Python 3.11
