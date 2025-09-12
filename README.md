@@ -33,12 +33,28 @@ Supported commands:
 
 ### Installation on the Remote (recommended)
 
-- Enable always on on your LG TV to be able to power on lan (see https://www.home-assistant.io/integrations/webostv/)
+#### Pre-requisites
+
+To make the TV available on the network and to make it powerable through the network, you have to enable some settings, which depend on your model (more details on [this link]((see https://www.home-assistant.io/integrations/webostv/)). 
+Please note that when the TV is off, it is no longer accessible through its IP address (even though its IP remains available a few minutes after power-off but then it goes into deep sleep) : the only way to turn on the TV is to send a "magic packet" to its mac address. This is the reason why the following settings have to be enabled, and then the mac address correclty set-up in the setup flow after, and there are 2 mac addresses (one for wifi, another one for ethernet). You can find the mac address in accessibility settings or network settings if they are not correctly detected by the setup flow (usually models < G2).
+Usually the controls to enable are located in Settings > Support > IP control for recent models :
+- Wake On LAN located in Settings > Support > IP control for recent models
+- LG Connect Apps feature in Network settings or Mobile App in General settings of the TV for older models
+
+
+<img src="https://github.com/user-attachments/assets/551b775f-82c7-4d76-a700-a5b172c82dd5" width="350">
+
+
+
+### Setup
+
 - Download the release from the release section : file ending with `.tar.gz`
 - Navigate into the Web Configurator of the remote, go into the `Integrations` tab, click on `Add new` and select : `Install custom`
 - Select the downloaded `.tar.gz` file and click on upload
 - Once uploaded, the new integration should appear in the list : click on it and select `Start setup`
 - Your TV must be running and connected to the network before proceed
+- The setup will be able to discover the LG TVs if they are connected on the same network, otherwise it is necessary to set manual IP
+- At the end, most users should enable at `Media Player` entity. `Remote entity` is useful for custom commands and commands sequence
 
 ### Backup or restore configuration
 
