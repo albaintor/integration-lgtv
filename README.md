@@ -115,7 +115,7 @@ About custom commands `CUSTOM_COMMAND` and `CUSTOM_NOTIFICATION` : these are low
 
 | Command           | Description                                                                               |
 |-------------------|-------------------------------------------------------------------------------------------|
-| *<Custom command> | See [this chapter](#remote-entity-commands--custom-commands) with endpoint and parameters |
+| <Custom command>  | See [this chapter](#remote-entity-commands--custom-commands) with endpoint and parameters |
 | LEFT              | Pad left                                                                                  |
 | RIGHT             | Pad right                                                                                 |
 | UP                | Pad Up                                                                                    |
@@ -178,6 +178,9 @@ About custom commands `CUSTOM_COMMAND` and `CUSTOM_NOTIFICATION` : these are low
 ### Remote entity commands : custom commands
 
 With the `Remote` entity one can call any endpoint with parameters.
+
+<img width="323" height="330" alt="image" src="https://github.com/user-attachments/assets/793b0df6-1869-41a2-971b-f0d2ccaf36f3" />
+
 
 There are 2 types of commands because some need to go through the internal Luna API.
 See [this link](https://github.com/chros73/bscpylgtv) for further information about available commands.
