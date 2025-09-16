@@ -53,6 +53,8 @@ INIT_APPS_LAUNCH_DELAY = 10
 
 SOURCE_IS_APP = "isApp"
 
+LUNA_SYSTEM_COMMAND = "luna"
+LUNA_SYSTEM_ENDPOINT = "com.webos.settingsservice/setSystemSettings"
 
 class LGState(IntEnum):
     """State of device."""
@@ -1028,7 +1030,17 @@ class LGDevice:
     @retry()
     async def custom_command(self, command: str) -> ucapi.StatusCodes:
         """Call a custom command from string in format : endpoint {optional json parameters}."""
-        try:
+        # luna picture {...params}
+        if command.startswith(LUNA_SYSTEM_COMMAND):
+            arguments = command.split(" ", 2)
+            category = arguments[1]
+            params = {'category': category}
+            if len(arguments) == 3:
+                params['settings'] = ast.literal_eval(arguments[2])
+            endpoint = LUNA_SYSTEM_ENDPOINT
+            _LOG.debug("[%s] LG TV luna command %s %s", self._device_config.address, endpoint, params)
+            await self.luna_command(endpoint, params)
+        else:
             arguments = command.split(" ", 1)
             endpoint = arguments[0]
             params = {}
@@ -1036,43 +1048,27 @@ class LGDevice:
                 params = ast.literal_eval(arguments[1])
             _LOG.debug("[%s] LG TV custom command %s %s", self._device_config.address, endpoint, params)
             await self._tv.request(endpoint, params)
-            return ucapi.StatusCodes.OK
-        except Exception as ex:
-            _LOG.error("[%s] LG TV unknown error custom_command %s", self._device_config.address, ex)
+        return ucapi.StatusCodes.OK
 
-        return ucapi.StatusCodes.BAD_REQUEST
-
-    @retry()
-    async def custom_notification(self, command: str) -> ucapi.StatusCodes:
-        """Call a custom command from string in format : endpoint {optional json parameters}.
+    async def luna_command(self, endpoint: str, params: dict) -> ucapi.StatusCodes:
+        """Call a Luna command from string in format : endpoint {optional json parameters}.
         This method uses system dialogs to trigger command and dismiss the prompt.
         """
-        try:
-            arguments = command.split(" ", 1)
-            endpoint = arguments[0]
-            params = {}
-            if len(arguments) == 2:
-                params = ast.literal_eval(arguments[1])
-            _LOG.debug("[%s] LG TV custom command with alerts %s %s", self._device_config.address, endpoint, params)
+        _LOG.debug("[%s] LG TV custom command with alerts %s %s", self._device_config.address, endpoint, params)
+        if not endpoint.startswith("luna://"):
+            endpoint = f"luna://{endpoint}"
 
-            if not endpoint.startswith("luna://"):
-                endpoint = f"luna://{endpoint}"
+        buttons = [{"label": "", "onClick": endpoint, "params": params}]
+        payload = {
+            "message": " ",
+            "buttons": buttons,
+            "onclose": {"uri": endpoint, "params": params},
+            "onfail": {"uri": endpoint, "params": params},
+        }
 
-            buttons = [{"label": "", "onClick": endpoint, "params": params}]
-            payload = {
-                "message": " ",
-                "buttons": buttons,
-                "onclose": {"uri": endpoint, "params": params},
-                "onfail": {"uri": endpoint, "params": params},
-            }
-
-            ret = await self._tv.request(CREATE_ALERT, payload)
-            alertid = ret.get("alertId")
-            if alertid is None:
-                raise WebOsTvCommandError("Invalid alertId")
-            await self._tv.request(CLOSE_ALERT, payload={"alertId": alertid})
-            return ucapi.StatusCodes.OK
-        except Exception as ex:
-            _LOG.error("[%s] LG TV unknown error custom_command %s", self._device_config.address, ex)
-
-        return ucapi.StatusCodes.BAD_REQUEST
+        ret = await self._tv.request(CREATE_ALERT, payload)
+        alertid = ret.get("alertId")
+        if alertid is None:
+            raise WebOsTvCommandError("Invalid alertId")
+        await self._tv.request(CLOSE_ALERT, payload={"alertId": alertid})
+        return ucapi.StatusCodes.OK

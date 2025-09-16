@@ -113,102 +113,99 @@ Remote entity exposes 3 commands : turn On/Off, power toggle, send a (custom) co
 Here are the available commmands :
 About custom commands `CUSTOM_COMMAND` and `CUSTOM_NOTIFICATION` : these are low level commands that let call any endpoint with parameters : see next chapter
 
-| Command             | Description                                                                                  |
-|---------------------|----------------------------------------------------------------------------------------------|
-| CUSTOM_COMMAND      | [Custom command](#remote-entity-commands--custom-commands) with endpoint and parameters      |
-| CUSTOM_NOTIFICATION | [Custom Luna command](#remote-entity-commands--custom-commands) with endpoint and parameters |
-| LEFT                | Pad left                                                                                     |
-| RIGHT               | Pad right                                                                                    |
-| UP                  | Pad Up                                                                                       |
-| DOWN                | Pad down                                                                                     |
-| RED                 | Red function                                                                                 |
-| GREEN               | Green function                                                                               |
-| YELLOW              | Yellow function                                                                              |
-| BLUE                | Blue function                                                                                |
-| CHANNELUP           | Channel Up                                                                                   |
-| CHANNELDOWN         | Channel Down                                                                                 |
-| VOLUMEUP            | Volume Up                                                                                    |
-| VOLUMEDOWN          | Volume Down                                                                                  |
-| PLAY                | Play                                                                                         |
-| PAUSE               | Pause                                                                                        |
-| STOP                | Stop                                                                                         |
-| REWIND              | Rewind                                                                                       |
-| FASTFORWARD         | Fast forward                                                                                 |
-| ASTERISK            | *                                                                                            |
-| BACK                | Back                                                                                         |
-| EXIT                | Exit                                                                                         |
-| ENTER               | Enter                                                                                        |
-| AMAZON              | Amazon                                                                                       |
-| NETFLIX             | NETFLIX                                                                                      |
-| 3D_MODE             | 3D mode                                                                                      |
-| AD                  | Audio description                                                                            |
-| ASPECT_RATIO        | Quick Settings Menu - Aspect Ratio                                                           |
-| CC                  | Closed Captions                                                                              |
-| DASH                | Live TV                                                                                      |
-| GUIDE               | Guide                                                                                        |
-| HOME                | Home Dashboard                                                                               |
-| INFO                | Info button                                                                                  |
-| INPUT_HUB           | Home Dashboard                                                                               |
-| LIST                | Live TV                                                                                      |
-| LIVE_ZOOM           | Live Zoom                                                                                    |
-| MAGNIFIER_ZOOM      | Focus Zoom                                                                                   |
-| MENU                | Quick Settings Menu                                                                          |
-| MUTE                | Myte                                                                                         |
-| MYAPPS              | Home Dashboard                                                                               |
-| POWER               | Power button                                                                                 |
-| PROGRAM             | TV Guide                                                                                     |
-| QMENU               | Quick Settings Men                                                                           |
-| RECENT              | Home Dashboard - Recent Apps                                                                 |
-| RECORD              | Record                                                                                       |
-| SAP                 | Multi Audio Setting                                                                          |
-| SCREEN_REMOTE       | Screen Remote                                                                                |
-| TELETEXT            | Teletext                                                                                     |
-| TEXTOPTION          | Text option                                                                                  |
-| 0                   | 0                                                                                            |
-| 1                   | 1                                                                                            |
-| 2                   | 2                                                                                            |
-| 3                   | 3                                                                                            |
-| 4                   | 4                                                                                            |
-| 5                   | 5                                                                                            |
-| 6                   | 6                                                                                            |
-| 7                   | 7                                                                                            |
-| 8                   | 8                                                                                            |
-| 9                   | 9                                                                                            |
+| Command           | Description                                                                               |
+|-------------------|-------------------------------------------------------------------------------------------|
+| *<Custom command> | See [this chapter](#remote-entity-commands--custom-commands) with endpoint and parameters |
+| LEFT              | Pad left                                                                                  |
+| RIGHT             | Pad right                                                                                 |
+| UP                | Pad Up                                                                                    |
+| DOWN              | Pad down                                                                                  |
+| RED               | Red function                                                                              |
+| GREEN             | Green function                                                                            |
+| YELLOW            | Yellow function                                                                           |
+| BLUE              | Blue function                                                                             |
+| CHANNELUP         | Channel Up                                                                                |
+| CHANNELDOWN       | Channel Down                                                                              |
+| VOLUMEUP          | Volume Up                                                                                 |
+| VOLUMEDOWN        | Volume Down                                                                               |
+| PLAY              | Play                                                                                      |
+| PAUSE             | Pause                                                                                     |
+| STOP              | Stop                                                                                      |
+| REWIND            | Rewind                                                                                    |
+| FASTFORWARD       | Fast forward                                                                              |
+| ASTERISK          | *                                                                                         |
+| BACK              | Back                                                                                      |
+| EXIT              | Exit                                                                                      |
+| ENTER             | Enter                                                                                     |
+| AMAZON            | Amazon                                                                                    |
+| NETFLIX           | NETFLIX                                                                                   |
+| 3D_MODE           | 3D mode                                                                                   |
+| AD                | Audio description                                                                         |
+| ASPECT_RATIO      | Quick Settings Menu - Aspect Ratio                                                        |
+| CC                | Closed Captions                                                                           |
+| DASH              | Live TV                                                                                   |
+| GUIDE             | Guide                                                                                     |
+| HOME              | Home Dashboard                                                                            |
+| INFO              | Info button                                                                               |
+| INPUT_HUB         | Home Dashboard                                                                            |
+| LIST              | Live TV                                                                                   |
+| LIVE_ZOOM         | Live Zoom                                                                                 |
+| MAGNIFIER_ZOOM    | Focus Zoom                                                                                |
+| MENU              | Quick Settings Menu                                                                       |
+| MUTE              | Myte                                                                                      |
+| MYAPPS            | Home Dashboard                                                                            |
+| POWER             | Power button                                                                              |
+| PROGRAM           | TV Guide                                                                                  |
+| QMENU             | Quick Settings Men                                                                        |
+| RECENT            | Home Dashboard - Recent Apps                                                              |
+| RECORD            | Record                                                                                    |
+| SAP               | Multi Audio Setting                                                                       |
+| SCREEN_REMOTE     | Screen Remote                                                                             |
+| TELETEXT          | Teletext                                                                                  |
+| TEXTOPTION        | Text option                                                                               |
+| 0                 | 0                                                                                         |
+| 1                 | 1                                                                                         |
+| 2                 | 2                                                                                         |
+| 3                 | 3                                                                                         |
+| 4                 | 4                                                                                         |
+| 5                 | 5                                                                                         |
+| 6                 | 6                                                                                         |
+| 7                 | 7                                                                                         |
+| 8                 | 8                                                                                         |
+| 9                 | 9                                                                                         |
 
 
 ### Remote entity commands : custom commands
 
-With `CUSTOM_COMMAND` and `CUSTOM_NOTIFICATION` commands exposed by the `Remote` entity, one can call any endpoint with parameters.
+With the `Remote` entity one can call any endpoint with parameters.
 
 There are 2 types of commands because some need to go through the internal Luna API.
 See [this link](https://github.com/chros73/bscpylgtv) for further information about available commands.
 
-Examples of commands : careful when setting up the command in the webconfigurator
-
-#### Using `CUSTOM_COMMAND`
+Examples of commands : 
+Warning : there is limited length (64 characters) to fill in custom commands
 
 **Screensaver start / stop**
 
-* `CUSTOM_COMMAND system.launcher/launch {'id': 'com.webos.app.screensaver'}`
-* `CUSTOM_COMMAND system.launcher/close {'id': 'com.webos.app.screensaver'}`
+`system.launcher/launch {'id':'com.webos.app.screensaver'}`
 
-#### Using `CUSTOM_NOTIFICATION`
+`system.launcher/close {'id':'com.webos.app.screensaver'}`
 
 **Set picture mode expert2**
 
-`CUSTOM_NOTIFICATION com.webos.settingsservice/setSystemSettings {'category': 'picture', 'settings': {'pictureMode': 'expert2'}}`
+`luna picture {'pictureMode':'expert2'}`
 
 **Set picture brightness to 85%**
 
-`CUSTOM_NOTIFICATION com.webos.settingsservice/setSystemSettings {'category': 'picture', 'settings': {'backlight': 0, 'contrast': 85}}`
+`luna picture {'backlight':0,'contrast':85}`
 
 **Turn hdrDynamicToneMapping on in the current HDR10 picture preset**
 
-`CUSTOM_NOTIFICATION com.webos.settingsservice/setSystemSettings {'category': 'picture', 'settings': {'hdrDynamicToneMapping': 'on'}}`
+`luna picture {'hdrDynamicToneMapping':'on'}`
 
 **Setting EOTF in HDMI Signal Override menu, values: auto, sdrGamma, hdrGamma, st2084, hlg**
 
-`CUSTOM_NOTIFICATION com.webos.settingsservice/setSystemSettings {'category': 'other', 'settings': {'eotf': 'hlg'}}`
+`luna other {'eotf':'hlg'}`
 
 
 ## Advanced usage
