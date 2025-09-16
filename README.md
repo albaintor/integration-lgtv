@@ -113,67 +113,67 @@ Remote entity exposes 3 commands : turn On/Off, power toggle, send a (custom) co
 Here are the available commmands :
 About custom commands `CUSTOM_COMMAND` and `CUSTOM_NOTIFICATION` : these are low level commands that let call any endpoint with parameters : see next chapter
 
-| Command             | Description                                      |
-|---------------------|--------------------------------------------------|
-| CUSTOM_COMMAND      | Custom command with endpoint and parameters      |
-| CUSTOM_NOTIFICATION | Custom Luna command with endpoint and parameters |
-| LEFT                | Pad left                                         |
-| RIGHT               | Pad right                                        |
-| UP                  | Pad Up                                           |
-| DOWN                | Pad down                                         |
-| RED                 | Red function                                     |
-| GREEN               | Green function                                   |
-| YELLOW              | Yellow function                                  |
-| BLUE                | Blue function                                    |
-| CHANNELUP           | Channel Up                                       |
-| CHANNELDOWN         | Channel Down                                     |
-| VOLUMEUP            | Volume Up                                        |
-| VOLUMEDOWN          | Volume Down                                      |
-| PLAY                | Play                                             |
-| PAUSE               | Pause                                            |
-| STOP                | Stop                                             |
-| REWIND              | Rewind                                           |
-| FASTFORWARD         | Fast forward                                     |
-| ASTERISK            | *                                                |
-| BACK                | Back                                             |
-| EXIT                | Exit                                             |
-| ENTER               | Enter                                            |
-| AMAZON              | Amazon                                           |
-| NETFLIX             | NETFLIX                                          |
-| 3D_MODE             | 3D mode                                          |
-| AD                  | Audio description                                |
-| ASPECT_RATIO        | Quick Settings Menu - Aspect Ratio               |
-| CC                  | Closed Captions                                  |
-| DASH                | Live TV                                          |
-| GUIDE               | Guide                                            |
-| HOME                | Home Dashboard                                   |
-| INFO                | Info button                                      |
-| INPUT_HUB           | Home Dashboard                                   |
-| LIST                | Live TV                                          |
-| LIVE_ZOOM           | Live Zoom                                        |
-| MAGNIFIER_ZOOM      | Focus Zoom                                       |
-| MENU                | Quick Settings Menu                              |
-| MUTE                | Myte                                             |
-| MYAPPS              | Home Dashboard                                   |
-| POWER               | Power button                                     |
-| PROGRAM             | TV Guide                                         |
-| QMENU               | Quick Settings Men                               |
-| RECENT              | Home Dashboard - Recent Apps                     |
-| RECORD              | Record                                           |
-| SAP                 | Multi Audio Setting                              |
-| SCREEN_REMOTE       | Screen Remote                                    |
-| TELETEXT            | Teletext                                         |
-| TEXTOPTION          | Text option                                      |
-| 0                   | 0                                                |
-| 1                   | 1                                                |
-| 2                   | 2                                                |
-| 3                   | 3                                                |
-| 4                   | 4                                                |
-| 5                   | 5                                                |
-| 6                   | 6                                                |
-| 7                   | 7                                                |
-| 8                   | 8                                                |
-| 9                   | 9                                                |
+| Command             | Description                                                                                  |
+|---------------------|----------------------------------------------------------------------------------------------|
+| CUSTOM_COMMAND      | [Custom command](#remote-entity-commands--custom-commands) with endpoint and parameters      |
+| CUSTOM_NOTIFICATION | [Custom Luna command](#remote-entity-commands--custom-commands) with endpoint and parameters |
+| LEFT                | Pad left                                                                                     |
+| RIGHT               | Pad right                                                                                    |
+| UP                  | Pad Up                                                                                       |
+| DOWN                | Pad down                                                                                     |
+| RED                 | Red function                                                                                 |
+| GREEN               | Green function                                                                               |
+| YELLOW              | Yellow function                                                                              |
+| BLUE                | Blue function                                                                                |
+| CHANNELUP           | Channel Up                                                                                   |
+| CHANNELDOWN         | Channel Down                                                                                 |
+| VOLUMEUP            | Volume Up                                                                                    |
+| VOLUMEDOWN          | Volume Down                                                                                  |
+| PLAY                | Play                                                                                         |
+| PAUSE               | Pause                                                                                        |
+| STOP                | Stop                                                                                         |
+| REWIND              | Rewind                                                                                       |
+| FASTFORWARD         | Fast forward                                                                                 |
+| ASTERISK            | *                                                                                            |
+| BACK                | Back                                                                                         |
+| EXIT                | Exit                                                                                         |
+| ENTER               | Enter                                                                                        |
+| AMAZON              | Amazon                                                                                       |
+| NETFLIX             | NETFLIX                                                                                      |
+| 3D_MODE             | 3D mode                                                                                      |
+| AD                  | Audio description                                                                            |
+| ASPECT_RATIO        | Quick Settings Menu - Aspect Ratio                                                           |
+| CC                  | Closed Captions                                                                              |
+| DASH                | Live TV                                                                                      |
+| GUIDE               | Guide                                                                                        |
+| HOME                | Home Dashboard                                                                               |
+| INFO                | Info button                                                                                  |
+| INPUT_HUB           | Home Dashboard                                                                               |
+| LIST                | Live TV                                                                                      |
+| LIVE_ZOOM           | Live Zoom                                                                                    |
+| MAGNIFIER_ZOOM      | Focus Zoom                                                                                   |
+| MENU                | Quick Settings Menu                                                                          |
+| MUTE                | Myte                                                                                         |
+| MYAPPS              | Home Dashboard                                                                               |
+| POWER               | Power button                                                                                 |
+| PROGRAM             | TV Guide                                                                                     |
+| QMENU               | Quick Settings Men                                                                           |
+| RECENT              | Home Dashboard - Recent Apps                                                                 |
+| RECORD              | Record                                                                                       |
+| SAP                 | Multi Audio Setting                                                                          |
+| SCREEN_REMOTE       | Screen Remote                                                                                |
+| TELETEXT            | Teletext                                                                                     |
+| TEXTOPTION          | Text option                                                                                  |
+| 0                   | 0                                                                                            |
+| 1                   | 1                                                                                            |
+| 2                   | 2                                                                                            |
+| 3                   | 3                                                                                            |
+| 4                   | 4                                                                                            |
+| 5                   | 5                                                                                            |
+| 6                   | 6                                                                                            |
+| 7                   | 7                                                                                            |
+| 8                   | 8                                                                                            |
+| 9                   | 9                                                                                            |
 
 
 ### Remote entity commands : custom commands
