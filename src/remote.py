@@ -34,6 +34,17 @@ LG_REMOTE_STATE_MAPPING = {
     States.PAUSED: RemoteStates.ON,
 }
 
+REMOTE_COMMAND_CUSTOM = "COMMAND_CUSTOM"
+REMOTE_COMMAND_NOTIFICATION = "CUSTOM_NOTIFICATION"
+
+
+def strip_off_command(command: str) -> str:
+    """Remote first argument from string."""
+    try:
+        return command.split(" ", 1)[1]
+    except Exception:
+        return command
+
 
 class LGRemote(Remote):
     """Representation of a LG Remote entity."""
@@ -117,6 +128,10 @@ class LGRemote(Remote):
                 return await self._device.power_off()
             if command == Commands.TOGGLE:
                 return await self._device.power_toggle()
+            if command.startswith(REMOTE_COMMAND_CUSTOM):
+                return await self._device.custom_command(strip_off_command(command))
+            if command.startswith(REMOTE_COMMAND_NOTIFICATION):
+                return await self._device.custom_notification(strip_off_command(command))
             return await self._device.button(command)
         elif cmd_id == Commands.SEND_CMD_SEQUENCE:
             commands = params.get("sequence", [])  # .split(",")

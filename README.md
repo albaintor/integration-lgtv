@@ -53,70 +53,146 @@ If the format is not recognized, the import will be aborted and existing configu
 
 After setting up the integration, you should add and use the `Media Player` entity, which should suit all needs with all its predefined commands.
 For custom commands, or to create commands sequence you can also use the `Remote` entity.
-This entity exposes 3 commands : turn On/Off, power toggle, send a (custom) command and send a command sequence.
+
+### Simple commands
+
+Simple commands are additional commands that are available on both `Media Player` and `Remote` entities.
+
+| Simple command   | Description                        |
+|------------------|------------------------------------|
+| ASTERISK         | *                                  |
+| 3D_MODE          | 3D mode                            |
+| AD               | Toggle audio description           |
+| AMAZON           | Amazon                             |
+| ASPECT_RATIO     | Quick Settings Menu - Aspect Ratio |
+| CC               | Closed Captions                    |
+| DASH             | Live TV                            |
+| EXIT             | Exit                               |
+| GUIDE            | Guide                              |
+| INPUT_HUB        | Home Dashboard                     |
+| LIST             | Live TV                            |
+| LIVE_ZOOM        | Live Zoom                          |
+| MAGNIFIER_ZOOM   | Focus Zoom                         |
+| MYAPPS           | Home Dashboard                     |
+| NETFLIX          | Netflix                            |
+| PAUSE            | Pause                              |
+| PLAY             | Play                               |
+| POWER            | Power button                       |
+| PROGRAM          | TV Guide                           |
+| RECENT           | Home Dashboard - Recent Apps       |
+| SAP              | Multi Audio Setting                |
+| SCREEN_REMOTE    | Screen Remote                      |
+| TELETEXT         | Teletext                           |
+| TEXTOPTION       | Text option                        |
+| INPUT_SOURCE     | Next input source                  |
+| TURN_SCREEN_ON   | Turn screen On                     |
+| TURN_SCREEN_OFF  | Turn screen Off                    |
+| TURN_SCREEN_ON4  | Turn screen On WebOS <=4           |
+| TURN_SCREEN_OFF4 | Turn screen Off WebOS <=4          |
+
+### Remote entity commands
+
+Remote entity exposes 3 commands : turn On/Off, power toggle, send a (custom) command and send a command sequence.
 
 Here are the available commmands :
+About custom commands `CUSTOM_COMMAND` and `CUSTOM_NOTIFICATION` : these are low level commands that let call any endpoint with parameters : see next chapter
 
-| Command        | Description                        |
-|----------------|------------------------------------|
-| LEFT           | Pad left                           |
-| RIGHT          | Pad right                          |
-| UP             | Pad Up                             |
-| DOWN           | Pad down                           |
-| RED            | Red function                       |
-| GREEN          | Green function                     |
-| YELLOW         | Yellow function                    |
-| BLUE           | Blue function                      |
-| CHANNELUP      | Channel Up                         |
-| CHANNELDOWN    | Channel Down                       |
-| VOLUMEUP       | Volume Up                          |
-| VOLUMEDOWN     | Volume Down                        |
-| PLAY           | Play                               |
-| PAUSE          | Pause                              |
-| STOP           | Stop                               |
-| REWIND         | Rewind                             |
-| FASTFORWARD    | Fast forward                       |
-| ASTERISK       | *                                  |
-| BACK           | Back                               |
-| EXIT           | Exit                               |
-| ENTER          | Enter                              |
-| AMAZON         | Amazon                             |
-| NETFLIX        | NETFLIX                            |
-| 3D_MODE        | 3D mode                            |
-| AD             | Audio description                  |
-| ASPECT_RATIO   | Quick Settings Menu - Aspect Ratio |
-| CC             | Closed Captions                    |
-| DASH           | Live TV                            |
-| GUIDE          | Guide                              |
-| HOME           | Home Dashboard                     |
-| INFO           | Info button                        |
-| INPUT_HUB      | Home Dashboard                     |
-| LIST           | Live TV                            |
-| LIVE_ZOOM      | Live Zoom                          |
-| MAGNIFIER_ZOOM | Focus Zoom                         |
-| MENU           | Quick Settings Menu                |
-| MUTE           | Myte                               |
-| MYAPPS         | Home Dashboard                     |
-| POWER          | Power button                       |
-| PROGRAM        | TV Guide                           |
-| QMENU          | Quick Settings Men                 |
-| RECENT         | Home Dashboard - Recent Apps       |
-| RECORD         | Record                             |
-| SAP            | Multi Audio Setting                |
-| SCREEN_REMOTE  | Screen Remote                      |
-| TELETEXT       | Teletext                           |
-| TEXTOPTION     | Text option                        |
-| 0              | 0                                  |
-| 1              | 1                                  |
-| 2              | 2                                  |
-| 3              | 3                                  |
-| 4              | 4                                  |
-| 5              | 5                                  |
-| 6              | 6                                  |
-| 7              | 7                                  |
-| 8              | 8                                  |
-| 9              | 9                                  |
+| Command             | Description                                      |
+|---------------------|--------------------------------------------------|
+| CUSTOM_COMMAND      | Custom command with endpoint and parameters      |
+| CUSTOM_NOTIFICATION | Custom Luna command with endpoint and parameters |
+| LEFT                | Pad left                                         |
+| RIGHT               | Pad right                                        |
+| UP                  | Pad Up                                           |
+| DOWN                | Pad down                                         |
+| RED                 | Red function                                     |
+| GREEN               | Green function                                   |
+| YELLOW              | Yellow function                                  |
+| BLUE                | Blue function                                    |
+| CHANNELUP           | Channel Up                                       |
+| CHANNELDOWN         | Channel Down                                     |
+| VOLUMEUP            | Volume Up                                        |
+| VOLUMEDOWN          | Volume Down                                      |
+| PLAY                | Play                                             |
+| PAUSE               | Pause                                            |
+| STOP                | Stop                                             |
+| REWIND              | Rewind                                           |
+| FASTFORWARD         | Fast forward                                     |
+| ASTERISK            | *                                                |
+| BACK                | Back                                             |
+| EXIT                | Exit                                             |
+| ENTER               | Enter                                            |
+| AMAZON              | Amazon                                           |
+| NETFLIX             | NETFLIX                                          |
+| 3D_MODE             | 3D mode                                          |
+| AD                  | Audio description                                |
+| ASPECT_RATIO        | Quick Settings Menu - Aspect Ratio               |
+| CC                  | Closed Captions                                  |
+| DASH                | Live TV                                          |
+| GUIDE               | Guide                                            |
+| HOME                | Home Dashboard                                   |
+| INFO                | Info button                                      |
+| INPUT_HUB           | Home Dashboard                                   |
+| LIST                | Live TV                                          |
+| LIVE_ZOOM           | Live Zoom                                        |
+| MAGNIFIER_ZOOM      | Focus Zoom                                       |
+| MENU                | Quick Settings Menu                              |
+| MUTE                | Myte                                             |
+| MYAPPS              | Home Dashboard                                   |
+| POWER               | Power button                                     |
+| PROGRAM             | TV Guide                                         |
+| QMENU               | Quick Settings Men                               |
+| RECENT              | Home Dashboard - Recent Apps                     |
+| RECORD              | Record                                           |
+| SAP                 | Multi Audio Setting                              |
+| SCREEN_REMOTE       | Screen Remote                                    |
+| TELETEXT            | Teletext                                         |
+| TEXTOPTION          | Text option                                      |
+| 0                   | 0                                                |
+| 1                   | 1                                                |
+| 2                   | 2                                                |
+| 3                   | 3                                                |
+| 4                   | 4                                                |
+| 5                   | 5                                                |
+| 6                   | 6                                                |
+| 7                   | 7                                                |
+| 8                   | 8                                                |
+| 9                   | 9                                                |
 
+
+### Remote entity commands : custom commands
+
+With `CUSTOM_COMMAND` and `CUSTOM_NOTIFICATION` commands exposed by the `Remote` entity, one can call any endpoint with parameters.
+
+There are 2 types of commands because some need to go through the internal Luna API.
+See [this link](https://github.com/chros73/bscpylgtv) for further information about available commands.
+
+Examples of commands : careful when setting up the command in the webconfigurator
+
+#### Using `CUSTOM_COMMAND`
+
+**Screensaver start / stop**
+
+* `CUSTOM_COMMAND system.launcher/launch {'id': 'com.webos.app.screensaver'}`
+* `CUSTOM_COMMAND system.launcher/close {'id': 'com.webos.app.screensaver'}`
+
+#### Using `CUSTOM_NOTIFICATION`
+
+**Set picture mode expert2**
+
+`CUSTOM_NOTIFICATION com.webos.settingsservice/setSystemSettings {'category': 'picture', 'settings': {'pictureMode': 'expert2'}}`
+
+**Set picture brightness to 85%**
+
+`CUSTOM_NOTIFICATION com.webos.settingsservice/setSystemSettings {'category': 'picture', 'settings': {'backlight': 0, 'contrast': 85}}`
+
+**Turn hdrDynamicToneMapping on in the current HDR10 picture preset**
+
+`CUSTOM_NOTIFICATION com.webos.settingsservice/setSystemSettings {'category': 'picture', 'settings': {'hdrDynamicToneMapping': 'on'}}`
+
+**Setting EOTF in HDMI Signal Override menu, values: auto, sdrGamma, hdrGamma, st2084, hlg**
+
+`CUSTOM_NOTIFICATION com.webos.settingsservice/setSystemSettings {'category': 'other', 'settings': {'eotf': 'hlg'}}`
 
 
 ## Advanced usage

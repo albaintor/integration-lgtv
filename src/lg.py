@@ -6,6 +6,7 @@ This module implements the AVR AVR receiver communication of the Remote Two inte
 """
 
 # pylint: disable = C0302
+import ast
 import asyncio
 import logging
 import socket
@@ -28,6 +29,7 @@ from typing import (
 import ucapi
 from aiohttp import WSMessageTypeError
 from aiowebostv import WebOsClient, WebOsTvCommandError, WebOsTvState, endpoints
+from aiowebostv.endpoints import CREATE_ALERT, CLOSE_ALERT
 from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr
 from ucapi.media_player import Features, MediaType, States
@@ -1022,3 +1024,55 @@ class LGDevice:
 
         await self._tv.request(endpoint, {"standbyMode": "active"})
         return ucapi.StatusCodes.OK
+
+    @retry()
+    async def custom_command(self, command: str) -> ucapi.StatusCodes:
+        """Call a custom command from string in format : endpoint {optional json parameters}."""
+        try:
+            arguments = command.split(" ", 1)
+            endpoint = arguments[0]
+            params = {}
+            if len(arguments) == 2:
+                params = ast.literal_eval(arguments[1])
+            _LOG.debug("[%s] LG TV custom command %s %s", self._device_config.address, endpoint, params)
+            await self._tv.request(endpoint, params)
+            return ucapi.StatusCodes.OK
+        except Exception as ex:
+            _LOG.error("[%s] LG TV unknown error custom_command %s", self._device_config.address, ex)
+
+        return ucapi.StatusCodes.BAD_REQUEST
+
+    @retry()
+    async def custom_notification(self, command: str) -> ucapi.StatusCodes:
+        """Call a custom command from string in format : endpoint {optional json parameters}.
+        This method uses system dialogs to trigger command and dismiss the prompt.
+        """
+        try:
+            arguments = command.split(" ", 1)
+            endpoint = arguments[0]
+            params = {}
+            if len(arguments) == 2:
+                params = ast.literal_eval(arguments[1])
+            _LOG.debug("[%s] LG TV custom command with alerts %s %s", self._device_config.address, endpoint, params)
+
+            if not endpoint.startswith("luna://"):
+                endpoint = f"luna://{endpoint}"
+
+            buttons = [{"label": "", "onClick": endpoint, "params": params}]
+            payload = {
+                "message": " ",
+                "buttons": buttons,
+                "onclose": {"uri": endpoint, "params": params},
+                "onfail": {"uri": endpoint, "params": params},
+            }
+
+            ret = await self._tv.request(CREATE_ALERT, payload)
+            alertid = ret.get("alertId")
+            if alertid is None:
+                raise WebOsTvCommandError("Invalid alertId")
+            await self._tv.request(CLOSE_ALERT, payload={"alertId": alertid})
+            return ucapi.StatusCodes.OK
+        except Exception as ex:
+            _LOG.error("[%s] LG TV unknown error custom_command %s", self._device_config.address, ex)
+
+        return ucapi.StatusCodes.BAD_REQUEST

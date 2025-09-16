@@ -16,14 +16,14 @@ _LOOP = asyncio.new_event_loop()
 asyncio.set_event_loop(_LOOP)
 
 # 55
-address = "192.168.1.41"
-mac_address = "04:4e:af:00:85:92"
-pairing_key = "4843d0b3a3ded816bcba7fce3f3a5ce1"
+# address = "192.168.1.41"
+# mac_address = "04:4e:af:00:85:92"
+# pairing_key = "4843d0b3a3ded816bcba7fce3f3a5ce1"
 
 # 77
-# address = "192.168.1.118"
-# mac_address = "4c:ba:d7:64:8c:b0"
-# pairing_key = "88de3f23b5cc6bf5d8c8c37086cdad6d"
+address = "192.168.1.118"
+mac_address = "4c:ba:d7:64:8c:b0"
+pairing_key = "88de3f23b5cc6bf5d8c8c37086cdad6d"
 
 
 async def pair():
@@ -50,8 +50,14 @@ async def main():
             wol_port=9,
         )
     )
+
     # await client.power_on()
-    # await client.connect()
+    await client.connect()
+    #await client.custom_command("system.launcher/launch {'id': 'com.webos.app.screensaver'}")
+    #await client.custom_command("system.launcher/close {'id': 'com.webos.app.screensaver'}")
+    #await client.custom_notification("com.webos.settingsservice/setSystemSettings {'category': 'picture', 'settings': {'pictureMode': 'expert2'}}")
+
+    exit(0)
     # sources = client.source_list
     # print(sources)
     #
@@ -67,7 +73,7 @@ async def main():
     # _LOG.debug("TV Info %s", tv_info)
 
     # Validate pairing key (77)
-    # await client.button("ENTER")
+    #await client.button("ENTER")
 
     # Validate pairing key (55)
     await client.button("RIGHT")
