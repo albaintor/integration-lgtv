@@ -152,7 +152,7 @@ def retry(*, timeout: float = 5, bufferize=False) -> Callable[
                 )
                 try:
                     return await retry_call_command(timeout, bufferize, func, obj, *args, **kwargs)
-                except (WEBOSTV_EXCEPTIONS, WSMessageTypeError) as wex:
+                except Exception as wex:
                     log_function(
                         "[%s] Error calling %s on [%s]: %r",
                         obj._device_config.address,
@@ -446,18 +446,13 @@ class LGDevice:
                 await self.connect()
                 if self._tv.tv_state.is_on:
                     _LOG.debug("[%s] LG TV connection succeeded", self._device_config.address)
-                    self._connect_task = None
-                    self._reconnect_retry = 0
-                    self._retry_wakeonlan = False
                     break
-            except WEBOSTV_EXCEPTIONS:
+            except Exception:
                 pass
             self._reconnect_retry += 1
             self._attr_state = States.OFF
             if self._reconnect_retry > CONNECTION_RETRIES:
                 _LOG.debug("[%s] LG not connected abort retries", self._device_config.address)
-                self._connect_task = None
-                self._reconnect_retry = 0
                 break
             if self._retry_wakeonlan:
                 self.wakeonlan()
@@ -469,6 +464,8 @@ class LGDevice:
             )
             await asyncio.sleep(DEFAULT_TIMEOUT)
         self._retry_wakeonlan = False
+        self._connect_task = None
+        self._reconnect_retry = 0
 
     async def connect(self):
         """Connect to the device."""
@@ -479,9 +476,9 @@ class LGDevice:
             await self._connect_lock.acquire()
             _LOG.debug("[%s] Connect", self._device_config.address)
             self._connecting = True
-            self._tv: WebOsClient = WebOsClient(host=self._device_config.address, client_key=self._device_config.key)
-            result: bool = await self._tv.connect()
-            if result is None or self._tv.connection is None:
+            self._tv = WebOsClient(host=self._device_config.address, client_key=self._device_config.key)
+            result = await self._tv.connect()
+            if not result or self._tv.connection is None:
                 _LOG.error(
                     "[%s] Connection process done but the connection is not available", self._device_config.address
                 )
@@ -497,6 +494,16 @@ class LGDevice:
         except WEBOSTV_EXCEPTIONS as ex:
             self._available = False
             _LOG.error("[%s] Unable to connect : %s", self._device_config.address, ex)
+            if not self._connect_task:
+                _LOG.warning(
+                    "[%s] Unable to update, LG TV probably off: running connect task %s",
+                    self._device_config.address,
+                    ex,
+                )
+                self._connect_task = asyncio.create_task(self._connect_loop())
+        except Exception as ex:
+            self._available = False
+            _LOG.error("[%s] Unknown error, unable to connect : %s", self._device_config.address, ex)
             if not self._connect_task:
                 _LOG.warning(
                     "[%s] Unable to update, LG TV probably off: running connect task %s",
