@@ -37,12 +37,13 @@ Supported commands:
 
 To make the TV available on the network and to make it powerable through the network, you have to enable some settings, which depend on your model (more details on [this link]((see https://www.home-assistant.io/integrations/webostv/)). 
 Please note that when the TV is off, it is no longer accessible through its IP address (even though its IP remains available a few minutes after power-off but then it goes into deep sleep) : the only way to turn on the TV is to send a "magic packet" to its mac address. This is the reason why the following settings have to be enabled, and then the mac address correclty set-up in the setup flow after, and there are 2 mac addresses (one for wifi, another one for ethernet). You can find the mac address in accessibility settings or network settings if they are not correctly detected by the setup flow (usually models < G2).
-Usually the controls to enable are located in Settings > Support > IP control for recent models :
-- Wake On LAN located in Settings > Support > IP control for recent models
+Usually the controls to enable are located in `Settings > Support > IP control Settings` for recent models :
+- Wake On LAN located in `Settings > Support > IP control Settings` for recent models
+- Also enable `Network IP Control` in the same section
+- Also enable `SDDP` for automatic device discovery
 - LG Connect Apps feature in Network settings or Mobile App in General settings of the TV for older models
 
-
-<img src="https://github.com/user-attachments/assets/551b775f-82c7-4d76-a700-a5b172c82dd5" width="350">
+<img src="https://github.com/user-attachments/assets/19413040-76bf-4003-8a7e-3e09034f7a41" width="350">
 
 
 
