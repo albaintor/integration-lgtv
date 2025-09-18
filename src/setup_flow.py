@@ -99,7 +99,6 @@ async def driver_setup_handler(msg: SetupDriver) -> SetupAction:
     global _setup_step
     global _cfg_add_device
 
-
     if isinstance(msg, DriverSetupRequest):
         _setup_step = SetupSteps.INIT
         _cfg_add_device = False
@@ -617,6 +616,7 @@ def get_additional_settings(config_device: LGConfigDevice) -> RequestUserInput:
         settings=additional_fields,
     )
 
+
 async def _handle_backup_restore_step() -> RequestUserInput:
     global _setup_step
 
@@ -645,6 +645,7 @@ async def _handle_backup_restore_step() -> RequestUserInput:
             },
         ],
     )
+
 
 def _is_ipv6_address(ip_address: str) -> bool:
     """Check if this is an IPV6 address."""
@@ -722,7 +723,13 @@ def get_wakeonlan_settings() -> RequestUserInput:
                     "fr": "Numéro de port pour wake on lan",
                 },
                 "field": {
-                    "number": {"value": _reconfigured_device.wol_port, "min": 1, "max": 65535, "steps": 1, "decimals": 0}
+                    "number": {
+                        "value": _reconfigured_device.wol_port,
+                        "min": 1,
+                        "max": 65535,
+                        "steps": 1,
+                        "decimals": 0,
+                    }
                 },
             },
         ],

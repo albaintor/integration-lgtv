@@ -1,4 +1,4 @@
-BUTTONS=(
+BUTTONS = (
     "LEFT",
     "RIGHT",
     "UP",
@@ -23,48 +23,48 @@ BUTTONS=(
     "AMAZON",
     "NETFLIX",
     "3D_MODE",
-    "AD",                   # Audio Description toggle
+    "AD",  # Audio Description toggle
     "ADVANCE_SETTING",
-    "ALEXA",                # Amazon Alexa
-    "AMAZON",               # Amazon Prime Video app
-    "ASPECT_RATIO",         # Quick Settings Menu - Aspect Ratio
-    "CC",                   # Closed Captions
-    "DASH",                 # Live TV
-    "EMANUAL",              # User Guide
-    "EZPIC",                # Pictore mode preset panel
-    "EZ_ADJUST",            # EzAdjust Service Menu
-    "EYE_Q",                # Energy saving panel
+    "ALEXA",  # Amazon Alexa
+    "AMAZON",  # Amazon Prime Video app
+    "ASPECT_RATIO",  # Quick Settings Menu - Aspect Ratio
+    "CC",  # Closed Captions
+    "DASH",  # Live TV
+    "EMANUAL",  # User Guide
+    "EZPIC",  # Pictore mode preset panel
+    "EZ_ADJUST",  # EzAdjust Service Menu
+    "EYE_Q",  # Energy saving panel
     "GUIDE",
-    "HCEC",                 # SIMPLINK toggle
-    "HOME",                 # Home Dashboard
-    "INFO",                 # Info button
-    "IN_START",             # InStart Service Menu
-    "INPUT_HUB",            # Home Dashboard
+    "HCEC",  # SIMPLINK toggle
+    "HOME",  # Home Dashboard
+    "INFO",  # Info button
+    "IN_START",  # InStart Service Menu
+    "INPUT_HUB",  # Home Dashboard
     "IVI",
-    "LIST",                 # Live TV
-    "LIVE_ZOOM",            # Live Zoom
-    "MAGNIFIER_ZOOM",       # Focus Zoom
-    "MENU",                 # Quick Settings Menu
+    "LIST",  # Live TV
+    "LIVE_ZOOM",  # Live Zoom
+    "MAGNIFIER_ZOOM",  # Focus Zoom
+    "MENU",  # Quick Settings Menu
     "MUTE",
-    "MYAPPS",               # Home Dashboard
-    "NETFLIX",              # Netflix app
-    "POWER",                # Power button
-    "PROGRAM",              # TV Guide
-    "QMENU",                # Quick Settings Menu
-    "RECENT",               # Home Dashboard - Recent Apps or last app
-    "RECLIST",              # Recording list
+    "MYAPPS",  # Home Dashboard
+    "NETFLIX",  # Netflix app
+    "POWER",  # Power button
+    "PROGRAM",  # TV Guide
+    "QMENU",  # Quick Settings Menu
+    "RECENT",  # Home Dashboard - Recent Apps or last app
+    "RECLIST",  # Recording list
     "RECORD",
-    "SAP",                  # Multi Audio Setting
-    "SCREEN_REMOTE",        # More Actions panel
+    "SAP",  # Multi Audio Setting
+    "SCREEN_REMOTE",  # More Actions panel
     "SEARCH",
-    "SOCCER",               # Sport preset
+    "SOCCER",  # Sport preset
     "TELETEXT",
     "TEXTOPTION",
-    "TIMER",                # Sleep Timer panel
+    "TIMER",  # Sleep Timer panel
     "TV",
-    "TWIN",                 # Twin View
-    "UPDOWN",               # Always Ready app
-    "USP",                  # Movie, TVshow, app list
+    "TWIN",  # Twin View
+    "UPDOWN",  # Always Ready app
+    "USP",  # Movie, TVshow, app list
     "YANDEX",
     "0",
     "1",
@@ -75,5 +75,5 @@ BUTTONS=(
     "6",
     "7",
     "8",
-    "9"
+    "9",
 )

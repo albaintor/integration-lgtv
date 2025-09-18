@@ -29,7 +29,7 @@ from typing import (
 import ucapi
 from aiohttp import WSMessageTypeError
 from aiowebostv import WebOsClient, WebOsTvCommandError, WebOsTvState, endpoints
-from aiowebostv.endpoints import CREATE_ALERT, CLOSE_ALERT
+from aiowebostv.endpoints import CLOSE_ALERT, CREATE_ALERT
 from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr
 from ucapi.media_player import Features, MediaType, States
@@ -55,6 +55,7 @@ SOURCE_IS_APP = "isApp"
 
 LUNA_SYSTEM_COMMAND = "luna"
 LUNA_SYSTEM_ENDPOINT = "com.webos.settingsservice/setSystemSettings"
+
 
 class LGState(IntEnum):
     """State of device."""
@@ -1041,9 +1042,9 @@ class LGDevice:
         if command.startswith(LUNA_SYSTEM_COMMAND):
             arguments = command.split(" ", 2)
             category = arguments[1]
-            params = {'category': category}
+            params = {"category": category}
             if len(arguments) == 3:
-                params['settings'] = ast.literal_eval(arguments[2])
+                params["settings"] = ast.literal_eval(arguments[2])
             endpoint = LUNA_SYSTEM_ENDPOINT
             _LOG.debug("[%s] LG TV luna command %s %s", self._device_config.address, endpoint, params)
             await self.luna_command(endpoint, params)

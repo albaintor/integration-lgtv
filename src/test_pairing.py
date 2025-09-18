@@ -4,9 +4,9 @@ import asyncio
 import json
 import logging
 import sys
+from argparse import ArgumentParser
 
 from aiowebostv import WebOsClient
-from argparse import ArgumentParser
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -22,8 +22,7 @@ async def pair(address: str) -> tuple[WebOsClient, str]:
 
 
 async def main():
-    parser = ArgumentParser(description="Pair and test connection to LG TV"
-                                        "(example : python -address 192.168.1.10)")
+    parser = ArgumentParser(description="Pair and test connection to LG TV" "(example : python -address 192.168.1.10)")
     parser.add_argument("-address", type=str, help="IP address of the LG TV", required=True)
     args = parser.parse_args()
     print("Trying to pair TV with address", args.address)

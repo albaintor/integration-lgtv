@@ -7,14 +7,15 @@ Media-player entity functions.
 
 import asyncio
 import logging
+from asyncio import shield
 from typing import Any
 
-from buttons import BUTTONS
 from ucapi import EntityTypes, Remote, StatusCodes
 from ucapi.media_player import States
 from ucapi.remote import Attributes, Commands, Features, Options
 from ucapi.remote import States as RemoteStates
 
+from buttons import BUTTONS
 from config import LGConfigDevice, create_entity_id
 from const import (
     LG_REMOTE_BUTTONS_MAPPING,
@@ -33,6 +34,17 @@ LG_REMOTE_STATE_MAPPING = {
     States.PLAYING: RemoteStates.ON,
     States.PAUSED: RemoteStates.ON,
 }
+
+COMMAND_TIMEOUT = 4.5
+
+
+def get_int_param(param: str, params: dict[str, Any], default: int):
+    """Get parameter in integer format."""
+    # TODO bug to be fixed on UC Core : some params are sent as (empty) strings by remote (hold == "")
+    value = params.get(param, default)
+    if isinstance(value, str) and len(value) > 0:
+        return int(float(value))
+    return default
 
 
 class LGRemote(Remote):
@@ -57,17 +69,6 @@ class LGRemote(Remote):
             ui_pages=LG_REMOTE_UI_PAGES,
         )
 
-    @staticmethod
-    def get_int_param(param: str, params: dict[str, Any], default: int):
-        """Get integer parameter."""
-        # TODO bug to be fixed on UC Core : some params are sent as (empty) strings by remote (hold == "")
-        if params is None or param is None:
-            return default
-        value = params.get(param, default)
-        if isinstance(value, str) and len(value) > 0:
-            return int(float(value))
-        return default
-
     async def command(self, cmd_id: str, params: dict[str, Any] | None = None) -> StatusCodes:
         """
         Media-player entity command handler.
@@ -78,65 +79,92 @@ class LGRemote(Remote):
         :param params: optional command parameters
         :return: status code of the command request
         """
-        _LOG.info("Got %s command request: %s %s", self.id, cmd_id, params)
-
+        _LOG.info("[%s] Got command request: %s %s", self.id, cmd_id, params)
         if self._device is None:
-            _LOG.warning("No Kodi instance for entity: %s", self.id)
-            return StatusCodes.SERVICE_UNAVAILABLE
-
-        repeat = LGRemote.get_int_param("repeat", params, 1)
+            _LOG.warning("[%s] No AndroidTV instance for this remote entity", self.id)
+            return StatusCodes.NOT_FOUND
         res = StatusCodes.OK
-        for _ in range(0, repeat):
-            res = await self.handle_command(cmd_id, params)
-        return res
 
-    async def handle_command(self, cmd_id: str, params: dict[str, Any] | None = None) -> StatusCodes:
-        """Handle command from command ID and optional parameters."""
-        # pylint: disable=R1705,R0911
-        # hold = LGRemote.getIntParam("hold", params, 0)
-        delay = LGRemote.get_int_param("delay", params, 0)
-        command = params.get("command", "")
-        res = None
-
-        if command in self.options[Options.SIMPLE_COMMANDS]:
-            if cmd_id in LG_SIMPLE_COMMANDS_CUSTOM:
-                if cmd_id == "INPUT_SOURCE":
-                    res = await self._device.select_source_next()
-            else:
-                res = await self._device.button(command)
-        elif cmd_id == Commands.ON:
+        if cmd_id == Commands.ON:
             return await self._device.power_on()
         elif cmd_id == Commands.OFF:
             return await self._device.power_off()
         elif cmd_id == Commands.TOGGLE:
             return await self._device.power_toggle()
-        elif cmd_id == Commands.SEND_CMD:
-            if command == Commands.ON:
-                return await self._device.power_on()
-            if command == Commands.OFF:
-                return await self._device.power_off()
-            if command == Commands.TOGGLE:
-                return await self._device.power_toggle()
-            if command in BUTTONS:
-                return await self._device.button(command)
-            return await self._device.custom_command(command)
-        elif cmd_id == Commands.SEND_CMD_SEQUENCE:
-            commands = params.get("sequence", [])  # .split(",")
-            res = StatusCodes.OK
-            for command in commands:
-                res = await self.handle_command(Commands.SEND_CMD, {"command": command, "params": params})
-                if delay > 0:
-                    await asyncio.sleep(delay)
+        elif cmd_id in [Commands.SEND_CMD, Commands.SEND_CMD_SEQUENCE]:
+            # If the duration exceeds the remote timeout, keep it running and return immediately
+            try:
+                async with asyncio.timeout(COMMAND_TIMEOUT):
+                    res = await shield(self.send_commands(cmd_id, params))
+            except asyncio.TimeoutError:
+                _LOG.info("[%s] Command request timeout, keep running: %s %s", self.id, cmd_id, params)
         else:
             return StatusCodes.NOT_IMPLEMENTED
-        if delay > 0 and cmd_id != Commands.SEND_CMD_SEQUENCE:
-            await asyncio.sleep(delay)
         return res
+
+    async def send_commands(self, cmd_id: str, params: dict[str, Any] | None = None) -> StatusCodes:
+        """Handle custom command or commands sequence."""
+        # hold = self.get_int_param("hold", params, 0)
+        delay = get_int_param("delay", params, 0)
+        repeat = get_int_param("repeat", params, 1)
+        command = params.get("command", "")
+        res = StatusCodes.OK
+
+        # if command in self.options[Options.SIMPLE_COMMANDS]:
+        #     if cmd_id in LG_SIMPLE_COMMANDS_CUSTOM:
+        #         if cmd_id == "INPUT_SOURCE":
+        #             res = await self._device.select_source_next()
+        #     else:
+        #         res = await self._device.button(command)
+        # elif command in self.options.get(Options.SIMPLE_COMMANDS, {}):
+        #     res = await self._device.send_media_player_command(command)
+
+        for _i in range(0, repeat):
+            if cmd_id == Commands.SEND_CMD:
+                result = await self.call_command(command)
+                if result != StatusCodes.OK:
+                    res = result
+                if delay > 0:
+                    await asyncio.sleep(delay)
+            else:
+                commands = params.get("sequence", [])
+                for command in commands:
+                    result = await self.call_command(command)
+                    if result != StatusCodes.OK:
+                        res = result
+                    if delay > 0:
+                        await asyncio.sleep(delay)
+        return res
+
+    async def call_command(self, command: str) -> StatusCodes:
+        """Call a single command."""
+        if command == Commands.ON:
+            return await self._device.power_on()
+        if command == Commands.OFF:
+            return await self._device.power_off()
+        if command == Commands.TOGGLE:
+            return await self._device.power_toggle()
+        if command in BUTTONS:
+            return await self._device.button(command)
+        if command == "INPUT_SOURCE":
+            return await self._device.select_source_next()
+        if command == "INPUT_SOURCE":
+            return await self._device.select_source_next()
+        if command == "TURN_SCREEN_ON":
+            return await self._device.turn_screen_on()
+        if command == "TURN_SCREEN_OFF":
+            return await self._device.turn_screen_off()
+        if command == "TURN_SCREEN_ON4":
+            return await self._device.turn_screen_on(webos_ver="4")
+        if command == "TURN_SCREEN_OFF4":
+            return await self._device.turn_screen_off(webos_ver="4")
+        if command in self.options[Options.SIMPLE_COMMANDS]:
+            return await self._device.button(command)
+        return await self._device.custom_command(command)
 
     def _key_update_helper(self, key: str, value: str | None, attributes):
         if value is None:
             return attributes
-
         if key in self.attributes:
             if self.attributes[key] != value:
                 attributes[key] = value

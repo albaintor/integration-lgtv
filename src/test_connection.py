@@ -53,9 +53,9 @@ async def main():
 
     # await client.power_on()
     await client.connect()
-    #await client.custom_command("system.launcher/launch {'id': 'com.webos.app.screensaver'}")
-    #await client.custom_command("system.launcher/close {'id': 'com.webos.app.screensaver'}")
-    #await client.custom_notification("com.webos.settingsservice/setSystemSettings {'category': 'picture', 'settings': {'pictureMode': 'expert2'}}")
+    # await client.custom_command("system.launcher/launch {'id': 'com.webos.app.screensaver'}")
+    # await client.custom_command("system.launcher/close {'id': 'com.webos.app.screensaver'}")
+    # await client.custom_notification("com.webos.settingsservice/setSystemSettings {'category': 'picture', 'settings': {'pictureMode': 'expert2'}}")
 
     exit(0)
     # sources = client.source_list
@@ -73,7 +73,7 @@ async def main():
     # _LOG.debug("TV Info %s", tv_info)
 
     # Validate pairing key (77)
-    #await client.button("ENTER")
+    # await client.button("ENTER")
 
     # Validate pairing key (55)
     await client.button("RIGHT")
