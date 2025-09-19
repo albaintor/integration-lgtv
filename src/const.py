@@ -126,26 +126,26 @@ LG_SIMPLE_COMMANDS = [
     *LG_SIMPLE_COMMANDS_CUSTOM,
 ]
 
-LG_REMOTE_BUTTONS_MAPPING: [DeviceButtonMapping] = [
-    {"button": Buttons.BACK, "short_press": {"cmd_id": "BACK"}},
-    {"button": Buttons.HOME, "short_press": {"cmd_id": "HOME"}},
-    {"button": Buttons.CHANNEL_DOWN, "short_press": {"cmd_id": "CHANNELDOWN"}},
-    {"button": Buttons.CHANNEL_UP, "short_press": {"cmd_id": "CHANNELUP"}},
-    {"button": Buttons.DPAD_UP, "short_press": {"cmd_id": "UP"}},
-    {"button": Buttons.DPAD_DOWN, "short_press": {"cmd_id": "DOWN"}},
-    {"button": Buttons.DPAD_LEFT, "short_press": {"cmd_id": "LEFT"}},
-    {"button": Buttons.DPAD_RIGHT, "short_press": {"cmd_id": "RIGHT"}},
-    {"button": Buttons.DPAD_MIDDLE, "short_press": {"cmd_id": "ENTER"}},
-    {"button": Buttons.PLAY, "short_press": {"cmd_id": "PAUSE"}},
-    {"button": Buttons.PREV, "short_press": {"cmd_id": "REWIND"}},
-    {"button": Buttons.NEXT, "short_press": {"cmd_id": "FASTFORWARD"}},
-    {"button": Buttons.VOLUME_UP, "short_press": {"cmd_id": "VOLUMEUP"}},
-    {"button": Buttons.VOLUME_DOWN, "short_press": {"cmd_id": "VOLUMEDOWN"}},
-    {"button": Buttons.MUTE, "short_press": {"cmd_id": "MUTE"}},
+LG_REMOTE_BUTTONS_MAPPING: list[DeviceButtonMapping] = [
+    DeviceButtonMapping(**{"button": Buttons.BACK, "short_press": {"cmd_id": "BACK"}}),
+    DeviceButtonMapping(**{"button": Buttons.HOME, "short_press": {"cmd_id": "HOME"}}),
+    DeviceButtonMapping(**{"button": Buttons.CHANNEL_DOWN, "short_press": {"cmd_id": "CHANNELDOWN"}}),
+    DeviceButtonMapping(**{"button": Buttons.CHANNEL_UP, "short_press": {"cmd_id": "CHANNELUP"}}),
+    DeviceButtonMapping(**{"button": Buttons.DPAD_UP, "short_press": {"cmd_id": "UP"}}),
+    DeviceButtonMapping(**{"button": Buttons.DPAD_DOWN, "short_press": {"cmd_id": "DOWN"}}),
+    DeviceButtonMapping(**{"button": Buttons.DPAD_LEFT, "short_press": {"cmd_id": "LEFT"}}),
+    DeviceButtonMapping(**{"button": Buttons.DPAD_RIGHT, "short_press": {"cmd_id": "RIGHT"}}),
+    DeviceButtonMapping(**{"button": Buttons.DPAD_MIDDLE, "short_press": {"cmd_id": "ENTER"}}),
+    DeviceButtonMapping(**{"button": Buttons.PLAY, "short_press": {"cmd_id": "PAUSE"}}),
+    DeviceButtonMapping(**{"button": Buttons.PREV, "short_press": {"cmd_id": "REWIND"}}),
+    DeviceButtonMapping(**{"button": Buttons.NEXT, "short_press": {"cmd_id": "FASTFORWARD"}}),
+    DeviceButtonMapping(**{"button": Buttons.VOLUME_UP, "short_press": {"cmd_id": "VOLUMEUP"}}),
+    DeviceButtonMapping(**{"button": Buttons.VOLUME_DOWN, "short_press": {"cmd_id": "VOLUMEDOWN"}}),
+    DeviceButtonMapping(**{"button": Buttons.MUTE, "short_press": {"cmd_id": "MUTE"}}),
 ]
 
-LG_REMOTE_UI_PAGES: [UiPage] = [
-    {
+LG_REMOTE_UI_PAGES: list[UiPage] = [
+    UiPage(**{
         "page_id": "LG commands",
         "name": "LG commands",
         "grid": {"width": 4, "height": 6},
@@ -267,8 +267,8 @@ LG_REMOTE_UI_PAGES: [UiPage] = [
                 "type": "icon",
             },
         ],
-    },
-    {
+    }),
+    UiPage(**{
         "page_id": "LG numbers",
         "name": "LG numbers",
         "grid": {"height": 4, "width": 3},
@@ -334,8 +334,8 @@ LG_REMOTE_UI_PAGES: [UiPage] = [
                 "type": "text",
             },
         ],
-    },
-    {
+    }),
+    UiPage(**{
         "page_id": "LG direction pad",
         "name": "LG direction pad",
         "grid": {"height": 3, "width": 3},
@@ -389,5 +389,5 @@ LG_REMOTE_UI_PAGES: [UiPage] = [
                 "type": "text",
             },
         ],
-    },
+    }),
 ]
