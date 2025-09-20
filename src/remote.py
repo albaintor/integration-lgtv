@@ -44,7 +44,7 @@ def get_int_param(param: str, params: dict[str, Any], default: int):
     value = params.get(param, default)
     if isinstance(value, str) and len(value) > 0:
         return int(float(value))
-    return default
+    return value
 
 
 class LGRemote(Remote):
@@ -110,22 +110,13 @@ class LGRemote(Remote):
         command = params.get("command", "")
         res = StatusCodes.OK
 
-        # if command in self.options[Options.SIMPLE_COMMANDS]:
-        #     if cmd_id in LG_SIMPLE_COMMANDS_CUSTOM:
-        #         if cmd_id == "INPUT_SOURCE":
-        #             res = await self._device.select_source_next()
-        #     else:
-        #         res = await self._device.button(command)
-        # elif command in self.options.get(Options.SIMPLE_COMMANDS, {}):
-        #     res = await self._device.send_media_player_command(command)
-
         for _i in range(0, repeat):
             if cmd_id == Commands.SEND_CMD:
                 result = await self.call_command(command)
                 if result != StatusCodes.OK:
                     res = result
                 if delay > 0:
-                    await asyncio.sleep(delay)
+                    await asyncio.sleep(delay/1000)
             else:
                 commands = params.get("sequence", [])
                 for command in commands:
@@ -133,7 +124,7 @@ class LGRemote(Remote):
                     if result != StatusCodes.OK:
                         res = result
                     if delay > 0:
-                        await asyncio.sleep(delay)
+                        await asyncio.sleep(delay/1000)
         return res
 
     async def call_command(self, command: str) -> StatusCodes:
