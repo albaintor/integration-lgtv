@@ -27,9 +27,8 @@ from typing import (
 )
 
 import ucapi
-from aiohttp import WSMessageTypeError
 from aiowebostv import WebOsClient, WebOsTvCommandError, WebOsTvState, endpoints
-from aiowebostv.endpoints import CLOSE_ALERT, CREATE_ALERT
+import aiowebostv.endpoints as ep
 from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr
 from ucapi.media_player import Features, MediaType, States
@@ -55,7 +54,7 @@ SOURCE_IS_APP = "isApp"
 
 LUNA_SYSTEM_COMMAND = "luna"
 LUNA_SYSTEM_ENDPOINT = "com.webos.settingsservice/setSystemSettings"
-
+PICTURE_COMMAND = "picture"
 
 class LGState(IntEnum):
     """State of device."""
@@ -571,6 +570,11 @@ class LGDevice:
         return updated_data
 
     @property
+    def client(self) -> WebOsClient:
+        """Return WebOs client instance."""
+        return self._tv
+
+    @property
     def available(self) -> bool:
         """Return True if device is available."""
         return self._available
@@ -1038,16 +1042,36 @@ class LGDevice:
     @retry()
     async def custom_command(self, command: str) -> ucapi.StatusCodes:
         """Call a custom command from string in format : endpoint {optional json parameters}."""
-        # luna picture {...params}
-        if command.startswith(LUNA_SYSTEM_COMMAND):
-            arguments = command.split(" ", 2)
-            category = arguments[1]
+        arguments = command.split(" ", 1)
+        if arguments[0] == LUNA_SYSTEM_COMMAND and len(arguments) == 2:
+            # luna picture {...params}
+            arguments = arguments[1].split(" ", 1)
+            category = arguments[0]
             params = {"category": category}
-            if len(arguments) == 3:
-                params["settings"] = ast.literal_eval(arguments[2])
+            if len(arguments) == 2:
+                params["settings"] = ast.literal_eval(arguments[1])
             endpoint = LUNA_SYSTEM_ENDPOINT
             _LOG.debug("[%s] LG TV luna command %s %s", self._device_config.address, endpoint, params)
-            await self.luna_command(endpoint, params)
+            await self.call_luna_command(endpoint, params)
+        elif arguments[0] == PICTURE_COMMAND and len(arguments) == 2:
+            # picture backlight +10
+            # picture contrast 80
+            arguments = arguments[1].split(" ", 1)
+            if len(arguments) != 2:
+                return ucapi.StatusCodes.BAD_REQUEST
+            option = arguments[0]
+            value = arguments[1]
+            relative = False
+            if value.startswith("+") or value.startswith("-"):
+                relative = True
+            try:
+                value = int(value)
+            except Exception as ex:
+                _LOG.error("[%s] Wrong picture setting value %s", ex, value)
+                return ucapi.StatusCodes.BAD_REQUEST
+            _LOG.debug("[%s] LG TV set picture setting %s %s %s", self._device_config.address, option,
+                       value, relative)
+            await self.set_picture_setting(option, value, relative)
         else:
             arguments = command.split(" ", 1)
             endpoint = arguments[0]
@@ -1055,12 +1079,21 @@ class LGDevice:
             if len(arguments) == 2:
                 params = ast.literal_eval(arguments[1])
             _LOG.debug("[%s] LG TV custom command %s %s", self._device_config.address, endpoint, params)
-            await self._tv.request(endpoint, params)
+            await self._tv.request(ep.GET_SYSTEM_SETTINGS, params)
         return ucapi.StatusCodes.OK
 
-    async def luna_command(self, endpoint: str, params: dict) -> ucapi.StatusCodes:
+    async def call_luna_command(self, endpoint: str, params: dict) -> ucapi.StatusCodes:
         """Call a Luna command from string in format : endpoint {optional json parameters}.
         This method uses system dialogs to trigger command and dismiss the prompt.
+        :returns: UC status code
+        """
+        await self.luna_command(endpoint, params)
+        return ucapi.StatusCodes.OK
+
+    async def luna_command(self, endpoint: str, params: dict) -> dict[str, any]:
+        """Call a Luna command from string in format : endpoint {optional json parameters}.
+        This method uses system dialogs to trigger command and dismiss the prompt.
+        :returns: Results dictionary
         """
         _LOG.debug("[%s] LG TV custom command with alerts %s %s", self._device_config.address, endpoint, params)
         if not endpoint.startswith("luna://"):
@@ -1074,9 +1107,25 @@ class LGDevice:
             "onfail": {"uri": endpoint, "params": params},
         }
 
-        ret = await self._tv.request(CREATE_ALERT, payload)
+        ret = await self._tv.request(ep.CREATE_ALERT, payload)
         alertid = ret.get("alertId")
         if alertid is None:
             raise WebOsTvCommandError("Invalid alertId")
-        await self._tv.request(CLOSE_ALERT, payload={"alertId": alertid})
-        return ucapi.StatusCodes.OK
+        await self._tv.request(ep.CLOSE_ALERT, payload={"alertId": alertid})
+        return ret
+
+    @retry()
+    async def set_picture_setting(self, option: str, value: int, relative=False):
+        """Set picture settings for a given picture option and given value.
+        Value can be relative or absolute
+
+        @param option: Picture key
+        @param value: Value to set
+        @param relative: True if relative to current value
+        :returns: UC status code
+        """
+        if relative:
+            result = await self._tv.request(ep.GET_SYSTEM_SETTINGS, {"category": "picture", "keys": [option]})
+            current_value: int = result["settings"][option]
+            value = max(min(current_value + value, 0), 100)
+        return await self.call_luna_command(ep.LUNA_SET_SYSTEM_SETTINGS, {"category": "picture", "settings": {option: value}})

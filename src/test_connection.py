@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import sys
+from rich import print_json
 
 from aiowebostv import WebOsClient
 
@@ -32,6 +33,14 @@ async def pair():
     key = _pairing_lg_tv.client_key
     _LOG.debug("Pairing key : %s", key)
 
+async def confirm_pairing(client: LGDevice):
+    # Validate pairing key (77)
+    # await client.button("ENTER")
+
+    # Validate pairing key (55)
+    await client.button("RIGHT")
+    await client.button("ENTER")
+
 
 async def main():
     _LOG.debug("Start connection")
@@ -40,7 +49,7 @@ async def main():
     client = LGDevice(
         device_config=LGConfigDevice(
             id="deviceid",
-            name="LG Soundbar",
+            name="LG TV",
             address=address,
             mac_address=mac_address,
             mac_address2=None,
@@ -53,6 +62,9 @@ async def main():
 
     # await client.power_on()
     await client.connect()
+    #results = await client.client.request("settings/getSystemSettings", {'category': 'picture', 'keys':['backlight']})
+    #results = await client.client.request("settings/getSystemSettings", {'category': 'picture', 'keys': ['contrast', 'backlight', 'brightness', 'color']})
+    #print_json(data=results)
     # await client.custom_command("system.launcher/launch {'id': 'com.webos.app.screensaver'}")
     # await client.custom_command("system.launcher/close {'id': 'com.webos.app.screensaver'}")
     # await client.custom_notification("com.webos.settingsservice/setSystemSettings {'category': 'picture', 'settings': {'pictureMode': 'expert2'}}")
@@ -72,12 +84,8 @@ async def main():
     # tv_info = client._tv.tv_info
     # _LOG.debug("TV Info %s", tv_info)
 
-    # Validate pairing key (77)
-    # await client.button("ENTER")
-
-    # Validate pairing key (55)
-    await client.button("RIGHT")
-    await client.button("ENTER")
+    # Confirm pairing prompt
+    await confirm_pairing(client)
 
 
 if __name__ == "__main__":

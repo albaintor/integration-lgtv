@@ -31,7 +31,7 @@ Supported commands:
 
 ## Usage
 
-### Installation on the Remote (recommended)
+### Installation on the Remote
 
 #### Pre-requisites
 
@@ -116,7 +116,7 @@ About custom commands `CUSTOM_COMMAND` and `CUSTOM_NOTIFICATION` : these are low
 
 | Command           | Description                                                                               |
 |-------------------|-------------------------------------------------------------------------------------------|
-| <Custom command>  | See [this chapter](#remote-entity-commands--custom-commands) with endpoint and parameters |
+| _Custom commands_ | See [this chapter](#remote-entity-commands--custom-commands) with endpoint and parameters |
 | LEFT              | Pad left                                                                                  |
 | RIGHT             | Pad right                                                                                 |
 | UP                | Pad Up                                                                                    |
@@ -189,6 +189,18 @@ See [this link](https://github.com/chros73/bscpylgtv) for further information ab
 Examples of commands : 
 Warning : there is limited length (64 characters) to fill in custom commands
 
+**Increase picture contrast by 10**
+`picture contrast +10`
+
+**Decrease picture backlight by 10**
+`picture backlight -10`
+
+**Set picture backlight to 90**
+`picture backlight 90`
+
+**Set picture brightness to 50**
+`picture brightness 50`
+
 **Screensaver start / stop**
 
 `system.launcher/launch {'id':'com.webos.app.screensaver'}`
@@ -199,7 +211,7 @@ Warning : there is limited length (64 characters) to fill in custom commands
 
 `luna picture {'pictureMode':'expert2'}`
 
-**Set picture brightness to 85%**
+**Set picture backlight to 0 and brightness to 85%**
 
 `luna picture {'backlight':0,'contrast':85}`
 
