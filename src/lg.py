@@ -1127,5 +1127,5 @@ class LGDevice:
         if relative:
             result = await self._tv.request(ep.GET_SYSTEM_SETTINGS, {"category": "picture", "keys": [option]})
             current_value: int = result["settings"][option]
-            value = max(min(current_value + value, 0), 100)
+            value = min(max(current_value + value, 0), 100)
         return await self.call_luna_command(ep.LUNA_SET_SYSTEM_SETTINGS, {"category": "picture", "settings": {option: value}})
