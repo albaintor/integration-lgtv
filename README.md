@@ -116,13 +116,13 @@ Simple commands are additional commands that are available on both `Media Player
 
 ### Remote entity commands
 
-Remote entity exposes 3 commands : turn On/Off, power toggle, send a (custom) command and send a command sequence.
+Remote entity expose 2 interesting commands for sending custom commands and send commands sequence.
 
 Here are the available commmands :
 
 | Command           | Description                                                                               |
 |-------------------|-------------------------------------------------------------------------------------------|
-| _Custom commands_ | See [this chapter](#remote-entity-commands--custom-commands) with endpoint and parameters |
+| _Custom commands_ | See [this chapter](#remote-entity-commands--custom-commands) with the list and parameters |
 | LEFT              | Pad left                                                                                  |
 | RIGHT             | Pad right                                                                                 |
 | UP                | Pad Up                                                                                    |
