@@ -189,8 +189,8 @@ With the `Remote` entity one can call commands with parameters.
 <img width="323" height="330" alt="image" src="https://github.com/user-attachments/assets/793b0df6-1869-41a2-971b-f0d2ccaf36f3" />
 
 
-There are 2 types of commands because some need to go through the internal Luna API. There is also a predefined `picture` command for picture settings.
-See [this link](https://github.com/chros73/bscpylgtv) for further information about available commands.
+_There are 2 types of commands because some need to go through the internal Luna API. There is also a predefined `picture` command for picture settings.
+See [this link](https://github.com/chros73/bscpylgtv) for further information about available commands._
 
 Examples of commands : 
 <br>_Warning : commands length is limited (64 characters)_
@@ -200,8 +200,8 @@ Examples of commands :
 | picture contrast `value`                                    | Set contrast<br/>Relative value : use sign (eg +10 or -10)<br/>or absolute value         | picture contrast +10                     |
 | picture backlight `value`                                   | Set backlight <br/>Relative value : use sign (eg +10 or -10)<br/>or absolute value       | picture backlight 80                     |
 | picture brightness `value`                                  | Set brightness <br/>Relative value : use sign (eg +10 or -10)<br/>or absolute value      | picture brightness -10                   |
-| system.launcher/launch `{'id':'com.webos.app.screensaver'}` | Screensaver start                                                                        |                                          |
-| system.launcher/close `{'id':'com.webos.app.screensaver'}`  | Screensaver close                                                                        |                                          |
+| system.launcher/launch `{'id':'com.webos.app.screensaver'}` | Start screensaver                                                                        |                                          |
+| system.launcher/close `{'id':'com.webos.app.screensaver'}`  | Stop screensaver                                                                         |                                          |
 | luna picture `{'pictureMode':'MODE'}`                       | Set picture mode to given mode                                                           | `luna picture {'pictureMode':'expert2'}` |
 | luna picture `{'backlight':0,'contrast':85}`                | Set picture settings once                                                                |                                          |
 | luna picture `{'hdrDynamicToneMapping':'on'}`               | Turn hdrDynamicToneMapping on in the current HDR10 picture preset                        |                                          |
