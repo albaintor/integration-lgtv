@@ -62,7 +62,7 @@ Usually the controls to enable are located in `Settings > Support > IP control S
 - Once uploaded, the new integration should appear in the list : click on it and select `Start setup`
 - Your TV must be running and connected to the network before proceeding (a pairing prompt will be displayed)
 - The setup will be able to discover the LG TVs if they are connected on the same network, otherwise it is necessary to set manual IP
-- At the end, most users should enable at `Media Player` entity. `Remote entity` is useful for custom commands and commands sequence
+- At the end, most users should enable the `Media Player` entity. `Remote entity` is useful for custom commands and commands sequence
 
 ### Backup or restore configuration
 
@@ -119,7 +119,6 @@ Simple commands are additional commands that are available on both `Media Player
 Remote entity exposes 3 commands : turn On/Off, power toggle, send a (custom) command and send a command sequence.
 
 Here are the available commmands :
-About custom commands `CUSTOM_COMMAND` and `CUSTOM_NOTIFICATION` : these are low level commands that let call any endpoint with parameters : see next chapter
 
 | Command           | Description                                                                               |
 |-------------------|-------------------------------------------------------------------------------------------|
