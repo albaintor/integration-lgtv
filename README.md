@@ -35,8 +35,15 @@ Supported commands:
 
 #### Pre-requisites
 
-To make the TV available on the network and to make it powerable through the network, you have to enable some settings, which depend on your model (more details on [this link](https://www.home-assistant.io/integrations/webostv/)). 
-Please note that when the TV is off, it is no longer accessible through its IP address (even though its IP remains available a few minutes after power-off but then it goes into deep sleep) : the only way to turn on the TV is to send a "magic packet" to its mac address. This is the reason why the following settings have to be enabled, and then the mac address correclty set-up in the setup flow after, and there are 2 mac addresses (one for wifi, another one for ethernet). You can find the mac address in accessibility settings or network settings if they are not correctly detected by the setup flow (usually models < G2).
+To make the TV available on the network and be able to power it through the network, some settings have to be enabled in the TV settings, depending on your model.
+
+_About setting up both IP and Mac addresses_ : when the TV is off, it is no longer accessible through its IP address (even though it remains connected a few minutes after power-off).
+<br>The only way to turn on the TV is to send a `magic packet` to its mac address.
+
+
+Therefore the following settings have to be enabled, and then the mac address correclty set-up in the setup flow. Also there are 2 mac addresses (wifi and ethernet). You can find the mac address in accessibility settings or network settings if they are not correctly detected by the setup flow (usually models < G2).
+
+
 Usually the controls to enable are located in `Settings > Support > IP control Settings` for recent models :
 - Wake On LAN located in `Settings > Support > IP control Settings` for recent models
 - Also enable `Network IP Control` in the same section
@@ -49,11 +56,11 @@ Usually the controls to enable are located in `Settings > Support > IP control S
 
 ### Setup
 
-- Download the release from the release section : file ending with `.tar.gz`
+- Download the release from the release section : file ending with `.tar.gz`, do not unzip it
 - Navigate into the Web Configurator of the remote, go into the `Integrations` tab, click on `Add new` and select : `Install custom`
 - Select the downloaded `.tar.gz` file and click on upload
 - Once uploaded, the new integration should appear in the list : click on it and select `Start setup`
-- Your TV must be running and connected to the network before proceed
+- Your TV must be running and connected to the network before proceeding (a pairing prompt will be displayed)
 - The setup will be able to discover the LG TVs if they are connected on the same network, otherwise it is necessary to set manual IP
 - At the end, most users should enable at `Media Player` entity. `Remote entity` is useful for custom commands and commands sequence
 
@@ -178,50 +185,28 @@ About custom commands `CUSTOM_COMMAND` and `CUSTOM_NOTIFICATION` : these are low
 
 ### Remote entity commands : custom commands
 
-With the `Remote` entity one can call any endpoint with parameters.
+With the `Remote` entity one can call commands with parameters.
 
 <img width="323" height="330" alt="image" src="https://github.com/user-attachments/assets/793b0df6-1869-41a2-971b-f0d2ccaf36f3" />
 
 
-There are 2 types of commands because some need to go through the internal Luna API.
+There are 2 types of commands because some need to go through the internal Luna API. There is also a predefined `picture` command for picture settings.
 See [this link](https://github.com/chros73/bscpylgtv) for further information about available commands.
 
 Examples of commands : 
-Warning : there is limited length (64 characters) to fill in custom commands
+<br>_Warning : commands length is limited (64 characters)_
 
-**Increase picture contrast by 10**
-`picture contrast +10`
-
-**Decrease picture backlight by 10**
-`picture backlight -10`
-
-**Set picture backlight to 90**
-`picture backlight 90`
-
-**Set picture brightness to 50**
-`picture brightness 50`
-
-**Screensaver start / stop**
-
-`system.launcher/launch {'id':'com.webos.app.screensaver'}`
-
-`system.launcher/close {'id':'com.webos.app.screensaver'}`
-
-**Set picture mode expert2**
-
-`luna picture {'pictureMode':'expert2'}`
-
-**Set picture backlight to 0 and brightness to 85%**
-
-`luna picture {'backlight':0,'contrast':85}`
-
-**Turn hdrDynamicToneMapping on in the current HDR10 picture preset**
-
-`luna picture {'hdrDynamicToneMapping':'on'}`
-
-**Setting EOTF in HDMI Signal Override menu, values: auto, sdrGamma, hdrGamma, st2084, hlg**
-
-`luna other {'eotf':'hlg'}`
+| Command                                                     | Description                                                                              | Example                                  |
+|-------------------------------------------------------------|------------------------------------------------------------------------------------------|------------------------------------------|
+| picture contrast `value`                                    | Set contrast<br/>Relative value : use sign (eg +10 or -10)<br/>or absolute value         | picture contrast +10                     |
+| picture backlight `value`                                   | Set backlight <br/>Relative value : use sign (eg +10 or -10)<br/>or absolute value       | picture backlight 80                     |
+| picture brightness `value`                                  | Set brightness <br/>Relative value : use sign (eg +10 or -10)<br/>or absolute value      | picture brightness -10                   |
+| system.launcher/launch `{'id':'com.webos.app.screensaver'}` | Screensaver start                                                                        |                                          |
+| system.launcher/close `{'id':'com.webos.app.screensaver'}`  | Screensaver close                                                                        |                                          |
+| luna picture `{'pictureMode':'MODE'}`                       | Set picture mode to given mode                                                           | `luna picture {'pictureMode':'expert2'}` |
+| luna picture `{'backlight':0,'contrast':85}`                | Set picture settings once                                                                |                                          |
+| luna picture `{'hdrDynamicToneMapping':'on'}`               | Turn hdrDynamicToneMapping on in the current HDR10 picture preset                        |                                          |
+| luna other `{'eotf':'hlg'}`                                 | Setting EOTF in HDMI Signal Override menu, values: auto, sdrGamma, hdrGamma, st2084, hlg |                                          |
 
 
 ## Advanced usage
