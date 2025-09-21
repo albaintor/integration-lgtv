@@ -116,7 +116,7 @@ Simple commands are additional commands that are available on both `Media Player
 
 ### Remote entity commands
 
-Remote entity expose 2 interesting commands for sending custom commands and send commands sequence.
+In addition of simple commands above, the remote entity `Send command` and `Commands sequence` support custom commands as well as all the commands exposed by the `Media Player` entity.
 
 Here are the available commmands :
 
