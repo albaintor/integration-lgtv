@@ -1125,9 +1125,8 @@ class LGDevice:
     @retry()
     async def set_picture_setting(self, option: str, value: int, relative=False):
         """Set picture settings for a given picture option and given value.
-        
-        Value can be relative or absolute
 
+        Value can be relative or absolute.
         @param option: Picture key
         @param value: Value to set
         @param relative: True if relative to current value
