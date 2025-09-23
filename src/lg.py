@@ -1086,7 +1086,10 @@ class LGDevice:
 
     async def call_luna_command(self, endpoint: str, params: dict) -> ucapi.StatusCodes:
         """Call a Luna command from string in format : endpoint {optional json parameters}.
+
         This method uses system dialogs to trigger command and dismiss the prompt.
+        :param endpoint : Endpoint of the Luna command
+        :param params : Dictionnary of optional parameters
         :returns: UC status code
         """
         await self.luna_command(endpoint, params)
@@ -1094,7 +1097,10 @@ class LGDevice:
 
     async def luna_command(self, endpoint: str, params: dict) -> dict[str, any]:
         """Call a Luna command from string in format : endpoint {optional json parameters}.
+
         This method uses system dialogs to trigger command and dismiss the prompt.
+        :param endpoint : Endpoint of the Luna command
+        :param params : Dictionnary of optional parameters
         :returns: Results dictionary
         """
         _LOG.debug("[%s] LG TV custom command with alerts %s %s", self._device_config.address, endpoint, params)
@@ -1119,6 +1125,7 @@ class LGDevice:
     @retry()
     async def set_picture_setting(self, option: str, value: int, relative=False):
         """Set picture settings for a given picture option and given value.
+        
         Value can be relative or absolute
 
         @param option: Picture key
