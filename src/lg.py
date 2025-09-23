@@ -1,7 +1,7 @@
 """
 This module implements the AVR AVR receiver communication of the Remote Two integration driver.
 
-:copyright: (c) 2023 by Unfolded Circle ApS.
+:copyright: (c) 2025 by Albaintor.
 :license: Mozilla Public License Version 2.0, see LICENSE for more details.
 """
 
@@ -26,9 +26,9 @@ from typing import (
     cast,
 )
 
-import ucapi
-from aiowebostv import WebOsClient, WebOsTvCommandError, WebOsTvState, endpoints
 import aiowebostv.endpoints as ep
+import ucapi
+from aiowebostv import WebOsClient, WebOsTvCommandError, WebOsTvState
 from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr
 from ucapi.media_player import Features, MediaType, States
@@ -55,6 +55,7 @@ SOURCE_IS_APP = "isApp"
 LUNA_SYSTEM_COMMAND = "luna"
 LUNA_SYSTEM_ENDPOINT = "com.webos.settingsservice/setSystemSettings"
 PICTURE_COMMAND = "picture"
+
 
 class LGState(IntEnum):
     """State of device."""
@@ -447,6 +448,7 @@ class LGDevice:
                 if self._tv.tv_state.is_on:
                     _LOG.debug("[%s] LG TV connection succeeded", self._device_config.address)
                     break
+            # pylint: disable=W0718
             except Exception:
                 pass
             self._reconnect_retry += 1
@@ -501,6 +503,7 @@ class LGDevice:
                     ex,
                 )
                 self._connect_task = asyncio.create_task(self._connect_loop())
+        # pylint: disable=W0718
         except Exception as ex:
             self._available = False
             _LOG.error("[%s] Unknown error, unable to connect : %s", self._device_config.address, ex)
@@ -770,7 +773,7 @@ class LGDevice:
         # Sleep time : sometimes the connection variable is not defined although the lib reports the TV as connected
         if self._tv.connection is None:
             await asyncio.sleep(2)
-        await self._tv.command("request", endpoints.POWER_OFF)
+        await self._tv.command("request", ep.POWER_OFF)
         self._attr_state = States.OFF
 
     @retry()
@@ -781,7 +784,7 @@ class LGDevice:
         lg_state = await self.check_connect()
         if lg_state == LGState.ON:
             _LOG.debug("[%s] TV is ON, powering off [%s]", self._device_config.address, lg_state)
-            await self._tv.command("request", endpoints.POWER_OFF)
+            await self._tv.command("request", ep.POWER_OFF)
             self._attr_state = States.OFF
         else:
             _LOG.debug(
@@ -1015,7 +1018,7 @@ class LGDevice:
     async def turn_screen_off(self, webos_ver="") -> ucapi.StatusCodes:
         """Turn TV Screen off."""
         epname = f"TURN_OFF_SCREEN_WO{webos_ver}" if webos_ver else "TURN_OFF_SCREEN"
-        endpoint = getattr(endpoints, epname, None)
+        endpoint = getattr(ep, epname, None)
         if endpoint is None:
             endpoint = LG_ADDITIONAL_ENDPOINTS.get(epname, None)
 
@@ -1029,7 +1032,7 @@ class LGDevice:
     async def turn_screen_on(self, webos_ver="") -> ucapi.StatusCodes:
         """Turn TV Screen on."""
         epname = f"TURN_ON_SCREEN_WO{webos_ver}" if webos_ver else "TURN_ON_SCREEN"
-        endpoint = getattr(endpoints, epname, None)
+        endpoint = getattr(ep, epname, None)
         if endpoint is None:
             endpoint = LG_ADDITIONAL_ENDPOINTS.get(epname, None)
 
@@ -1066,11 +1069,10 @@ class LGDevice:
                 relative = True
             try:
                 value = int(value)
-            except Exception as ex:
+            except ValueError as ex:
                 _LOG.error("[%s] Wrong picture setting value %s", ex, value)
                 return ucapi.StatusCodes.BAD_REQUEST
-            _LOG.debug("[%s] LG TV set picture setting %s %s %s", self._device_config.address, option,
-                       value, relative)
+            _LOG.debug("[%s] LG TV set picture setting %s %s %s", self._device_config.address, option, value, relative)
             await self.set_picture_setting(option, value, relative)
         else:
             arguments = command.split(" ", 1)
@@ -1128,4 +1130,6 @@ class LGDevice:
             result = await self._tv.request(ep.GET_SYSTEM_SETTINGS, {"category": "picture", "keys": [option]})
             current_value: int = int(result["settings"][option])
             value = min(max(current_value + value, 0), 100)
-        return await self.call_luna_command(ep.LUNA_SET_SYSTEM_SETTINGS, {"category": "picture", "settings": {option: value}})
+        return await self.call_luna_command(
+            ep.LUNA_SET_SYSTEM_SETTINGS, {"category": "picture", "settings": {option: value}}
+        )

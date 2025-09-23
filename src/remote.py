@@ -1,7 +1,7 @@
 """
 Media-player entity functions.
 
-:copyright: (c) 2023 by Unfolded Circle ApS.
+:copyright: (c) 2025 by Albaintor.
 :license: Mozilla Public License Version 2.0, see LICENSE for more details.
 """
 
@@ -20,7 +20,6 @@ from config import LGConfigDevice, create_entity_id
 from const import (
     LG_REMOTE_BUTTONS_MAPPING,
     LG_REMOTE_UI_PAGES,
-    LG_SIMPLE_COMMANDS_CUSTOM,
 )
 from lg import LGDevice
 
@@ -87,11 +86,11 @@ class LGRemote(Remote):
 
         if cmd_id == Commands.ON:
             return await self._device.power_on()
-        elif cmd_id == Commands.OFF:
+        if cmd_id == Commands.OFF:
             return await self._device.power_off()
-        elif cmd_id == Commands.TOGGLE:
+        if cmd_id == Commands.TOGGLE:
             return await self._device.power_toggle()
-        elif cmd_id in [Commands.SEND_CMD, Commands.SEND_CMD_SEQUENCE]:
+        if cmd_id in [Commands.SEND_CMD, Commands.SEND_CMD_SEQUENCE]:
             # If the duration exceeds the remote timeout, keep it running and return immediately
             try:
                 async with asyncio.timeout(COMMAND_TIMEOUT):
@@ -116,7 +115,7 @@ class LGRemote(Remote):
                 if result != StatusCodes.OK:
                     res = result
                 if delay > 0:
-                    await asyncio.sleep(delay/1000)
+                    await asyncio.sleep(delay / 1000)
             else:
                 commands = params.get("sequence", [])
                 for command in commands:
@@ -124,11 +123,12 @@ class LGRemote(Remote):
                     if result != StatusCodes.OK:
                         res = result
                     if delay > 0:
-                        await asyncio.sleep(delay/1000)
+                        await asyncio.sleep(delay / 1000)
         return res
 
     async def call_command(self, command: str) -> StatusCodes:
         """Call a single command."""
+        # pylint: disable=R0911
         if command == Commands.ON:
             return await self._device.power_on()
         if command == Commands.OFF:

@@ -4,9 +4,9 @@ import asyncio
 import json
 import logging
 import sys
-from rich import print_json
 
 from aiowebostv import WebOsClient
+from rich import print_json
 
 from config import LGConfigDevice
 from lg import LGDevice
@@ -32,6 +32,7 @@ async def pair():
     await _pairing_lg_tv.connect()
     key = _pairing_lg_tv.client_key
     _LOG.debug("Pairing key : %s", key)
+
 
 async def confirm_pairing(client: LGDevice):
     # Validate pairing key (77)
@@ -62,10 +63,10 @@ async def main():
 
     # await client.power_on()
     await client.connect()
-    #await client.custom_command("picture backlight -10")
-    #results = await client.client.request("settings/getSystemSettings", {'category': 'picture', 'keys':['backlight']})
-    #results = await client.client.request("settings/getSystemSettings", {'category': 'picture', 'keys': ['contrast', 'backlight', 'brightness', 'color']})
-    #print_json(data=results)
+    # await client.custom_command("picture backlight -10")
+    # results = await client.client.request("settings/getSystemSettings", {'category': 'picture', 'keys':['backlight']})
+    # results = await client.client.request("settings/getSystemSettings", {'category': 'picture', 'keys': ['contrast', 'backlight', 'brightness', 'color']})
+    # print_json(data=results)
     # await client.custom_command("system.launcher/launch {'id': 'com.webos.app.screensaver'}")
     # await client.custom_command("system.launcher/close {'id': 'com.webos.app.screensaver'}")
     # await client.custom_notification("com.webos.settingsservice/setSystemSettings {'category': 'picture', 'settings': {'pictureMode': 'expert2'}}")

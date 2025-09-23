@@ -1,7 +1,7 @@
 """
 Configuration handling of the integration driver.
 
-:copyright: (c) 2023 by Unfolded Circle ApS.
+:copyright: (c) 2025 by Albaintor.
 :license: Mozilla Public License Version 2.0, see LICENSE for more details.
 """
 
@@ -226,6 +226,7 @@ class Devices:
             with open(self._cfg_file_path, "w+", encoding="utf-8") as f:
                 json.dump(self._config, f, ensure_ascii=False, cls=_EnhancedJSONEncoder)
             return True
+        # pylint: disable=W0718
         except Exception as ex:
             _LOG.error(
                 "Cannot import the updated configuration %s, keeping existing configuration : %s", updated_config, ex
@@ -234,6 +235,7 @@ class Devices:
                 # Restore current configuration
                 self._config = config_backup
                 self.store()
+            # pylint: disable=W0718
             except Exception:
                 pass
         return False

@@ -1,7 +1,7 @@
 """
 Setup flow for LG TV integration.
 
-:copyright: (c) 2023 by Unfolded Circle ApS.
+:copyright: (c) 2025 by Albaintor.
 :license: Mozilla Public License Version 2.0, see LICENSE for more details.
 """
 
@@ -110,16 +110,14 @@ async def driver_setup_handler(msg: SetupDriver) -> SetupAction:
                 _setup_step = SetupSteps.DEVICE_CONFIGURATION_MODE
                 _LOG.debug("Starting normal setup workflow")
                 return _user_input_discovery
-            else:
-                _LOG.debug("User requested backup/restore of configuration")
-                return await _handle_backup_restore_step()
+            _LOG.debug("User requested backup/restore of configuration")
+            return await _handle_backup_restore_step()
         if _setup_step == SetupSteps.DEVICE_CONFIGURATION_MODE:
             if "action" in msg.input_values:
                 _LOG.debug("Setup flow starts with existing configuration")
                 return await handle_configuration_mode(msg)
-            else:
-                _LOG.debug("Setup flow configuration mode")
-                return await _handle_discovery(msg)
+            _LOG.debug("Setup flow configuration mode")
+            return await _handle_discovery(msg)
         # if _setup_step == SetupSteps.DEVICE_CONFIGURATION_MODE and "action" in msg.input_values:
         #     return await handle_configuration_mode(msg)
         if _setup_step == SetupSteps.DISCOVER and "address" in msg.input_values:
@@ -268,43 +266,43 @@ async def handle_driver_setup(msg: DriverSetupRequest) -> RequestUserInput | Set
                 },
             ],
         )
-    else:
-        # Initial setup, make sure we have a clean configuration
-        config.devices.clear()  # triggers device instance removal
-        _setup_step = SetupSteps.WORKFLOW_MODE
-        return RequestUserInput(
-            {"en": "Configuration mode", "de": "Konfigurations-Modus"},
-            [
-                {
-                    "field": {
-                        "dropdown": {
-                            "value": "normal",
-                            "items": [
-                                {
-                                    "id": "normal",
-                                    "label": {
-                                        "en": "Start the configuration of the integration",
-                                        "fr": "Démarrer la configuration de l'intégration",
-                                    },
+
+    # Initial setup, make sure we have a clean configuration
+    config.devices.clear()  # triggers device instance removal
+    _setup_step = SetupSteps.WORKFLOW_MODE
+    return RequestUserInput(
+        {"en": "Configuration mode", "de": "Konfigurations-Modus"},
+        [
+            {
+                "field": {
+                    "dropdown": {
+                        "value": "normal",
+                        "items": [
+                            {
+                                "id": "normal",
+                                "label": {
+                                    "en": "Start the configuration of the integration",
+                                    "fr": "Démarrer la configuration de l'intégration",
                                 },
-                                {
-                                    "id": "backup_restore",
-                                    "label": {
-                                        "en": "Backup or restore devices configuration",
-                                        "fr": "Sauvegarder ou restaurer la configuration des appareils",
-                                    },
+                            },
+                            {
+                                "id": "backup_restore",
+                                "label": {
+                                    "en": "Backup or restore devices configuration",
+                                    "fr": "Sauvegarder ou restaurer la configuration des appareils",
                                 },
-                            ],
-                        }
-                    },
-                    "id": "configuration_mode",
-                    "label": {
-                        "en": "Configuration mode",
-                        "fr": "Mode de configuration",
-                    },
-                }
-            ],
-        )
+                            },
+                        ],
+                    }
+                },
+                "id": "configuration_mode",
+                "label": {
+                    "en": "Configuration mode",
+                    "fr": "Mode de configuration",
+                },
+            }
+        ],
+    )
 
 
 async def handle_configuration_mode(msg: UserDataResponse) -> RequestUserInput | SetupComplete | SetupError:
@@ -370,6 +368,7 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
     global _pairing_lg_tv
     global _setup_step
     global _discovered_devices
+    # pylint: disable=W0718
 
     # clear all configured devices and any previous pairing attempt
     if _pairing_lg_tv:
@@ -471,6 +470,7 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
     host = msg.input_values["choice"]
     mac_address = None
     mac_address2 = None
+    # pylint: disable=W0718
 
     if _discovered_devices:
         for device in _discovered_devices:
@@ -628,7 +628,8 @@ async def _handle_backup_restore_step() -> RequestUserInput:
     return RequestUserInput(
         {
             "en": "Backup or restore devices configuration (all existing devices will be removed)",
-            "fr": "Sauvegarder ou restaurer la configuration des appareils (tous les appareils existants seront supprimés)",
+            "fr": "Sauvegarder ou restaurer la configuration des appareils (tous les appareils existants "
+            "seront supprimés)",
         },
         [
             {
@@ -865,7 +866,7 @@ async def _handle_backup_restore(msg: UserDataResponse) -> SetupComplete | Setup
     updated_config = msg.input_values["config"]
     _LOG.info("Replacing configuration with : %s", updated_config)
     if not config.devices.import_config(updated_config):
-        _LOG.error("Setup error : unable to import updated configuration", updated_config)
+        _LOG.error("Setup error : unable to import updated configuration %s", updated_config)
         return SetupError(error_type=IntegrationSetupError.OTHER)
     _LOG.debug("Configuration imported successfully")
 
