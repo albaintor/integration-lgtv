@@ -1089,7 +1089,7 @@ class LGDevice:
             if len(arguments) == 2:
                 params = ast.literal_eval(arguments[1])
             _LOG.debug("[%s] LG TV custom command %s %s", self._device_config.address, endpoint, params)
-            await self._tv.request(ep.GET_SYSTEM_SETTINGS, params)
+            await self._tv.request(endpoint, params)
         return ucapi.StatusCodes.OK
 
     async def call_luna_command(self, endpoint: str, params: dict) -> ucapi.StatusCodes:
