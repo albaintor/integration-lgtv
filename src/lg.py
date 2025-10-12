@@ -472,7 +472,8 @@ class LGDevice:
     async def connect(self):
         """Connect to the device."""
         # pylint: disable = R1702
-        if self._connecting:  # TODO : to confirm or self.state != States.OFF:
+        if self._connect_lock.locked():
+            _LOG.debug("[%s] Connect already in progress, returns", self._device_config.address)
             return
         try:
             await self._connect_lock.acquire()
@@ -484,6 +485,10 @@ class LGDevice:
                 _LOG.error(
                     "[%s] Connection process done but the connection is not available", self._device_config.address
                 )
+                try:
+                    self._connect_lock.release()
+                except RuntimeError:
+                    pass
                 raise WebOsTvCommandError("Connection process done but the connection is not available")
 
             _LOG.debug("[%s] Connection succeeded", self._device_config.address)
@@ -519,7 +524,10 @@ class LGDevice:
             self.events.emit(Events.CONNECTED, self.id)
             self._connecting = False
             _LOG.debug("[%s] Connection task ends", self._device_config.address)
-            self._connect_lock.release()
+            try:
+                self._connect_lock.release()
+            except RuntimeError:
+                pass
 
     async def reconnect(self):
         """Occurs when the TV has been turned off and on : the client has to be reset."""
@@ -1014,7 +1022,7 @@ class LGDevice:
         await self._tv.button(button)
         return ucapi.StatusCodes.OK
 
-    @retry()
+    @retry(timeout=1)
     async def turn_screen_off(self, webos_ver="") -> ucapi.StatusCodes:
         """Turn TV Screen off."""
         epname = f"TURN_OFF_SCREEN_WO{webos_ver}" if webos_ver else "TURN_OFF_SCREEN"
@@ -1028,7 +1036,7 @@ class LGDevice:
         await self._tv.request(endpoint, {"standbyMode": "active"})
         return ucapi.StatusCodes.OK
 
-    @retry()
+    @retry(timeout=1)
     async def turn_screen_on(self, webos_ver="") -> ucapi.StatusCodes:
         """Turn TV Screen on."""
         epname = f"TURN_ON_SCREEN_WO{webos_ver}" if webos_ver else "TURN_ON_SCREEN"
