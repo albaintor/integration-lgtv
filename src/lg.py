@@ -47,6 +47,7 @@ _LOG = logging.getLogger(__name__)
 DEFAULT_TIMEOUT = 2
 BUFFER_LIFETIME = 30
 CONNECTION_RETRIES = 20
+CONNECT_LOCK_TIMEOUT = 20
 
 INIT_APPS_LAUNCH_DELAY = 10
 
@@ -222,6 +223,7 @@ class LGDevice:
         self._connect_task = None
         self._buffered_callbacks = {}
         self._connect_lock = Lock()
+        self._connect_lock_time: float = 0
         self._reconnect_retry = 0
         self._sound_output = None
         self._retry_wakeonlan = False
@@ -473,10 +475,20 @@ class LGDevice:
         """Connect to the device."""
         # pylint: disable = R1702
         if self._connect_lock.locked():
-            _LOG.debug("[%s] Connect already in progress, returns", self._device_config.address)
-            return
+            _LOG.debug("[%s] Connect already in progress", self._device_config.address)
+            if time.time() - self._connect_lock_time > CONNECT_LOCK_TIMEOUT:
+                _LOG.warning(
+                    "[%s] Connect is locked since a too long time, unlock it anyway", self._device_config.address
+                )
+                try:
+                    self._connect_lock.release()
+                except RuntimeError:
+                    pass
+            else:
+                return
         try:
             await self._connect_lock.acquire()
+            self._connect_lock_time = time.time()
             _LOG.debug("[%s] Connect", self._device_config.address)
             self._connecting = True
             self._tv = WebOsClient(host=self._device_config.address, client_key=self._device_config.key)
@@ -554,6 +566,11 @@ class LGDevice:
             self._available = False
         finally:
             self._connect_task = None
+            if self._connect_lock.locked():
+                try:
+                    self._connect_lock.release()
+                except RuntimeError:
+                    pass
 
     @property
     def unique_id(self) -> str:

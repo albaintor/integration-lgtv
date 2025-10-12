@@ -233,7 +233,7 @@ def evaluate_scpd_xml(url: str, response: Response) -> Optional[Dict]:
 
         return device
     except Exception as err:
-        _LOGGER.error("Error occurred during evaluation of SCPD XML from URI %s: %s", url, err)
+        _LOGGER.warning("Error occurred during evaluation of SCPD XML from URI %s: %s, skip this device", url, err)
         return None
 
 
