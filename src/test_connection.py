@@ -58,6 +58,7 @@ async def main():
             interface="0.0.0.0",
             broadcast=None,
             wol_port=9,
+            log=True,
         )
     )
 

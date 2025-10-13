@@ -523,6 +523,7 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
         interface="0.0.0.0",
         broadcast=None,
         wol_port=9,
+        log=False,
     )
 
     return get_additional_settings(_reconfigured_device)
@@ -603,6 +604,14 @@ def get_additional_settings(config_device: LGConfigDevice) -> RequestUserInput:
             "label": {
                 "en": "Regenerate the pairing key and test connection",
                 "fr": "Régénérer la clé d'appairage et tester la connection",
+            },
+            "field": {"checkbox": {"value": False}},
+        },
+        {
+            "id": "log",
+            "label": {
+                "en": "Enable additional traces for debugging",
+                "fr": "Activer les traces additionnalles pour l'analyse",
             },
             "field": {"checkbox": {"value": False}},
         },
@@ -733,6 +742,14 @@ def get_wakeonlan_settings() -> RequestUserInput:
                     }
                 },
             },
+            {
+                "id": "log",
+                "label": {
+                    "en": "Enable additional traces for debugging",
+                    "fr": "Activer les traces additionnalles pour l'analyse",
+                },
+                "field": {"checkbox": {"value": _reconfigured_device.log}},
+            },
         ],
     )
 
@@ -748,6 +765,7 @@ async def handle_additional_settings(msg: UserDataResponse) -> RequestUserConfir
     broadcast = msg.input_values.get("broadcast", "")
     test_wakeonlan = msg.input_values.get("test_wakeonlan", "false") == "true"
     pairing = msg.input_values.get("pairing", "false") == "true"
+    log = msg.input_values.get("log", "false") == "true"
     _LOG.debug("Handle additional settings")
 
     try:
@@ -771,6 +789,7 @@ async def handle_additional_settings(msg: UserDataResponse) -> RequestUserConfir
     _reconfigured_device.interface = interface
     _reconfigured_device.broadcast = broadcast
     _reconfigured_device.wol_port = wolport
+    _reconfigured_device.log = log
 
     if pairing:
         client = WebOsClient(_reconfigured_device.address)

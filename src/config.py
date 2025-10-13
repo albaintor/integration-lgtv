@@ -10,7 +10,7 @@ import json
 import logging
 import os
 from asyncio import Lock
-from dataclasses import dataclass
+from dataclasses import dataclass, field, fields
 from typing import Callable, Iterator
 
 from ucapi import EntityTypes
@@ -49,9 +49,20 @@ class LGConfigDevice:
     key: str
     mac_address: str | None
     mac_address2: str | None
-    broadcast: str | None
-    interface: str | None
-    wol_port: int | None
+    broadcast: str | None = field(default=None)
+    interface: str | None = field(default="0.0.0.0")
+    wol_port: int | None = field(default=9)
+    log: bool | None = field(default=False)
+
+    def __post_init__(self):
+        """Apply default values on missing fields."""
+        for attribute in fields(self):
+            # If there is a default and the value of the field is none we can assign a value
+            if (
+                not isinstance(attribute.default, dataclasses.MISSING.__class__)
+                and getattr(self, attribute.name) is None
+            ):
+                setattr(self, attribute.name, attribute.default)
 
 
 class _EnhancedJSONEncoder(json.JSONEncoder):
@@ -137,6 +148,7 @@ class Devices:
                 item.broadcast = device.broadcast
                 item.interface = device.interface
                 item.wol_port = device.wol_port
+                item.log = device.log
                 return self.store()
         return False
 

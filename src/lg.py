@@ -21,7 +21,9 @@ from typing import (
     Callable,
     Concatenate,
     Coroutine,
+    NotRequired,
     ParamSpec,
+    TypedDict,
     TypeVar,
     cast,
 )
@@ -79,6 +81,15 @@ class Events(IntEnum):
 
 _LGDeviceT = TypeVar("_LGDeviceT", bound="LGDevice")
 _P = ParamSpec("_P")
+
+
+class DeferredCallback(TypedDict):
+    """Deferred callback parameters."""
+
+    object: _LGDeviceT | WebOsClient
+    function: Callable[[Any | None], Coroutine]
+    args: NotRequired[_P.args]
+    kwargs: NotRequired[_P.kwargs]
 
 
 async def retry_call_command(
@@ -221,7 +232,7 @@ class LGDevice:
         self._media_image_url = ""
         self._attr_state = States.OFF
         self._connect_task = None
-        self._buffered_callbacks = {}
+        self._buffered_callbacks: dict[float, DeferredCallback] = {}
         self._connect_lock = Lock()
         self._connect_lock_time: float = 0
         self._reconnect_retry = 0
@@ -325,7 +336,7 @@ class LGDevice:
                 await self._tv.set_inputs_state(list(sources.values()))
                 await self._tv.set_apps_state(await self._tv.get_apps())
                 # pylint: disable = E1101
-                await self._tv.set_current_app_state(await self._tv.get_current_app())
+                await self._tv.set_current_app_state(str(await self._tv.get_current_app()))
             # pylint: disable = W0718
             except Exception:
                 pass
@@ -777,15 +788,16 @@ class LGDevice:
             )
             self.wakeonlan()
             self._retry_wakeonlan = True
-            self._buffered_callbacks[time.time()] = {"object": self._tv, "function": WebOsClient.power_on}
+            # This method power_on seems to no longer be supported
+            # self._buffered_callbacks[time.time()] = {"object": self._tv, "function": WebOsClient.power_on}
             self.event_loop.create_task(self.check_connect())
-            try:
-                _LOG.debug(
-                    "[%s] Sends power on command in case of TV is already connected", self._device_config.address
-                )
-                await self._tv.power_on()
-            except Exception as ex:
-                _LOG.error("[%s] LG TV error power on command %s", self._device_config.address, ex)
+            # try:
+            #     _LOG.debug(
+            #         "[%s] Sends power on command in case of TV is already connected", self._device_config.address
+            #     )
+            #     await self._tv.power_on()
+            # except Exception as ex:
+            #     _LOG.error("[%s] LG TV error power on command %s", self._device_config.address, ex)
             return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("[%s] LG TV error power_on %s", self._device_config.address, ex)

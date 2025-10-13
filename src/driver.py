@@ -352,6 +352,17 @@ def _register_available_entities(device_config: config.LGConfigDevice, device: l
         api.available_entities.add(entity)
 
 
+def update_global_settings():
+    """Update global settings."""
+    client_log = "INFO"
+    for device_config in config.devices.all():
+        if device_config.log:
+            client_log = os.getenv("UC_LOG_LEVEL", "DEBUG").upper()
+            break
+    _LOG.debug("Enable client logging : %s", client_log)
+    logging.getLogger("aiowebostv").setLevel(client_log)
+
+
 def on_device_added(device: config.LGConfigDevice) -> None:
     """Handle a newly added device in the configuration."""
     _LOG.debug("New device added: %s", device)
@@ -428,6 +439,7 @@ async def main():
     logging.getLogger("setup_flow").setLevel(level)
 
     config.devices = config.Devices(api.config_dir_path, on_device_added, on_device_removed, on_device_updated)
+    update_global_settings()
     for device_config in config.devices.all():
         _configure_new_device(device_config, connect=False)
 
