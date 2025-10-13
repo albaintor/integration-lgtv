@@ -58,6 +58,7 @@ SOURCE_IS_APP = "isApp"
 LUNA_SYSTEM_COMMAND = "luna"
 LUNA_SYSTEM_ENDPOINT = "com.webos.settingsservice/setSystemSettings"
 PICTURE_COMMAND = "picture"
+CHANNEL_COMMAND = "channel"
 
 
 class LGState(IntEnum):
@@ -257,19 +258,19 @@ class LGDevice:
                 self._attr_state = States.OFF
 
             # _LOG.debug("State changed:")
-            # _LOG.debug(f"System info: {client.system_info}")
-            # _LOG.debug(f"Software info: {client.software_info}")
-            # _LOG.debug(f"Hello info: {client.hello_info}")
-            # _LOG.debug(f"Channel info: {client.channel_info}")
-            # _LOG.debug(f"Apps: {client.apps}")
-            # _LOG.debug(f"Inputs: {client.inputs}")
-            # _LOG.debug(f"Powered on: {client.power_state}")
-            # _LOG.debug(f"App Id: {client.current_app_id}")
-            # _LOG.debug(f"Channels: {client.channels}")
-            # _LOG.debug(f"Current channel: {client.current_channel}")
-            # _LOG.debug(f"Muted: {client.muted}")
-            # _LOG.debug(f"Volume: {client.volume}")
-            # _LOG.debug(f"Sound output: {client.sound_output}")
+            # _LOG.debug(f"System info: {self._tv.tv_state.system_info}")
+            # _LOG.debug(f"Software info: {self._tv.tv_state.software_info}")
+            # _LOG.debug(f"Hello info: {self._tv.tv_state.hello_info}")
+            # _LOG.debug(f"Channel info: {self._tv.tv_state.channel_info}")
+            # _LOG.debug(f"Apps: {self._tv.tv_state.apps}")
+            # _LOG.debug(f"Inputs: {self._tv.tv_state.inputs}")
+            # _LOG.debug(f"Powered on: {self._tv.tv_state.power_state}")
+            # _LOG.debug(f"App Id: {self._tv.tv_state.current_app_id}")
+            # _LOG.debug(f"Channels: {self._tv.tv_state.channels}")
+            # _LOG.debug(f"Current channel: {self._tv.tv_state.current_channel}")
+            # _LOG.debug(f"Muted: {self._tv.tv_state.muted}")
+            # _LOG.debug(f"Volume: {self._tv.tv_state.volume}")
+            # _LOG.debug(f"Sound output: {self._tv.tv_state.sound_output}")
 
         async def _on_sound_output_changed(sound_output: str):
             if sound_output:
@@ -1112,6 +1113,10 @@ class LGDevice:
                 return ucapi.StatusCodes.BAD_REQUEST
             _LOG.debug("[%s] LG TV set picture setting %s %s %s", self._device_config.address, option, value, relative)
             await self.set_picture_setting(option, value, relative)
+        elif arguments[0] == CHANNEL_COMMAND and len(arguments) == 2:
+            # channel '123'
+            # channel 'MTV'
+            await self.set_channel(arguments[1])
         else:
             arguments = command.split(" ", 1)
             endpoint = arguments[0]
@@ -1177,3 +1182,41 @@ class LGDevice:
         return await self.call_luna_command(
             ep.LUNA_SET_SYSTEM_SETTINGS, {"category": "picture", "settings": {option: value}}
         )
+
+    @retry()
+    async def set_channel(self, channel: str) -> ucapi.StatusCodes:
+        """Switch to given channel."""
+        partial_match_channel_id = None
+        perfect_match_channel_id = None
+        channel_number = -1
+        try:
+            channel_number = int(channel)
+        except ValueError:
+            pass
+
+        for channel_entry in self._tv.tv_state.channels:
+            if channel == channel_entry["channelNumber"] or (channel_number != -1 and
+                                                             channel_number == channel_entry["channelNumber"]):
+                perfect_match_channel_id = channel_entry["channelId"]
+                break
+
+            if channel.lower() == channel_entry["channelName"].lower():
+                perfect_match_channel_id = channel_entry["channelId"]
+                continue
+
+            if channel.lower() in channel_entry["channelName"].lower():
+                partial_match_channel_id = channel_entry["channelId"]
+
+        if perfect_match_channel_id is not None:
+            _LOG.debug("[%s] Switching to channel %s with perfect match", self._device_config.address,
+                       perfect_match_channel_id)
+            await self._tv.set_channel(perfect_match_channel_id)
+        elif partial_match_channel_id is not None:
+            _LOG.debug("[%s] Switching to channel %s with partial match", self._device_config.address,
+                       partial_match_channel_id)
+            await self._tv.set_channel(partial_match_channel_id)
+        else:
+            _LOG.error("[%s] Switching to channel %s : not found in the list %s",
+                       self._device_config.address, channel, self._tv.tv_state.channels)
+            return ucapi.StatusCodes.BAD_REQUEST
+        return ucapi.StatusCodes.OK

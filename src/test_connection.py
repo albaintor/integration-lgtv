@@ -64,6 +64,8 @@ async def main():
 
     # await client.power_on()
     await client.connect()
+    await asyncio.sleep(5)
+    await client.custom_command("channel '101'")
     # await client.custom_command("picture backlight -10")
     # results = await client.client.request("settings/getSystemSettings", {'category': 'picture', 'keys':['backlight']})
     # results = await client.client.request("settings/getSystemSettings", {'category': 'picture', 'keys': ['contrast', 'backlight', 'brightness', 'color']})

@@ -197,6 +197,7 @@ Examples of commands :
 
 | Command                                                     | Description                                                                              | Example                                  |
 |-------------------------------------------------------------|------------------------------------------------------------------------------------------|------------------------------------------|
+| channel '123'                                               | Switch to given channel number or name                                                   | channel 'MTV'                            |
 | picture contrast `value`                                    | Set contrast<br/>Relative value : use sign (eg +10 or -10)<br/>or absolute value         | picture contrast +10                     |
 | picture backlight `value`                                   | Set backlight <br/>Relative value : use sign (eg +10 or -10)<br/>or absolute value       | picture backlight 80                     |
 | picture brightness `value`                                  | Set brightness <br/>Relative value : use sign (eg +10 or -10)<br/>or absolute value      | picture brightness -10                   |
