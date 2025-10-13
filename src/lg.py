@@ -451,7 +451,8 @@ class LGDevice:
                     _LOG.debug("[%s] LG TV connection succeeded", self._device_config.address)
                     break
             # pylint: disable=W0718
-            except Exception:
+            except Exception as ex:
+                _LOG.warning("[%s] LG TV connection failed %s", self._device_config.address, ex)
                 pass
             self._reconnect_retry += 1
             self._attr_state = States.OFF
