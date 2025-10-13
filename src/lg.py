@@ -513,7 +513,7 @@ class LGDevice:
             await self._run_buffered_commands()
         except WEBOSTV_EXCEPTIONS as ex:
             self._available = False
-            _LOG.error("[%s] Unable to connect : %s", self._device_config.address, ex)
+            _LOG.error("[%s] Unable to connect : %s (%s)", self._device_config.address, ex, repr(ex))
             if not self._connect_task:
                 _LOG.warning(
                     "[%s] Unable to update, LG TV probably off: running connect task %s",
