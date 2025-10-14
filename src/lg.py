@@ -12,7 +12,7 @@ import logging
 import socket
 import struct
 import time
-from asyncio import AbstractEventLoop, Lock, shield
+from asyncio import AbstractEventLoop, Lock, shield, CancelledError
 from enum import IntEnum
 from functools import wraps
 from typing import (
@@ -456,30 +456,36 @@ class LGDevice:
         After sending magic packet we need to wait for the device to be accessible from network or maybe the
         device has shutdown by itself.
         """
-        while True:
-            try:
-                await self.connect()
-                if self._tv.tv_state.is_on:
-                    _LOG.debug("[%s] LG TV connection succeeded", self._device_config.address)
+        try:
+            while True:
+                try:
+                    await self.connect()
+                    if self._tv.tv_state.is_on:
+                        _LOG.debug("[%s] LG TV connection succeeded", self._device_config.address)
+                        break
+                except CancelledError:
+                    _LOG.debug("[%s] LG TV connect task cancelled", self._device_config.address)
                     break
-            # pylint: disable=W0718
-            except Exception as ex:
-                _LOG.warning("[%s] LG TV connection failed %s", self._device_config.address, ex)
-                pass
-            self._reconnect_retry += 1
-            self._attr_state = States.OFF
-            if self._reconnect_retry > CONNECTION_RETRIES:
-                _LOG.debug("[%s] LG not connected abort retries", self._device_config.address)
-                break
-            if self._retry_wakeonlan:
-                self.wakeonlan()
-            _LOG.debug(
-                "[%s] LG not connected, retry %s / %s",
-                self._device_config.address,
-                self._reconnect_retry,
-                CONNECTION_RETRIES,
-            )
-            await asyncio.sleep(DEFAULT_TIMEOUT)
+                # pylint: disable=W0718
+                except Exception as ex:
+                    _LOG.warning("[%s] LG TV connection failed %s", self._device_config.address, ex)
+                    pass
+                self._reconnect_retry += 1
+                self._attr_state = States.OFF
+                if self._reconnect_retry > CONNECTION_RETRIES:
+                    _LOG.debug("[%s] LG not connected abort retries", self._device_config.address)
+                    break
+                if self._retry_wakeonlan:
+                    self.wakeonlan()
+                _LOG.debug(
+                    "[%s] LG not connected, retry %s / %s",
+                    self._device_config.address,
+                    self._reconnect_retry,
+                    CONNECTION_RETRIES,
+                )
+                await asyncio.sleep(DEFAULT_TIMEOUT)
+        except CancelledError:
+            _LOG.debug("[%s] LG TV connect task cancelled", self._device_config.address)
         self._retry_wakeonlan = False
         self._connect_task = None
         self._reconnect_retry = 0
@@ -571,9 +577,9 @@ class LGDevice:
         """Disconnect from TV."""
         _LOG.debug("[%s] Disconnect %s", self._device_config.address, self.id)
         try:
-            await self._tv.disconnect()
             if self._connect_task:
                 self._connect_task.cancel()
+            await self._tv.disconnect()
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("[%s] Unable to update: %s", self._device_config.address, ex)
             self._available = False
