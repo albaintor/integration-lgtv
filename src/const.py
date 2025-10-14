@@ -3,13 +3,12 @@
 import asyncio
 from xmlrpc.client import ProtocolError
 
-from aiohttp import ServerTimeoutError
+from aiohttp import ServerTimeoutError, WSMessageTypeError, ClientConnectorError, ServerDisconnectedError
 from aiowebostv import WebOsTvCommandError
 from aiowebostv.exceptions import WebOsTvError
 from httpx import TransportError
 from ucapi.media_player import Features
 from ucapi.ui import Buttons, DeviceButtonMapping, UiPage
-from websockets.exceptions import ConnectionClosed, ConnectionClosedOK
 
 LIVE_TV_APP_ID = "com.webos.app.livetv"
 
@@ -63,16 +62,20 @@ LG_FEATURES = [
 
 WEBOSTV_EXCEPTIONS = (
     OSError,
-    ConnectionClosed,
-    ConnectionClosedOK,
     ConnectionRefusedError,
     WebOsTvCommandError,
     WebOsTvError,
     TimeoutError,
+    ClientConnectorError,
+    ServerDisconnectedError,
+    WSMessageTypeError,
     asyncio.CancelledError,
     TransportError,
     ProtocolError,
     ServerTimeoutError,
+    ConnectionResetError,
+    WebOsTvCommandError,
+    asyncio.TimeoutError,
 )
 
 LG_SOUND_OUTPUTS: dict[str, str] = {
