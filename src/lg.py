@@ -28,9 +28,11 @@ from typing import (
     cast,
 )
 
+import aiohttp
 import aiowebostv.endpoints as ep
 import ucapi
 from aiowebostv import WebOsClient, WebOsTvCommandError, WebOsTvState
+from aiowebostv.webos_client import WS_PORT, MAIN_WS_MAX_MSG_SIZE, WSS_PORT
 from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr
 from ucapi.media_player import Features, MediaType, States
@@ -199,6 +201,20 @@ def create_magic_packet(mac_address: str) -> bytes:
     )
     return b"\xff" * 6 + hw_addr * 16
 
+async def patched_create_main_ws(self):
+    """Create main websocket connection.
+
+    Try using ws:// and fallback to wss:// if the TV rejects the connection.
+    """
+    try:
+        uri = f"ws://{self.host}:{WS_PORT}"
+        return await self._ws_connect(uri, MAIN_WS_MAX_MSG_SIZE)
+    # ClientConnectionError is raised when firmware reject WS_PORT
+    # WSServerHandshakeError is raised when firmware enforce using ssl
+    except (aiohttp.ClientConnectionError, aiohttp.WSServerHandshakeError, TimeoutError):
+        uri = f"wss://{self.host}:{WSS_PORT}"
+        return await self._ws_connect(uri, MAIN_WS_MAX_MSG_SIZE)
+
 
 class LGDevice:
     """Representing a LG TV Device."""
@@ -210,6 +226,8 @@ class LGDevice:
     ):
         """Create instance with given IP or hostname of AVR."""
         # identifier from configuration
+        # TODO patch to be removed
+        WebOsClient._create_main_ws = patched_create_main_ws
         self._connecting = False
         self._device_config = device_config  # For reconnection
         self.id: str = device_config.id
