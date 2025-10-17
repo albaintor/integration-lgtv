@@ -75,7 +75,11 @@ Also depending on your router, even if the mac addresses are correct it may not 
 So in the setup flow there is a specific section to set and test the wake on lan :
 - Interface : should be set to "0.0.0.0" which means all interfaces if setting up the integration on the remote
 - Broadcast : should be empty by default (which means broadcast to all network 255.255.255.255) but some routers won't allow this. If wake on lan fails, try to set your subnet mask. For example if your network is `192.168.1.*` => set `192.168.1.255`
+- Wake on lan port : should not be modified, leave to 9
+- Tick `Test turn on your configured TV` to test that wol is working (after powering off your TV for at least 15 minutes)
 
+<img width="350" alt="image" src="https://github.com/user-attachments/assets/ef95a3d3-0b62-4f84-b180-7bb6bfd8d70b" />
+<img width="350" alt="image" src="https://github.com/user-attachments/assets/4cb4357c-f2b7-4ace-b349-d416246c0511" />
 
 
 
