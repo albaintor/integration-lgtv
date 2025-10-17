@@ -56,16 +56,25 @@ async def main():
             mac_address2=None,
             key=pairing_key,
             interface="0.0.0.0",
-            broadcast=None,
+            broadcast=None, # or network mask like 192.168.1.255
             wol_port=9,
             log=True,
         )
     )
 
     # await client.power_on()
-    await client.connect()
-    await asyncio.sleep(5)
-    await client.custom_command("channel '101'")
+    # Test power cycle
+    # await client.connect()
+    # await asyncio.sleep(5)
+    # await client.power_on()
+    # await asyncio.sleep(15)
+    # _LOG.debug("Attributes %s", client.attributes)
+    # await client.disconnect()
+    # await asyncio.sleep(5)
+    # await client.connect()
+    # await asyncio.sleep(5)
+    # await client.power_off()
+    # await client.custom_command("channel '101'")
     # await client.custom_command("picture backlight -10")
     # results = await client.client.request("settings/getSystemSettings", {'category': 'picture', 'keys':['backlight']})
     # results = await client.client.request("settings/getSystemSettings", {'category': 'picture', 'keys': ['contrast', 'backlight', 'brightness', 'color']})

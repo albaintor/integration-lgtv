@@ -528,7 +528,8 @@ class LGDevice:
             self._connect_lock_time = time.time()
             _LOG.debug("[%s] Connect", self._device_config.address)
             self._connecting = True
-            self._tv = WebOsClient(host=self._device_config.address, client_key=self._device_config.key)
+            if self._tv is None:
+                self._tv = WebOsClient(host=self._device_config.address, client_key=self._device_config.key)
             result = await self._tv.connect()
             if not result or self._tv.connection is None:
                 _LOG.error(
@@ -597,6 +598,7 @@ class LGDevice:
         try:
             if self._connect_task:
                 self._connect_task.cancel()
+            self._tv.clear_state_update_callbacks()
             await self._tv.disconnect()
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("[%s] Unable to update: %s", self._device_config.address, ex)

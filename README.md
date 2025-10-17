@@ -64,6 +64,21 @@ Usually the controls to enable are located in `Settings > Support > IP control S
 - The setup will be able to discover the LG TVs if they are connected on the same network, otherwise it is necessary to set manual IP
 - At the end, most users should enable the `Media Player` entity. `Remote entity` is useful for custom commands and commands sequence
 
+
+### Wake on lan
+
+When the TV is off, it is not connected to the network (no IP available) : it can only be turned on while sending a "magic packet" also called WoL (wake on lan), which is a network packet broadcasted to the mac address of the TV.
+This is the reason why the network settings above have to be correctly set to enable "wake on lan" from the TV, as well as setting up the correct Mac Addresses in the integration.
+As there are 2 mac addresses - one for wifi, one for wired connection - both should be filled in : the integration will systematically send 2 magic packets to both macs.
+Please note that when you power off the TV, its connection (and IP) remains active during ~15 minutes : so you have to wait more than 15 minutes to test power on lan.
+Also depending on your router, even if the mac addresses are correct it may not work with the default settings
+So in the setup flow there is a specific section to set and test the wake on lan :
+- Interface : should be set to "0.0.0.0" which means all interfaces if setting up the integration on the remote
+- Broadcast : should be empty by default (which means broadcast to all network 255.255.255.255) but some routers won't allow this. If wake on lan fails, try to set your subnet mask. For example if your network is `192.168.1.*` => set `192.168.1.255`
+
+
+
+
 ### Backup or restore configuration
 
 The integration lets backup or restore the devices configuration (in JSON format).
