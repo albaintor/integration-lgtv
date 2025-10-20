@@ -68,7 +68,7 @@ Usually the controls to enable are located in `Settings > Support > IP control S
 The remote doesn't allow to upgrade an existing integration yet : it is necessary to remove the existing integration (twice) before being able to install a new release.<br>
 However the integration lets backup or restore the devices configuration (in JSON format), so that you don't have to perform the setup and pairing process again.
 
-If you want to upgrade the integration to a new release, or simply wants to backup the configuration for later restore, you can use backup/restore.
+If you want to upgrade the integration to a new release, or simply wants to backup the configuration for later restore or cloning the configuration to another remote, you can use backup/restore.
 
 To use this functionality, launch the setup flow of your existing integration, and select the `Backup or restore` option in the setup flow :
 <img width="350" alt="image" src="https://github.com/user-attachments/assets/28799000-d6c9-4f99-86b1-286a857d12bb" />
