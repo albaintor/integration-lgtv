@@ -29,11 +29,10 @@ Supported commands:
 - Digit numbers
 - Subtitle/audio language switching
 
-## Usage
 
-### Installation on the Remote
+## Installation on the Remote
 
-#### Pre-requisites
+### Pre-requisites
 
 To make the TV available on the network and be able to power it through the network, some settings have to be enabled in the TV settings, depending on your model.
 
@@ -53,7 +52,6 @@ Usually the controls to enable are located in `Settings > Support > IP control S
 <img src="https://github.com/user-attachments/assets/19413040-76bf-4003-8a7e-3e09034f7a41" width="350">
 
 
-
 ### Setup
 
 - Download the release from the release section : file ending with `.tar.gz`, do not unzip it
@@ -64,6 +62,30 @@ Usually the controls to enable are located in `Settings > Support > IP control S
 - The setup will be able to discover the LG TVs if they are connected on the same network, otherwise it is necessary to set manual IP
 - At the end, most users should enable the `Media Player` entity. `Remote entity` is useful for custom commands and commands sequence
 
+
+### Upgrade and backup/restore
+
+The remote doesn't allow to upgrade an existing integration yet : it is necessary to remove the existing integration (twice) before being able to install a new release.<br>
+However the integration lets backup or restore the devices configuration (in JSON format), so that you don't have to perform the setup and pairing process again.
+
+If you want to upgrade the integration to a new release, or simply wants to backup the configuration for later restore, you can use backup/restore.
+
+To use this functionality, launch the setup flow of your existing integration, and select the `Backup or restore` option in the setup flow :
+<img width="350" alt="image" src="https://github.com/user-attachments/assets/28799000-d6c9-4f99-86b1-286a857d12bb" />
+
+Then you will have a text field with the current configuration. This field which will be empty if no devices are configured. 
+Then just save the content of the text field in a file for later restore and abort the setup flow (clicking next will apply this configuration)
+
+You can now remove the integration and upload the new one. Once you launch the setup flow, you will have an option to perform the normal setup flow or restore a configuration.
+Select this option and just replace the content of the text field by the previously saved configuration and click on next to apply it. 
+<br>
+Beware while using this functionality : the expected format should be respected and could change in the future.
+If the format is not recognized, the import will be aborted and existing configuration will remain unchanged.
+
+This functionnality can also be used to clone a configuration from one remote to another.
+
+
+## Configuration
 
 ### Wake on lan
 
@@ -80,16 +102,6 @@ So in the setup flow there is a specific section to set and test the wake on lan
 
 <img width="350" alt="image" src="https://github.com/user-attachments/assets/ef95a3d3-0b62-4f84-b180-7bb6bfd8d70b" />
 <img width="350" alt="image" src="https://github.com/user-attachments/assets/4cb4357c-f2b7-4ace-b349-d416246c0511" />
-
-
-
-### Backup or restore configuration
-
-The integration lets backup or restore the devices configuration (in JSON format).
-To use this functionality, select the "Backup or restore" option in the setup flow, then you will have a text field which will be empty if no devices are configured. 
-- Backup : just save the content of the text field in a file for later restore and abort the setup flow (clicking next will apply this configuration)
-- Restore : just replace the content by the previously saved configuration and click on next to apply it. Beware while using this functionality : the expected format should be respected and could change in the future.
-If the format is not recognized, the import will be aborted and existing configuration will remain unchanged.
 
 
 ### Available commands
