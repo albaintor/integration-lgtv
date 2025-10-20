@@ -12,7 +12,7 @@ import logging
 import socket
 import struct
 import time
-from asyncio import AbstractEventLoop, Lock, shield, CancelledError
+from asyncio import AbstractEventLoop, CancelledError, Lock, shield
 from enum import IntEnum
 from functools import wraps
 from typing import (
@@ -32,7 +32,7 @@ import aiohttp
 import aiowebostv.endpoints as ep
 import ucapi
 from aiowebostv import WebOsClient, WebOsTvCommandError, WebOsTvState
-from aiowebostv.webos_client import WS_PORT, MAIN_WS_MAX_MSG_SIZE, WSS_PORT
+from aiowebostv.webos_client import MAIN_WS_MAX_MSG_SIZE, WS_PORT, WSS_PORT
 from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr
 from ucapi.media_player import Features, MediaType, States
@@ -41,6 +41,8 @@ from config import LGConfigDevice
 from const import (
     LG_ADDITIONAL_ENDPOINTS,
     LG_FEATURES,
+    LG_PLAYSTATE,
+    LG_PLAYSTATES,
     LG_SOUND_OUTPUTS,
     LIVE_TV_APP_ID,
     WEBOSTV_EXCEPTIONS,
@@ -201,11 +203,13 @@ def create_magic_packet(mac_address: str) -> bytes:
     )
     return b"\xff" * 6 + hw_addr * 16
 
+
 async def patched_create_main_ws(self):
     """Create main websocket connection.
 
     Try using ws:// and fallback to wss:// if the TV rejects the connection.
     """
+    # pylint: disable=W0212
     try:
         uri = f"ws://{self.host}:{WS_PORT}"
         return await self._ws_connect(uri, MAIN_WS_MAX_MSG_SIZE)
@@ -257,6 +261,7 @@ class LGDevice:
         self._reconnect_retry = 0
         self._sound_output = None
         self._retry_wakeonlan = False
+        self._media_state: list[dict[str, Any]] | None = None
 
         _LOG.debug("[%s] LG TV created", device_config.address)
 
@@ -270,8 +275,11 @@ class LGDevice:
 
         async def _on_state_changed(state: WebOsTvState):
             """State changed callback."""
+            if state.media_state:
+                self._media_state = state.media_state
+                if self.media_state:
+                    self._paused = self.media_state.get(LG_PLAYSTATE, "playing") == "paused"
             await self._update_states(self._tv)
-
             if not state.power_state:
                 self._attr_state = States.OFF
 
@@ -386,6 +394,8 @@ class LGDevice:
                 _LOG.warning("[%s] Error extraction of sound output %s", self._device_config.address, ex)
 
         state = States.ON if is_on else States.OFF
+        if self.media_state:
+            state = LG_PLAYSTATES.get(self.media_state.get(LG_PLAYSTATE, "playing"), States.ON)
         if state != self.state:
             self._attr_state = state
             updated_data[MediaAttr.STATE] = self.state
@@ -487,7 +497,6 @@ class LGDevice:
                 # pylint: disable=W0718
                 except Exception as ex:
                     _LOG.warning("[%s] LG TV connection failed %s", self._device_config.address, ex)
-                    pass
                 self._reconnect_retry += 1
                 self._attr_state = States.OFF
                 if self._reconnect_retry > CONNECTION_RETRIES:
@@ -510,7 +519,7 @@ class LGDevice:
 
     async def connect(self):
         """Connect to the device."""
-        # pylint: disable = R1702
+        # pylint: disable = R1702, R0915
         if self._connect_lock.locked():
             _LOG.debug("[%s] Connect already in progress", self._device_config.address)
             if time.time() - self._connect_lock_time > CONNECT_LOCK_TIMEOUT:
@@ -528,8 +537,7 @@ class LGDevice:
             self._connect_lock_time = time.time()
             _LOG.debug("[%s] Connect", self._device_config.address)
             self._connecting = True
-            if self._tv is None:
-                self._tv = WebOsClient(host=self._device_config.address, client_key=self._device_config.key)
+            self._tv = WebOsClient(host=self._device_config.address, client_key=self._device_config.key)
             result = await self._tv.connect()
             if not result or self._tv.connection is None:
                 _LOG.error(
@@ -592,6 +600,11 @@ class LGDevice:
         self._serial_number = info.system.get("serialNumber")
         self._device_config.mac_address = info.software.get("device_id")
 
+    def reset(self):
+        """Reset values."""
+        self._paused = False
+        self._media_state = None
+
     async def disconnect(self):
         """Disconnect from TV."""
         _LOG.debug("[%s] Disconnect %s", self._device_config.address, self.id)
@@ -610,6 +623,7 @@ class LGDevice:
                     self._connect_lock.release()
                 except RuntimeError:
                     pass
+            self.reset()
 
     @property
     def unique_id(self) -> str:
@@ -725,6 +739,13 @@ class LGDevice:
     def media_type(self) -> MediaType:
         """Current media type."""
         return self._media_type
+
+    @property
+    def media_state(self) -> dict[str, Any] | None:
+        """Current media state."""
+        if self._media_state is None or len(self._media_state) == 0:
+            return None
+        return self._media_state[0]
 
     async def power_toggle(self) -> ucapi.StatusCodes:
         """Toggle power."""
@@ -890,14 +911,14 @@ class LGDevice:
         return ucapi.StatusCodes.OK
 
     @retry()
-    async def async_media_play(self) -> ucapi.StatusCodes:
+    async def media_play(self) -> ucapi.StatusCodes:
         """Send play command."""
         self._paused = False
         await self._tv.play()
         return ucapi.StatusCodes.OK
 
     @retry()
-    async def async_media_pause(self) -> ucapi.StatusCodes:
+    async def media_pause(self) -> ucapi.StatusCodes:
         """Send media pause command to media player."""
         self._paused = True
         await self._tv.pause()
@@ -906,10 +927,10 @@ class LGDevice:
     @retry()
     async def play_pause(self) -> ucapi.StatusCodes:
         """Send toggle-play-pause command to LG TV."""
-        if self._paused:
-            await self.async_media_play()
+        if self._paused or (self.media_state and self.media_state.get(LG_PLAYSTATE, "playing") == "paused"):
+            await self.media_play()
         else:
-            await self.async_media_pause()
+            await self.media_pause()
         return ucapi.StatusCodes.OK
 
     @retry()
@@ -1221,8 +1242,9 @@ class LGDevice:
             pass
 
         for channel_entry in self._tv.tv_state.channels:
-            if channel == channel_entry["channelNumber"] or (channel_number != -1 and
-                                                             channel_number == channel_entry["channelNumber"]):
+            if channel == channel_entry["channelNumber"] or (
+                channel_number != -1 and channel_number == channel_entry["channelNumber"]
+            ):
                 perfect_match_channel_id = channel_entry["channelId"]
                 break
 
@@ -1234,15 +1256,21 @@ class LGDevice:
                 partial_match_channel_id = channel_entry["channelId"]
 
         if perfect_match_channel_id is not None:
-            _LOG.debug("[%s] Switching to channel %s with perfect match", self._device_config.address,
-                       perfect_match_channel_id)
+            _LOG.debug(
+                "[%s] Switching to channel %s with perfect match", self._device_config.address, perfect_match_channel_id
+            )
             await self._tv.set_channel(perfect_match_channel_id)
         elif partial_match_channel_id is not None:
-            _LOG.debug("[%s] Switching to channel %s with partial match", self._device_config.address,
-                       partial_match_channel_id)
+            _LOG.debug(
+                "[%s] Switching to channel %s with partial match", self._device_config.address, partial_match_channel_id
+            )
             await self._tv.set_channel(partial_match_channel_id)
         else:
-            _LOG.error("[%s] Switching to channel %s : not found in the list %s",
-                       self._device_config.address, channel, self._tv.tv_state.channels)
+            _LOG.error(
+                "[%s] Switching to channel %s : not found in the list %s",
+                self._device_config.address,
+                channel,
+                self._tv.tv_state.channels,
+            )
             return ucapi.StatusCodes.BAD_REQUEST
         return ucapi.StatusCodes.OK

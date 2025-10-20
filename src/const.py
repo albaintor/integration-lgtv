@@ -3,11 +3,16 @@
 import asyncio
 from xmlrpc.client import ProtocolError
 
-from aiohttp import ServerTimeoutError, WSMessageTypeError, ClientConnectorError, ServerDisconnectedError
+from aiohttp import (
+    ClientConnectorError,
+    ServerDisconnectedError,
+    ServerTimeoutError,
+    WSMessageTypeError,
+)
 from aiowebostv import WebOsTvCommandError
 from aiowebostv.exceptions import WebOsTvError
 from httpx import TransportError
-from ucapi.media_player import Features
+from ucapi.media_player import Features, States
 from ucapi.ui import Buttons, DeviceButtonMapping, UiPage
 
 LIVE_TV_APP_ID = "com.webos.app.livetv"
@@ -89,6 +94,12 @@ LG_SOUND_OUTPUTS: dict[str, str] = {
     "tv_speaker_headphone": "TV speaker and headphones",
     "bt_soundbar": "Bluetooth soundbar and bluetooth devices",
     "soundbar": "Soundbar optical",
+}
+
+LG_PLAYSTATE = "playState"
+LG_PLAYSTATES: dict[str, States] = {
+    "paused": States.PAUSED,
+    "playing": States.PLAYING,
 }
 
 # Custom commands to be handled specifically

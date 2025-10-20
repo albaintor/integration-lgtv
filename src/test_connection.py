@@ -4,12 +4,13 @@ import asyncio
 import json
 import logging
 import sys
+from typing import Any
 
-from aiowebostv import WebOsClient
+from aiowebostv import WebOsClient, WebOsTvState
 from rich import print_json
 
 from config import LGConfigDevice
-from lg import LGDevice
+from lg import Events, LGDevice
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -43,6 +44,24 @@ async def confirm_pairing(client: LGDevice):
     await client.button("ENTER")
 
 
+async def _on_state_changed(state: WebOsTvState):
+    print("State changed")
+    if state.power_state:
+        print("Power state")
+        print_json(data=state.power_state)
+    if state.media_state:
+        print("Media state")
+        print_json(data=state.media_state)
+    if state.channel_info:
+        print("Channel info")
+        print_json(data=state.channel_info)
+    # ...
+
+
+async def on_device_update(device_id: str, update: dict[str, Any] | None) -> None:
+    print_json(data=update)
+
+
 async def main():
     _LOG.debug("Start connection")
     # await pair()
@@ -56,24 +75,25 @@ async def main():
             mac_address2=None,
             key=pairing_key,
             interface="0.0.0.0",
-            broadcast=None, # or network mask like 192.168.1.255
+            broadcast=None,  # or network mask like 192.168.1.255
             wol_port=9,
             log=True,
         )
     )
+    await client._tv.register_state_update_callback(_on_state_changed)
+    client.events.on(Events.UPDATE, on_device_update)
+    # await client.power_on()
+    await client.connect()
+    # state = client._tv.tv_state
+    # await _on_state_changed(state)
+    # await asyncio.sleep(10)
+    # await client.button("FASTFORWARD")
+    # await asyncio.sleep(5)
+    # await client.button("PLAY PAUSE")
+    # await client.play_pause()
+    # await asyncio.sleep(60)
 
-    # await client.power_on()
-    # Test power cycle
-    # await client.connect()
     # await asyncio.sleep(5)
-    # await client.power_on()
-    # await asyncio.sleep(15)
-    # _LOG.debug("Attributes %s", client.attributes)
-    # await client.disconnect()
-    # await asyncio.sleep(5)
-    # await client.connect()
-    # await asyncio.sleep(5)
-    # await client.power_off()
     # await client.custom_command("channel '101'")
     # await client.custom_command("picture backlight -10")
     # results = await client.client.request("settings/getSystemSettings", {'category': 'picture', 'keys':['backlight']})
