@@ -1,0 +1,1 @@
+curl --http1.1 -i -N -H 'Sec-Websocket-Version: 13' -H 'Sec-Websocket-Key: QUo86XL2bHszCCpigvKqHg==' -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Host: echo.websocket.org" -H "Origin: https://$1:3001" https://$1:3001 -k
