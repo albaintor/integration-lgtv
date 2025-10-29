@@ -84,6 +84,8 @@ async def main():
     client.events.on(Events.UPDATE, on_device_update)
     # await client.power_on()
     await client.connect()
+    # print_json(data=await client._tv.get_power_state())
+    # await asyncio.sleep(120)
     # state = client._tv.tv_state
     # await _on_state_changed(state)
     # await asyncio.sleep(10)

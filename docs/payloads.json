@@ -1,0 +1,13 @@
+[// TV ON
+{
+  "state": "ON"
+},
+// Screen OFF
+{
+  "state": "Screen Off",
+  "returnValue": true
+},
+// Standby
+{
+  "state": "OFF"
+}]

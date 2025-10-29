@@ -48,8 +48,13 @@ Usually the controls to enable are located in `Settings > Support > IP control S
 - Also enable `Network IP Control` in the same section
 - Also enable `SDDP` for automatic device discovery
 - LG Connect Apps feature in Network settings or Mobile App in General settings of the TV for older models
+- Other settings to check depending on the model range :
+  - Enable `Quickstart+` (up to 2021 models)
+  - Enable `Always ready` (2022 or later)
+  - Disable `HDD Eco Mode`
 
 <img src="https://github.com/user-attachments/assets/19413040-76bf-4003-8a7e-3e09034f7a41" width="350">
+
 
 
 ### Setup
