@@ -16,7 +16,7 @@ from typing import Any
 import ucapi
 import ucapi.api_definitions as uc
 import websockets
-from ucapi.api import IntegrationAPI, filter_log_msg_data
+from ucapi.api import IntegrationAPI
 from ucapi.media_player import Attributes as MediaAttr
 from ucapi.media_player import States
 
@@ -271,6 +271,43 @@ async def on_device_update(device_id: str, update: dict[str, Any] | None) -> Non
 
     attributes = None
 
+    # Re-register entities if SOURCE_LIST changed (apps discovered)
+    # This updates simple_commands and UI pages with new app launch commands
+    # Only re-register if at least one entity is already configured by the Remote
+    if MediaAttr.SOURCE_LIST in update:
+        if device_id in _configured_devices:
+            device = _configured_devices[device_id]
+            device_config = config.devices.get(device_id)
+
+            # Check if any entity from this device is configured
+            has_configured_entity = any(
+                api.configured_entities.get(entity_id) is not None
+                for entity_id in _entities_from_device_id(device_id)
+            )
+
+            if device_config and has_configured_entity:
+                app_commands = device.app_buttons
+                _LOG.info(
+                    "[%s] Apps discovered (%d apps), updating available entities with dynamic commands: %s",
+                    device_id,
+                    len(app_commands),
+                    app_commands[:5] if len(app_commands) > 5 else app_commands  # Show first 5
+                )
+                # Re-register available entities with app commands
+                # Note: We don't remove configured entities as that breaks active subscriptions
+                # The Remote will pick up updated commands when it queries available entities
+                _register_available_entities(device_config, device)
+            elif device_config and not has_configured_entity:
+                app_commands = device.app_buttons
+                _LOG.info(
+                    "[%s] Apps discovered (%d apps), updating available entities with dynamic commands: %s",
+                    device_id,
+                    len(app_commands),
+                    app_commands[:5] if len(app_commands) > 5 else app_commands  # Show first 5
+                )
+                # Re-register available entities with app commands so Remote sees them
+                _register_available_entities(device_config, device)
+
     # TODO awkward logic: this needs better support from the integration library
     _LOG.info("Update device %s for configured devices %s", device_id, api.configured_entities)
     for entity_id in _entities_from_device_id(device_id):
@@ -415,13 +452,10 @@ async def patched_broadcast_ws_event(self, msg: str, msg_data: dict[str, Any], c
     """
     data = {"kind": "event", "msg": msg, "msg_data": msg_data, "cat": category}
     data_dump = json.dumps(data)
-    # filter fields
-    if _LOG.isEnabledFor(logging.DEBUG):
-        data_log = json.dumps(data) if filter_log_msg_data(data) else data_dump
     # pylint: disable = W0212
     for websocket in self._clients.copy():
         if _LOG.isEnabledFor(logging.DEBUG):
-            _LOG.debug("[%s] ->: %s", websocket.remote_address, data_log)
+            _LOG.debug("[%s] ->: %s", websocket.remote_address, data_dump)
         try:
             await websocket.send(data_dump)
         except websockets.exceptions.WebSocketException:

@@ -20,6 +20,7 @@ from config import LGConfigDevice, create_entity_id
 from const import (
     LG_REMOTE_BUTTONS_MAPPING,
     LG_REMOTE_UI_PAGES,
+    LG_SIMPLE_COMMANDS_CUSTOM,
 )
 from lg import LGDevice
 
@@ -58,14 +59,32 @@ class LGRemote(Remote):
         attributes = {
             Attributes.STATE: LG_REMOTE_STATE_MAPPING.get(device.state),
         }
+        # Merge static commands with dynamic app commands and custom commands
+        app_commands = device.app_buttons
+        simple_commands = list(BUTTONS) + list(LG_SIMPLE_COMMANDS_CUSTOM) + app_commands
+        if app_commands:
+            _LOG.info("LGRemote: Added %d dynamic app commands: %s", len(app_commands), app_commands[:5] if len(app_commands) > 5 else app_commands)
+        
+        # Merge static UI pages with dynamic apps page
+        ui_pages = list(LG_REMOTE_UI_PAGES)
+        try:
+            apps_page = device.generate_apps_ui_page()
+            if apps_page:
+                _LOG.info("LGRemote: Added dynamic 'Apps' UI page with %d apps", len(apps_page.items))
+                _LOG.debug("Apps page structure: page_id=%s, grid=%s, sample_items=%s", 
+                          apps_page.page_id, apps_page.grid, apps_page.items[:2] if len(apps_page.items) > 0 else [])
+                ui_pages.append(apps_page)
+        except Exception as ex:
+            _LOG.error("Failed to generate apps UI page: %s", ex, exc_info=True)
+        
         super().__init__(
             entity_id,
             config_device.name,
             features,
             attributes,
-            simple_commands=BUTTONS,
+            simple_commands=simple_commands,
             button_mapping=LG_REMOTE_BUTTONS_MAPPING,
-            ui_pages=LG_REMOTE_UI_PAGES,
+            ui_pages=ui_pages,
         )
 
     async def command(self, cmd_id: str, params: dict[str, Any] | None = None) -> StatusCodes:
@@ -135,10 +154,6 @@ class LGRemote(Remote):
             return await self._device.power_off()
         if command == Commands.TOGGLE:
             return await self._device.power_toggle()
-        if command in BUTTONS:
-            return await self._device.button(command)
-        if command == "INPUT_SOURCE":
-            return await self._device.select_source_next()
         if command == "INPUT_SOURCE":
             return await self._device.select_source_next()
         if command == "TURN_SCREEN_ON":
@@ -149,6 +164,10 @@ class LGRemote(Remote):
             return await self._device.turn_screen_on(webos_ver="4")
         if command == "TURN_SCREEN_OFF4":
             return await self._device.turn_screen_off(webos_ver="4")
+        if command.startswith("LAUNCH_"):
+            # Handle dynamic app launch commands
+            app_name = command[7:]  # Remove "LAUNCH_" prefix
+            return await self._device.launch_app_by_name(app_name)
         if command in self.options[Options.SIMPLE_COMMANDS]:
             return await self._device.button(command)
         return await self._device.custom_command(command)
