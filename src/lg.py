@@ -31,6 +31,7 @@ from typing import (
 import aiohttp
 import aiowebostv.endpoints as ep
 import ucapi
+from aiohttp import ClientOSError
 from aiowebostv import WebOsClient, WebOsTvCommandError, WebOsTvState
 from aiowebostv.webos_client import MAIN_WS_MAX_MSG_SIZE, WS_PORT, WSS_PORT
 from pyee.asyncio import AsyncIOEventEmitter
@@ -50,12 +51,12 @@ from const import (
 
 _LOG = logging.getLogger(__name__)
 
-DEFAULT_TIMEOUT = 2
+DEFAULT_TIMEOUT = 5
 BUFFER_LIFETIME = 30
 CONNECTION_RETRIES = 20
 CONNECT_LOCK_TIMEOUT = 20
-
 INIT_APPS_LAUNCH_DELAY = 10
+ERROR_OS_WAIT = 0.5
 
 SOURCE_IS_APP = "isApp"
 
@@ -538,7 +539,17 @@ class LGDevice:
             _LOG.debug("[%s] Connect", self._device_config.address)
             self._connecting = True
             self._tv = WebOsClient(host=self._device_config.address, client_key=self._device_config.key)
-            result = await self._tv.connect()
+            try:
+                result = await self._tv.connect()
+            except WEBOSTV_EXCEPTIONS as ex:
+                if isinstance(ex, ClientOSError):
+                    _LOG.warning("[%s] OS error, waiting %ss and retry connection",
+                                 self._device_config.address, ERROR_OS_WAIT)
+                    await asyncio.sleep(ERROR_OS_WAIT)
+                    result = await self._tv.connect()
+                else:
+                    raise ex
+
             if not result or self._tv.connection is None:
                 _LOG.error(
                     "[%s] Connection process done but the connection is not available", self._device_config.address
@@ -789,6 +800,11 @@ class LGDevice:
                 socket_instance.sendto(msg, (broadcast, wol_port))
             socket_instance.close()
 
+    async def _deferred_wakeonlan(self, delay: float):
+        """Send WakeOnLan packets after given delay."""
+        await asyncio.sleep(delay)
+        self.wakeonlan()
+
     async def check_connect(self) -> LGState:
         """Check power and connection state."""
         lg_state: LGState = LGState.ON
@@ -835,6 +851,8 @@ class LGDevice:
                 ip_address,
             )
             self.wakeonlan()
+            # Send another WakeOnLan request after a delay in case the remote is waking up otherwise it won't be sent
+            asyncio.create_task(self._deferred_wakeonlan(ERROR_OS_WAIT))
             self._retry_wakeonlan = True
             # This method power_on seems to no longer be supported
             # self._buffered_callbacks[time.time()] = {"object": self._tv, "function": WebOsClient.power_on}
