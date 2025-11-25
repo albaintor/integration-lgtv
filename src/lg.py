@@ -543,8 +543,9 @@ class LGDevice:
                 result = await self._tv.connect()
             except WEBOSTV_EXCEPTIONS as ex:
                 if isinstance(ex, ClientOSError):
-                    _LOG.warning("[%s] OS error, waiting %ss and retry connection",
-                                 self._device_config.address, ERROR_OS_WAIT)
+                    _LOG.warning(
+                        "[%s] OS error, waiting %ss and retry connection", self._device_config.address, ERROR_OS_WAIT
+                    )
                     await asyncio.sleep(ERROR_OS_WAIT)
                     result = await self._tv.connect()
                 else:
