@@ -326,5 +326,5 @@ class Devices:
 
         self._config_lock.release()
 
-
+# pylint: disable=C0103
 devices: Devices | None = None
