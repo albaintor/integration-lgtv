@@ -9,6 +9,7 @@ This module implements the AVR AVR receiver communication of the Remote Two inte
 import ast
 import asyncio
 import logging
+import re
 import socket
 import struct
 import time
@@ -37,6 +38,7 @@ from aiowebostv.webos_client import MAIN_WS_MAX_MSG_SIZE, WS_PORT, WSS_PORT
 from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr
 from ucapi.media_player import Features, MediaType, States
+from ucapi.ui import UiPage
 
 from config import LGConfigDevice
 from const import (
@@ -342,11 +344,14 @@ class LGDevice:
             self._sources["Live TV"] = app
             self._sources[app["title"]][SOURCE_IS_APP] = True
 
-        if (
-            not current_source_list and self._sources
-        ):  # or (self._sources and list(self._sources.keys()).sort() != list(current_source_list).sort()):
-            _LOG.debug("[%s] Source list %s", self._device_config.address, self._sources)
-            updated_data[MediaAttr.SOURCE_LIST] = self.source_list
+        # Always update SOURCE_LIST when sources change
+        if self._sources:
+            new_source_list = self.source_list
+            # Compare with previous source list (convert dict keys to sorted list for comparison)
+            old_source_list = sorted(current_source_list.keys()) if current_source_list else []
+            if new_source_list != old_source_list:
+                _LOG.debug("[%s] Source list updated: %s", self._device_config.address, new_source_list)
+                updated_data[MediaAttr.SOURCE_LIST] = new_source_list
 
         if active_source != self._active_source:
             _LOG.debug("[%s] Active source %s", self._device_config.address, active_source)
@@ -710,6 +715,69 @@ class LGDevice:
         """Return the current input source."""
         return self._active_source
 
+    @staticmethod
+    def _sanitize_app_name_for_command(app_name: str) -> str:
+        """Convert app name to command format (e.g., 'YouTube' -> 'YOUTUBE', 'Disney+' -> 'DISNEY_PLUS')."""
+        # Remove special characters and replace spaces/dashes with underscores
+        sanitized = re.sub(r"[^\w\s-]", "", app_name)  # Remove special chars except spaces and dashes
+        sanitized = re.sub(r"[\s-]+", "_", sanitized)  # Replace spaces and dashes with underscore
+        return sanitized.upper()
+
+    @property
+    def app_buttons(self) -> list[str]:
+        """Return list of LAUNCH_* commands for installed apps."""
+        commands = []
+        for source_name, source in self._sources.items():
+            if source.get(SOURCE_IS_APP, False):
+                command_name = f"LAUNCH_{self._sanitize_app_name_for_command(source_name)}"
+                commands.append(command_name)
+        return sorted(commands)
+
+    @property
+    def apps_with_commands(self) -> dict[str, str]:
+        """Return mapping of command names to app titles for installed apps."""
+        mapping = {}
+        for source_name, source in self._sources.items():
+            if source.get(SOURCE_IS_APP, False):
+                command_name = f"LAUNCH_{self._sanitize_app_name_for_command(source_name)}"
+                mapping[command_name] = source_name
+        return mapping
+
+    def generate_apps_ui_page(self) -> UiPage | None:
+        """
+        Generate dynamic UI page with app launch buttons.
+
+        Creates a 4-column grid with up to 24 apps (6 rows).
+        Returns None if no apps are available.
+        """
+        apps = [(name, source) for name, source in self._sources.items() if source.get(SOURCE_IS_APP, False)]
+
+        if not apps:
+            return None
+
+        # Sort apps alphabetically
+        apps.sort(key=lambda x: x[0])
+
+        # Limit to 24 apps (4x6 grid)
+        apps = apps[:24]
+
+        items = []
+        for idx, (app_name, _) in enumerate(apps):
+            row = idx // 4
+            col = idx % 4
+            command_name = f"LAUNCH_{self._sanitize_app_name_for_command(app_name)}"
+
+            items.append(
+                {
+                    "command": {"cmd_id": command_name},
+                    "text": app_name,
+                    "location": {"x": col, "y": row},
+                    "type": "text",
+                }
+            )
+
+        return UiPage(**{"page_id": "LG_apps", "name": "Apps", "grid": {"width": 4, "height": 6}, "items": items})
+
     @property
     def sound_output(self) -> str | None:
         """Return the current sound output."""
@@ -1070,6 +1138,45 @@ class LGDevice:
         except Exception as ex:
             _LOG.error("[%s] LG TV unknown error select_source %s", self._device_config.address, ex)
         return ucapi.StatusCodes.BAD_REQUEST
+
+    async def launch_app_by_name(self, app_name: str) -> ucapi.StatusCodes:
+        """
+        Launch app by name with fuzzy matching.
+
+        Supports both exact matches and sanitized command format.
+        Example: 'YOUTUBE' or 'YouTube' will match 'YouTube' app.
+        """
+        if not app_name:
+            return ucapi.StatusCodes.BAD_REQUEST
+
+        _LOG.debug("[%s] Launching app by name: %s", self._device_config.address, app_name)
+
+        # Try exact match first (case-insensitive)
+        for source_name, source in self._sources.items():
+            if source.get(SOURCE_IS_APP, False):
+                if source_name.lower() == app_name.lower():
+                    _LOG.debug("[%s] Found exact app match: %s", self._device_config.address, source_name)
+                    return await self.select_source(source_name)
+
+        # Try sanitized match (convert command format back to potential app name)
+        # E.g., "YOUTUBE" or "DISNEY_PLUS" -> match against sanitized app names
+        sanitized_search = app_name.upper().replace("_", " ")
+        for source_name, source in self._sources.items():
+            if source.get(SOURCE_IS_APP, False):
+                sanitized_source = self._sanitize_app_name_for_command(source_name)
+                if sanitized_source == sanitized_search.upper():
+                    _LOG.debug("[%s] Found sanitized app match: %s", self._device_config.address, source_name)
+                    return await self.select_source(source_name)
+
+        # Try partial match as fallback
+        for source_name, source in self._sources.items():
+            if source.get(SOURCE_IS_APP, False):
+                if app_name.lower() in source_name.lower():
+                    _LOG.debug("[%s] Found partial app match: %s", self._device_config.address, source_name)
+                    return await self.select_source(source_name)
+
+        _LOG.warning("[%s] App not found: %s", self._device_config.address, app_name)
+        return ucapi.StatusCodes.NOT_FOUND
 
     async def select_sound_output_deferred(self, sound_output: str | None) -> ucapi.StatusCodes:
         """Set sound output."""

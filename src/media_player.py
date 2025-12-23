@@ -48,7 +48,16 @@ class LGTVMediaPlayer(MediaPlayer):
             Attributes.MEDIA_TYPE: device.media_type,
         }
         _LOG.debug("LGTVMediaPlayer init %s : %s", entity_id, attributes)
-        options = {Options.SIMPLE_COMMANDS: LG_SIMPLE_COMMANDS}
+        # Merge static commands with dynamic app commands
+        app_commands = device.app_buttons
+        simple_commands = list(LG_SIMPLE_COMMANDS) + app_commands
+        if app_commands:
+            _LOG.info(
+                "LGTVMediaPlayer: Added %d dynamic app commands: %s",
+                len(app_commands),
+                app_commands[:5] if len(app_commands) > 5 else app_commands,
+            )
+        options = {Options.SIMPLE_COMMANDS: simple_commands}
         super().__init__(
             entity_id,
             config_device.name,
@@ -175,7 +184,11 @@ class LGTVMediaPlayer(MediaPlayer):
         elif cmd_id == Commands.SELECT_SOUND_MODE:
             res = await self._device.select_sound_output(params.get("mode"))
         elif cmd_id in self.options[Options.SIMPLE_COMMANDS]:
-            if cmd_id in LG_SIMPLE_COMMANDS_CUSTOM:
+            if cmd_id.startswith("LAUNCH_"):
+                # Handle dynamic app launch commands
+                app_name = cmd_id[7:]  # Remove "LAUNCH_" prefix
+                res = await self._device.launch_app_by_name(app_name)
+            elif cmd_id in LG_SIMPLE_COMMANDS_CUSTOM:
                 if cmd_id == "INPUT_SOURCE":
                     res = await self._device.select_source_next()
                 elif cmd_id == "TURN_SCREEN_ON":
