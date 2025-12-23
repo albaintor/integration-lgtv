@@ -719,8 +719,8 @@ class LGDevice:
     def _sanitize_app_name_for_command(app_name: str) -> str:
         """Convert app name to command format (e.g., 'YouTube' -> 'YOUTUBE', 'Disney+' -> 'DISNEY_PLUS')."""
         # Remove special characters and replace spaces/dashes with underscores
-        sanitized = re.sub(r'[^\w\s-]', '', app_name)  # Remove special chars except spaces and dashes
-        sanitized = re.sub(r'[\s-]+', '_', sanitized)  # Replace spaces and dashes with underscore
+        sanitized = re.sub(r"[^\w\s-]", "", app_name)  # Remove special chars except spaces and dashes
+        sanitized = re.sub(r"[\s-]+", "_", sanitized)  # Replace spaces and dashes with underscore
         return sanitized.upper()
 
     @property
@@ -746,42 +746,37 @@ class LGDevice:
     def generate_apps_ui_page(self) -> UiPage | None:
         """
         Generate dynamic UI page with app launch buttons.
-        
+
         Creates a 4-column grid with up to 24 apps (6 rows).
         Returns None if no apps are available.
         """
         apps = [(name, source) for name, source in self._sources.items() if source.get(SOURCE_IS_APP, False)]
-        
+
         if not apps:
             return None
-        
+
         # Sort apps alphabetically
         apps.sort(key=lambda x: x[0])
-        
+
         # Limit to 24 apps (4x6 grid)
         apps = apps[:24]
-        
+
         items = []
-        for idx, (app_name, app_data) in enumerate(apps):
+        for idx, (app_name, _) in enumerate(apps):
             row = idx // 4
             col = idx % 4
             command_name = f"LAUNCH_{self._sanitize_app_name_for_command(app_name)}"
-            
-            items.append({
-                "command": {"cmd_id": command_name},
-                "text": app_name,
-                "location": {"x": col, "y": row},
-                "type": "text",
-            })
-        
-        return UiPage(
-            **{
-                "page_id": "LG_apps",
-                "name": "Apps",
-                "grid": {"width": 4, "height": 6},
-                "items": items
-            }
-        )
+
+            items.append(
+                {
+                    "command": {"cmd_id": command_name},
+                    "text": app_name,
+                    "location": {"x": col, "y": row},
+                    "type": "text",
+                }
+            )
+
+        return UiPage(**{"page_id": "LG_apps", "name": "Apps", "grid": {"width": 4, "height": 6}, "items": items})
 
     @property
     def sound_output(self) -> str | None:
@@ -1147,39 +1142,39 @@ class LGDevice:
     async def launch_app_by_name(self, app_name: str) -> ucapi.StatusCodes:
         """
         Launch app by name with fuzzy matching.
-        
+
         Supports both exact matches and sanitized command format.
         Example: 'YOUTUBE' or 'YouTube' will match 'YouTube' app.
         """
         if not app_name:
             return ucapi.StatusCodes.BAD_REQUEST
-        
+
         _LOG.debug("[%s] Launching app by name: %s", self._device_config.address, app_name)
-        
+
         # Try exact match first (case-insensitive)
         for source_name, source in self._sources.items():
             if source.get(SOURCE_IS_APP, False):
                 if source_name.lower() == app_name.lower():
                     _LOG.debug("[%s] Found exact app match: %s", self._device_config.address, source_name)
                     return await self.select_source(source_name)
-        
+
         # Try sanitized match (convert command format back to potential app name)
         # E.g., "YOUTUBE" or "DISNEY_PLUS" -> match against sanitized app names
-        sanitized_search = app_name.upper().replace('_', ' ')
+        sanitized_search = app_name.upper().replace("_", " ")
         for source_name, source in self._sources.items():
             if source.get(SOURCE_IS_APP, False):
                 sanitized_source = self._sanitize_app_name_for_command(source_name)
-                if sanitized_source == app_name.upper():
+                if sanitized_source == sanitized_search.upper():
                     _LOG.debug("[%s] Found sanitized app match: %s", self._device_config.address, source_name)
                     return await self.select_source(source_name)
-        
+
         # Try partial match as fallback
         for source_name, source in self._sources.items():
             if source.get(SOURCE_IS_APP, False):
                 if app_name.lower() in source_name.lower():
                     _LOG.debug("[%s] Found partial app match: %s", self._device_config.address, source_name)
                     return await self.select_source(source_name)
-        
+
         _LOG.warning("[%s] App not found: %s", self._device_config.address, app_name)
         return ucapi.StatusCodes.NOT_FOUND
 

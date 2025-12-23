@@ -281,8 +281,7 @@ async def on_device_update(device_id: str, update: dict[str, Any] | None) -> Non
 
             # Check if any entity from this device is configured
             has_configured_entity = any(
-                api.configured_entities.get(entity_id) is not None
-                for entity_id in _entities_from_device_id(device_id)
+                api.configured_entities.get(entity_id) is not None for entity_id in _entities_from_device_id(device_id)
             )
 
             if device_config and has_configured_entity:
@@ -291,7 +290,7 @@ async def on_device_update(device_id: str, update: dict[str, Any] | None) -> Non
                     "[%s] Apps discovered (%d apps), updating available entities with dynamic commands: %s",
                     device_id,
                     len(app_commands),
-                    app_commands[:5] if len(app_commands) > 5 else app_commands  # Show first 5
+                    app_commands[:5] if len(app_commands) > 5 else app_commands,  # Show first 5
                 )
                 # Re-register available entities with app commands
                 # Note: We don't remove configured entities as that breaks active subscriptions
@@ -303,7 +302,7 @@ async def on_device_update(device_id: str, update: dict[str, Any] | None) -> Non
                     "[%s] Apps discovered (%d apps), updating available entities with dynamic commands: %s",
                     device_id,
                     len(app_commands),
-                    app_commands[:5] if len(app_commands) > 5 else app_commands  # Show first 5
+                    app_commands[:5] if len(app_commands) > 5 else app_commands,  # Show first 5
                 )
                 # Re-register available entities with app commands so Remote sees them
                 _register_available_entities(device_config, device)

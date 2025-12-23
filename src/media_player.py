@@ -52,7 +52,11 @@ class LGTVMediaPlayer(MediaPlayer):
         app_commands = device.app_buttons
         simple_commands = list(LG_SIMPLE_COMMANDS) + app_commands
         if app_commands:
-            _LOG.info("LGTVMediaPlayer: Added %d dynamic app commands: %s", len(app_commands), app_commands[:5] if len(app_commands) > 5 else app_commands)
+            _LOG.info(
+                "LGTVMediaPlayer: Added %d dynamic app commands: %s",
+                len(app_commands),
+                app_commands[:5] if len(app_commands) > 5 else app_commands,
+            )
         options = {Options.SIMPLE_COMMANDS: simple_commands}
         super().__init__(
             entity_id,

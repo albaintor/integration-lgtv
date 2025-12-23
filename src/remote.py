@@ -63,20 +63,28 @@ class LGRemote(Remote):
         app_commands = device.app_buttons
         simple_commands = list(BUTTONS) + list(LG_SIMPLE_COMMANDS_CUSTOM) + app_commands
         if app_commands:
-            _LOG.info("LGRemote: Added %d dynamic app commands: %s", len(app_commands), app_commands[:5] if len(app_commands) > 5 else app_commands)
-        
+            _LOG.info(
+                "LGRemote: Added %d dynamic app commands: %s",
+                len(app_commands),
+                app_commands[:5] if len(app_commands) > 5 else app_commands,
+            )
+
         # Merge static UI pages with dynamic apps page
         ui_pages = list(LG_REMOTE_UI_PAGES)
         try:
             apps_page = device.generate_apps_ui_page()
             if apps_page:
                 _LOG.info("LGRemote: Added dynamic 'Apps' UI page with %d apps", len(apps_page.items))
-                _LOG.debug("Apps page structure: page_id=%s, grid=%s, sample_items=%s", 
-                          apps_page.page_id, apps_page.grid, apps_page.items[:2] if len(apps_page.items) > 0 else [])
+                _LOG.debug(
+                    "Apps page structure: page_id=%s, grid=%s, sample_items=%s",
+                    apps_page.page_id,
+                    apps_page.grid,
+                    apps_page.items[:2] if len(apps_page.items) > 0 else [],
+                )
                 ui_pages.append(apps_page)
-        except Exception as ex:
+        except Exception as ex:  # pylint: disable = W0718
             _LOG.error("Failed to generate apps UI page: %s", ex, exc_info=True)
-        
+
         super().__init__(
             entity_id,
             config_device.name,
