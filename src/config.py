@@ -286,7 +286,7 @@ class Devices:
             return
         if self._config_lock.locked():
             _LOG.debug("Check device change already in progress")
-            return False
+            return
 
         # Only one instance of devices change
         await self._config_lock.acquire()
@@ -327,4 +327,4 @@ class Devices:
         self._config_lock.release()
 
 
-devices: Devices | None = None
+devices: Devices | None = None  # pylint: disable=C0103

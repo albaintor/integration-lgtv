@@ -383,10 +383,10 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
         _LOG.debug("Starting manual driver setup for %s", address)
         try:
             # simple connection check
-            device = WebOsClient(address)
-            await device.connect()
+            _pairing_lg_tv = WebOsClient(address)
+            await _pairing_lg_tv.connect()
             try:
-                info = await device.get_system_info()
+                info = await _pairing_lg_tv.get_system_info()
                 model_name = info.get("modelName")
             except Exception as exc:
                 _LOG.info("Cannot get system info, trying to retrieve the model name either way %s: %s", address, exc)
@@ -395,7 +395,7 @@ async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupEr
                 # unique_id = info.software.get("device_id")
 
             dropdown_items.append({"id": address, "label": {"en": f"{model_name} [{address}]"}})
-            await device.disconnect()
+            await _pairing_lg_tv.disconnect()
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("Cannot connect to manually entered address %s: %s", address, ex)
             return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)

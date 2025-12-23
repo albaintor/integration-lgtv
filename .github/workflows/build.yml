@@ -15,7 +15,7 @@ env:
   INTG_NAME: lgtv
   HASH_FILENAME: uc-intg-lgtv.hash
   # Python version to use in the builder image. See https://hub.docker.com/r/unfoldedcircle/r2-pyinstaller for possible versions.
-  PYTHON_VER: 3.11.6-0.2.0
+  PYTHON_VER: 3.11.13-0.4.0
 
 jobs:
   build:
