@@ -29,9 +29,11 @@ Supported commands:
 - Digit numbers
 - Subtitle/audio language switching
 
-2 sensors are exposed :
+4 sensors are exposed :
 - Current input source
 - Current volume level
+- Muted state
+- Current sound output
 
 ## Installation on the Remote
 
