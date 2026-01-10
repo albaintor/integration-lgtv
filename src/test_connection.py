@@ -25,7 +25,8 @@ asyncio.set_event_loop(_LOOP)
 # 77
 address = "192.168.1.118"
 mac_address = "4c:ba:d7:64:8c:b0"
-pairing_key = "88de3f23b5cc6bf5d8c8c37086cdad6d"
+# mac_address2 = "ac:5a:f0:97:66:76"
+pairing_key = "08430cefd592affb85fd56ffb31cd489"
 
 
 async def pair():
@@ -133,6 +134,7 @@ if __name__ == "__main__":
     logging.basicConfig(handlers=[ch])
     logging.getLogger("client").setLevel(logging.DEBUG)
     logging.getLogger("lg").setLevel(logging.DEBUG)
+    logging.getLogger("aiowebostv").setLevel(logging.DEBUG)
     logging.getLogger(__name__).setLevel(logging.DEBUG)
     _LOOP.run_until_complete(main())
     _LOOP.run_forever()

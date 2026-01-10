@@ -49,6 +49,7 @@ from const import (
     LG_SOUND_OUTPUTS,
     LIVE_TV_APP_ID,
     WEBOSTV_EXCEPTIONS,
+    LGSensors,
 )
 
 _LOG = logging.getLogger(__name__)
@@ -310,7 +311,7 @@ class LGDevice:
         await self._tv.register_state_update_callback(_on_state_changed)
         await self._tv.subscribe_sound_output(_on_sound_output_changed)
 
-    def _update_sources(self, updated_data: any) -> None:
+    def _update_sources(self, updated_data: dict[str, Any]) -> None:
         """Update list of sources from current source, apps, inputs and configured list."""
         current_source_list = self._sources
         self._sources = {}
@@ -357,6 +358,7 @@ class LGDevice:
             _LOG.debug("[%s] Active source %s", self._device_config.address, active_source)
             self._active_source = active_source
             updated_data[MediaAttr.SOURCE] = self._active_source
+            updated_data[LGSensors.INPUT_SOURCE] = self._active_source
 
     async def _update_states(self, data: WebOsClient | None) -> None:
         """Update entity state attributes."""
@@ -648,7 +650,7 @@ class LGDevice:
         return self._unique_id
 
     @property
-    def attributes(self) -> dict[str, any]:
+    def attributes(self) -> dict[str, Any]:
         """Return the device attributes."""
         updated_data = {
             MediaAttr.STATE: self.state,
@@ -658,6 +660,7 @@ class LGDevice:
             MediaAttr.MEDIA_IMAGE_URL: self.media_image_url,
             MediaAttr.MEDIA_TITLE: self.media_title,
             MediaAttr.SOUND_MODE_LIST: self.sound_outputs,
+            LGSensors.INPUT_SOURCE: self._active_source,
         }
         if self.source_list:
             updated_data[MediaAttr.SOURCE_LIST] = self.source_list
@@ -791,7 +794,7 @@ class LGDevice:
         return _sound_output
 
     @property
-    def sound_outputs(self) -> [str]:
+    def sound_outputs(self) -> list[str]:
         """Return the current sound output."""
         return list(LG_SOUND_OUTPUTS.values())
 
@@ -1311,7 +1314,7 @@ class LGDevice:
         await self.luna_command(endpoint, params)
         return ucapi.StatusCodes.OK
 
-    async def luna_command(self, endpoint: str, params: dict) -> dict[str, any]:
+    async def luna_command(self, endpoint: str, params: dict) -> dict[str, Any]:
         """Call a Luna command from string in format : endpoint {optional json parameters}.
 
         This method uses system dialogs to trigger command and dismiss the prompt.

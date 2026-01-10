@@ -523,6 +523,7 @@ async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | Setu
         interface="0.0.0.0",
         broadcast=None,
         wol_port=9,
+        update_apps_list=True,
         log=False,
     )
 
@@ -606,6 +607,14 @@ def get_additional_settings(config_device: LGConfigDevice) -> RequestUserInput:
                 "fr": "Régénérer la clé d'appairage et tester la connection",
             },
             "field": {"checkbox": {"value": False}},
+        },
+        {
+            "id": "update_apps_list",
+            "label": {
+                "en": "Update apps list and re-register entities if necessary",
+                "fr": "Maintenir la liste des apps à jour et enregistrer les entités à nouveau si nécessaire",
+            },
+            "field": {"checkbox": {"value": True}},
         },
         {
             "id": "log",
@@ -743,6 +752,14 @@ def get_wakeonlan_settings() -> RequestUserInput:
                 },
             },
             {
+                "id": "update_apps_list",
+                "label": {
+                    "en": "Update apps list and re-register entities if necessary",
+                    "fr": "Maintenir la liste des apps à jour et enregistrer les entités à nouveau si nécessaire",
+                },
+                "field": {"checkbox": {"value": _reconfigured_device.update_apps_list}},
+            },
+            {
                 "id": "log",
                 "label": {
                     "en": "Enable additional traces for debugging",
@@ -765,6 +782,7 @@ async def handle_additional_settings(msg: UserDataResponse) -> RequestUserConfir
     broadcast = msg.input_values.get("broadcast", "")
     test_wakeonlan = msg.input_values.get("test_wakeonlan", "false") == "true"
     pairing = msg.input_values.get("pairing", "false") == "true"
+    update_apps_list = msg.input_values.get("update_apps_list", "false") == "true"
     log = msg.input_values.get("log", "false") == "true"
     _LOG.debug("Handle additional settings")
 
@@ -790,6 +808,7 @@ async def handle_additional_settings(msg: UserDataResponse) -> RequestUserConfir
     _reconfigured_device.broadcast = broadcast
     _reconfigured_device.wol_port = wolport
     _reconfigured_device.log = log
+    _reconfigured_device.update_apps_list = update_apps_list
 
     if pairing:
         client = WebOsClient(_reconfigured_device.address)

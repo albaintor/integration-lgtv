@@ -16,7 +16,7 @@ from ucapi.remote import Attributes, Commands, Features, Options
 from ucapi.remote import States as RemoteStates
 
 from buttons import BUTTONS
-from config import LGConfigDevice, create_entity_id
+from config import LGConfigDevice, LGEntity, create_entity_id
 from const import (
     LG_REMOTE_BUTTONS_MAPPING,
     LG_REMOTE_UI_PAGES,
@@ -47,7 +47,7 @@ def get_int_param(param: str, params: dict[str, Any], default: int):
     return value
 
 
-class LGRemote(Remote):
+class LGRemote(Remote, LGEntity):
     """Representation of a LG Remote entity."""
 
     def __init__(self, config_device: LGConfigDevice, device: LGDevice):
@@ -94,6 +94,11 @@ class LGRemote(Remote):
             button_mapping=LG_REMOTE_BUTTONS_MAPPING,
             ui_pages=ui_pages,
         )
+
+    @property
+    def deviceid(self) -> str:
+        """Returns the device identifier."""
+        return self._device.id
 
     async def command(self, cmd_id: str, params: dict[str, Any] | None = None) -> StatusCodes:
         """

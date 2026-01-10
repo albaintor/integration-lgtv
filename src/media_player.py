@@ -19,7 +19,7 @@ from ucapi.media_player import (
 )
 
 import lg
-from config import LGConfigDevice, create_entity_id
+from config import LGConfigDevice, LGEntity, create_entity_id
 from const import LG_SIMPLE_COMMANDS, LG_SIMPLE_COMMANDS_CUSTOM
 
 # pylint: disable = R0801
@@ -27,7 +27,7 @@ from const import LG_SIMPLE_COMMANDS, LG_SIMPLE_COMMANDS_CUSTOM
 _LOG = logging.getLogger(__name__)
 
 
-class LGTVMediaPlayer(MediaPlayer):
+class LGTVMediaPlayer(MediaPlayer, LGEntity):
     """Representation of a Sony Media Player entity."""
 
     def __init__(self, config_device: LGConfigDevice, device: lg.LGDevice):
@@ -66,6 +66,11 @@ class LGTVMediaPlayer(MediaPlayer):
             device_class=DeviceClasses.RECEIVER,
             options=options,
         )
+
+    @property
+    def deviceid(self) -> str:
+        """Returns the device identifier."""
+        return self._device.id
 
     async def command(self, cmd_id: str, params: dict[str, Any] | None = None) -> StatusCodes:
         """

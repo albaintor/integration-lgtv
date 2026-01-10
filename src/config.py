@@ -13,13 +13,22 @@ from asyncio import Lock
 from dataclasses import dataclass, field, fields
 from typing import Callable, Iterator
 
-from ucapi import EntityTypes
+from ucapi import Entity, EntityTypes
 
 import discover
 
 _LOG = logging.getLogger(__name__)
 
 _CFG_FILENAME = "config.json"
+
+
+class LGEntity(Entity):
+    """Global LG entity."""
+
+    @property
+    def deviceid(self) -> str:
+        """Return the device identifier."""
+        raise NotImplementedError()
 
 
 def create_entity_id(avr_id: str, entity_type: EntityTypes) -> str:
@@ -53,6 +62,7 @@ class LGConfigDevice:
     interface: str | None = field(default="0.0.0.0")
     wol_port: int | None = field(default=9)
     log: bool | None = field(default=False)
+    update_apps_list: bool | None = field(default=True)
 
     def __post_init__(self):
         """Apply default values on missing fields."""

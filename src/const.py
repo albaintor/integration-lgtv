@@ -1,6 +1,7 @@
 """Constants used for LG webOS Smart TV."""
 
 import asyncio
+from enum import Enum
 from xmlrpc.client import ProtocolError
 
 from aiohttp import (
@@ -14,6 +15,14 @@ from aiowebostv.exceptions import WebOsTvError
 from httpx import TransportError
 from ucapi.media_player import Features, States
 from ucapi.ui import Buttons, DeviceButtonMapping, UiPage
+
+
+class LGSensors(str, Enum):
+    """Kodi sensor values."""
+
+    INPUT_SOURCE = "input_source"
+    CURRENT_VOLUME = "current_volume"
+
 
 LIVE_TV_APP_ID = "com.webos.app.livetv"
 
