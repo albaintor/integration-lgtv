@@ -148,7 +148,7 @@ class LGSensorMuted(LGSensor):
                 attributes[Attributes.VALUE] = update[LGSensors.SENSOR_MUTED]
             return attributes
         return {
-            Attributes.VALUE: self._device.is_volume_muted,
+            Attributes.VALUE: "on" if self._device.is_volume_muted else "off",
             Attributes.STATE: SENSOR_STATE_MAPPING.get(self._device.state),
         }
 

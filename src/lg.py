@@ -412,7 +412,7 @@ class LGDevice:
         if muted != self._attr_is_volume_muted:
             self._attr_is_volume_muted = muted
             updated_data[MediaAttr.MUTED] = self._attr_is_volume_muted
-            updated_data[LGSensors.SENSOR_MUTED] = self._attr_is_volume_muted
+            updated_data[LGSensors.SENSOR_MUTED] = "on" if self._attr_is_volume_muted else "off"
 
         if self._tv.tv_state.volume is not None:
             volume = cast(float, self._tv.tv_state.volume)
@@ -663,7 +663,7 @@ class LGDevice:
             MediaAttr.SOUND_MODE_LIST: self.sound_outputs,
             LGSensors.SENSOR_INPUT_SOURCE: self._active_source,
             LGSensors.SENSOR_VOLUME: self.volume_level,
-            LGSensors.SENSOR_MUTED: self.is_volume_muted,
+            LGSensors.SENSOR_MUTED: "on" if self.is_volume_muted else "off",
         }
         if self.source_list:
             updated_data[MediaAttr.SOURCE_LIST] = self.source_list
