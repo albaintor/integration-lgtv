@@ -28,7 +28,12 @@ import sensor
 import setup_flow
 from config import LGEntity
 from const import WEBOSTV_EXCEPTIONS
-from sensor import LGSensorInputSource, LGSensorMuted, LGSensorVolume
+from sensor import (
+    LGSensorInputSource,
+    LGSensorMuted,
+    LGSensorSoundOutput,
+    LGSensorVolume,
+)
 
 _LOG = logging.getLogger("driver")  # avoid having __main__ in log messages
 if sys.platform == "win32":
@@ -394,6 +399,7 @@ def _entities_from_device_id(device_id: str) -> list[str]:
         f"sensor.{device_id}.{LGSensorInputSource.ENTITY_NAME}",
         f"sensor.{device_id}.{LGSensorVolume.ENTITY_NAME}",
         f"sensor.{device_id}.{LGSensorMuted.ENTITY_NAME}",
+        f"sensor.{device_id}.{LGSensorSoundOutput.ENTITY_NAME}",
     ]
 
 
@@ -451,6 +457,7 @@ def _register_available_entities(device_config: config.LGConfigDevice, device: l
         sensor.LGSensorInputSource(device_config, device),
         sensor.LGSensorVolume(device_config, device),
         sensor.LGSensorMuted(device_config, device),
+        sensor.LGSensorSoundOutput(device_config, device),
     ]
     for entity in entities:
         if api.available_entities.contains(entity.id):

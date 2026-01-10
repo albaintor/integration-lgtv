@@ -65,7 +65,6 @@ async def on_device_update(device_id: str, update: dict[str, Any] | None) -> Non
 
 
 async def direct_connect():
-    client_session = ClientSession()
     tv: WebOsClient = WebOsClient(host=address, client_key=pairing_key)
     await tv.connect()
     await asyncio.sleep(50)
@@ -94,7 +93,12 @@ async def main():
     await client.power_on()
     await client.connect()
     # print_json(data=await client._tv.get_software_info())
-    # print_json(data=await client._tv.get_system_info())
+    # print_json(data=await client._tv.get_power_state())
+    # print_json(data=await client._tv.get_current_app())
+    # print_json(data=await client._tv.get_media_foreground_app())
+    # print_json(data=await client._tv.get_audio_status())
+    # print_json(data=await client._tv.get_input())
+
     await asyncio.sleep(50)
     # print_json(data=await client._tv.get_power_state())
     # await asyncio.sleep(120)
@@ -116,7 +120,6 @@ async def main():
     # await client.custom_command("system.launcher/launch {'id': 'com.webos.app.screensaver'}")
     # await client.custom_command("system.launcher/close {'id': 'com.webos.app.screensaver'}")
     # await client.custom_notification("com.webos.settingsservice/setSystemSettings {'category': 'picture', 'settings': {'pictureMode': 'expert2'}}")
-
     exit(0)
     # sources = client.source_list
     # print(sources)
@@ -146,6 +149,6 @@ if __name__ == "__main__":
     logging.getLogger("lg").setLevel(logging.DEBUG)
     logging.getLogger("aiowebostv").setLevel(logging.DEBUG)
     logging.getLogger(__name__).setLevel(logging.DEBUG)
-    # _LOOP.run_until_complete(main())
-    _LOOP.run_until_complete(direct_connect())
+    _LOOP.run_until_complete(main())
+    # _LOOP.run_until_complete(direct_connect())
     _LOOP.run_forever()
