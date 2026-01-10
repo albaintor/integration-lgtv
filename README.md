@@ -3,7 +3,7 @@
 Using [AioWebOSTV](https://github.com/home-assistant-libs/aiowebostv)
 and [uc-integration-api](https://github.com/aitatoi/integration-python-library)
 
-The driver discovers LG TVs on the network. A media player entity is exposed to the core.
+The driver discovers LG TVs on the network. A media player, a remote entity and several sensors entities are exposed to the core.
 
 Supported attributes:
 - State (on, off, playing, paused, unknown)
@@ -29,6 +29,9 @@ Supported commands:
 - Digit numbers
 - Subtitle/audio language switching
 
+2 sensors are exposed :
+- Current input source
+- Current volume level
 
 ## Installation on the Remote
 
@@ -55,7 +58,7 @@ Usually the controls to enable are located in `Settings > Support > IP control S
 
 <img src="https://github.com/user-attachments/assets/19413040-76bf-4003-8a7e-3e09034f7a41" width="350">
 
-
+If you have troubles connecting to the TV, try to unplug and replug electrically the TV to recover a better network state.
 
 ### Setup
 
