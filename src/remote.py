@@ -97,7 +97,7 @@ class LGRemote(Remote, LGEntity):
 
     @property
     def deviceid(self) -> str:
-        """Returns the device identifier."""
+        """Return the device identifier."""
         return self._device.id
 
     async def command(self, cmd_id: str, params: dict[str, Any] | None = None) -> StatusCodes:

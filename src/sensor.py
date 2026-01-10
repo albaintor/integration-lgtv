@@ -54,11 +54,11 @@ class LGSensor(LGEntity, Sensor):
 
     @property
     def deviceid(self) -> str:
-        """Returns the device identifier."""
+        """Return the device identifier."""
         return self._device.id
 
     def update_attributes(self, update: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Returns the updated attributes of current sensor entity."""
+        """Return the updated attributes of current sensor entity."""
         raise NotImplementedError()
 
 
@@ -68,6 +68,7 @@ class LGSensorInputSource(LGSensor):
     ENTITY_NAME = "input_source"
 
     def __init__(self, config_device: LGConfigDevice, device: lg.LGDevice):
+        """Initialize the class."""
         entity_id = f"{create_entity_id(config_device.id, EntityTypes.SENSOR)}.{LGSensorInputSource.ENTITY_NAME}"
         # TODO : dict instead of name to report language names
         self._device = device
@@ -95,6 +96,7 @@ class LGSensorVolume(LGSensor):
     ENTITY_NAME = "current_volume"
 
     def __init__(self, config_device: LGConfigDevice, device: lg.LGDevice):
+        """Initialize the class."""
         entity_id = f"{create_entity_id(config_device.id, EntityTypes.SENSOR)}.{LGSensorVolume.ENTITY_NAME}"
         # TODO : dict instead of name to report language names
         self._device = device
