@@ -36,7 +36,7 @@ from lg import LGDevice
 _LOG = logging.getLogger(__name__)
 
 
-# pylint: disable = W1405
+# pylint: disable=W1405,C0103
 
 
 class SetupSteps(IntEnum):
