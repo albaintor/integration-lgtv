@@ -58,7 +58,7 @@ Usually the controls to enable are located in `Settings > Support > IP control S
 
 <img src="https://github.com/user-attachments/assets/19413040-76bf-4003-8a7e-3e09034f7a41" width="350">
 
-
+If you have troubles connecting to the TV, try to unplug and replug electrically the TV to recover a better network state.
 
 ### Setup
 
