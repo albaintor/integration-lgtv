@@ -358,7 +358,7 @@ class LGDevice:
             _LOG.debug("[%s] Active source %s", self._device_config.address, active_source)
             self._active_source = active_source
             updated_data[MediaAttr.SOURCE] = self._active_source
-            updated_data[LGSensors.INPUT_SOURCE] = self._active_source
+            updated_data[LGSensors.SENSOR_INPUT_SOURCE] = self._active_source
 
     async def _update_states(self, data: WebOsClient | None) -> None:
         """Update entity state attributes."""
@@ -412,6 +412,7 @@ class LGDevice:
         if muted != self._attr_is_volume_muted:
             self._attr_is_volume_muted = muted
             updated_data[MediaAttr.MUTED] = self._attr_is_volume_muted
+            updated_data[LGSensors.SENSOR_MUTED] = self._attr_is_volume_muted
 
         if self._tv.tv_state.volume is not None:
             volume = cast(float, self._tv.tv_state.volume)
@@ -660,7 +661,9 @@ class LGDevice:
             MediaAttr.MEDIA_IMAGE_URL: self.media_image_url,
             MediaAttr.MEDIA_TITLE: self.media_title,
             MediaAttr.SOUND_MODE_LIST: self.sound_outputs,
-            LGSensors.INPUT_SOURCE: self._active_source,
+            LGSensors.SENSOR_INPUT_SOURCE: self._active_source,
+            LGSensors.SENSOR_VOLUME: self.volume_level,
+            LGSensors.SENSOR_MUTED: self.is_volume_muted,
         }
         if self.source_list:
             updated_data[MediaAttr.SOURCE_LIST] = self.source_list

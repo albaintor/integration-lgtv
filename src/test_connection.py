@@ -6,6 +6,7 @@ import logging
 import sys
 from typing import Any
 
+from aiohttp import ClientSession
 from aiowebostv import WebOsClient, WebOsTvState
 from rich import print_json
 
@@ -63,6 +64,13 @@ async def on_device_update(device_id: str, update: dict[str, Any] | None) -> Non
     print_json(data=update)
 
 
+async def direct_connect():
+    client_session = ClientSession()
+    tv: WebOsClient = WebOsClient(host=address, client_key=pairing_key)
+    await tv.connect()
+    await asyncio.sleep(50)
+
+
 async def main():
     _LOG.debug("Start connection")
     # await pair()
@@ -85,6 +93,8 @@ async def main():
     client.events.on(Events.UPDATE, on_device_update)
     await client.power_on()
     await client.connect()
+    # print_json(data=await client._tv.get_software_info())
+    # print_json(data=await client._tv.get_system_info())
     await asyncio.sleep(50)
     # print_json(data=await client._tv.get_power_state())
     # await asyncio.sleep(120)
@@ -136,5 +146,6 @@ if __name__ == "__main__":
     logging.getLogger("lg").setLevel(logging.DEBUG)
     logging.getLogger("aiowebostv").setLevel(logging.DEBUG)
     logging.getLogger(__name__).setLevel(logging.DEBUG)
-    _LOOP.run_until_complete(main())
+    # _LOOP.run_until_complete(main())
+    _LOOP.run_until_complete(direct_connect())
     _LOOP.run_forever()

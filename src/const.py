@@ -20,8 +20,9 @@ from ucapi.ui import Buttons, DeviceButtonMapping, UiPage
 class LGSensors(str, Enum):
     """Kodi sensor values."""
 
-    INPUT_SOURCE = "input_source"
-    CURRENT_VOLUME = "current_volume"
+    SENSOR_INPUT_SOURCE = "sensor_input_source"
+    SENSOR_VOLUME = "sensor_volume"
+    SENSOR_MUTED = "sensor_muted"
 
 
 LIVE_TV_APP_ID = "com.webos.app.livetv"

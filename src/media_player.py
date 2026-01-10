@@ -72,7 +72,7 @@ class LGTVMediaPlayer(MediaPlayer, LGEntity):
         """Return the device identifier."""
         return self._device.id
 
-    async def command(self, cmd_id: str, params: dict[str, Any] | None = None) -> StatusCodes:
+    async def command(self, cmd_id: str, params: dict[str, Any] | None = None, *, websocket: Any) -> StatusCodes:
         """
         Media-player entity command handler.
 
@@ -80,6 +80,8 @@ class LGTVMediaPlayer(MediaPlayer, LGEntity):
 
         :param cmd_id: command
         :param params: optional command parameters
+        :param websocket: optional websocket connection. Allows for directed event
+                          callbacks instead of broadcasts.
         :return: status code of the command request
         """
         # pylint: disable = R0915
