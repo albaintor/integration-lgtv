@@ -249,6 +249,34 @@ Examples of commands :
 | luna picture `{'hdrDynamicToneMapping':'on'}`               | Turn hdrDynamicToneMapping on in the current HDR10 picture preset                        |                                          |
 | luna other `{'eotf':'hlg'}`                                 | Setting EOTF in HDMI Signal Override menu, values: auto, sdrGamma, hdrGamma, st2084, hlg |                                          |
 
+### Picture commands with remote entity
+
+The following commands depend on your TV model
+
+**FilmMaker**
+- luna picture {'pictureMode' : ' filmMaker'}
+- luna picture {'pictureMode' : 'hdrFilmMaker'}
+- luna picture {'pictureMode' : 'dolbyHdrCinema'}
+
+
+**Standard Mode**
+- luna picture {'pictureMode' : 'normal'}
+- luna picture {'pictureMode' : 'hdrStandard'}
+- luna picture {'pictureMode' : 'dolbyHdrStandard'}
+
+**Sports**
+- luna picture {'pictureMode' :'sports'}
+
+**VIVID**
+- luna picture {'pictureMode' : 'vivid'}
+- luna picture {'pictureMode' : 'hdrvivid'}
+- luna picture {'pictureMode' : 'dolbyHdrVivid'}
+
+**Cinema**
+- luna picture {'pictureMode' : 'cinema'}
+- luna picture {'pictureMode' : 'hdrCinema'}
+- luna picture {'pictureMode' : 'dolbyHdrCinema'}
+
 
 ## Advanced usage
 
