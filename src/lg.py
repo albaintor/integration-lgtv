@@ -350,7 +350,7 @@ class LGDevice:
             new_source_list = self.source_list
             # Compare with previous source list (convert dict keys to sorted list for comparison)
             old_source_list = sorted(current_source_list.keys()) if current_source_list else []
-            if new_source_list != old_source_list:
+            if len(new_source_list) != len(old_source_list):
                 _LOG.debug("[%s] Source list updated: %s", self._device_config.address, new_source_list)
                 updated_data[MediaAttr.SOURCE_LIST] = new_source_list
 
@@ -414,11 +414,15 @@ class LGDevice:
             updated_data[MediaAttr.MUTED] = self._attr_is_volume_muted
             updated_data[LGSensors.SENSOR_MUTED] = "on" if self._attr_is_volume_muted else "off"
 
-        if self._tv.tv_state.volume is not None:
-            volume = cast(float, self._tv.tv_state.volume)
+        volume = data.tv_state.volume if data and data.tv_state else None
+        if volume is None:
+            volume = self._tv.tv_state.volume
+        if volume is not None:
+            volume = float(volume)
             if volume != self._volume:
                 self._volume = volume
                 updated_data[MediaAttr.VOLUME] = self._volume
+                updated_data[LGSensors.SENSOR_VOLUME] = self._volume if self._volume else 0
 
         media_type = MediaType.VIDEO
         if self._tv.tv_state.current_app_id == LIVE_TV_APP_ID:

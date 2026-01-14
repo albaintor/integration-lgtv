@@ -129,7 +129,7 @@ class LGSensorVolume(LGSensor):
     @property
     def sensor_value(self) -> str | float:
         """Return sensor value."""
-        return self._device.volume_level
+        return self._device.volume_level if self._device.volume_level else 0
 
 
 class LGSensorMuted(LGSensor):
