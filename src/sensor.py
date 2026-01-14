@@ -20,7 +20,7 @@ from const import LGSensors
 _LOG = logging.getLogger(__name__)
 
 SENSOR_STATE_MAPPING = {
-    MediaStates.OFF: States.UNAVAILABLE,
+    MediaStates.OFF: States.ON,
     MediaStates.ON: States.ON,
     MediaStates.STANDBY: States.ON,
     MediaStates.PLAYING: States.ON,
@@ -33,6 +33,9 @@ SENSOR_STATE_MAPPING = {
 # pylint: disable=R0917
 class LGSensor(LGEntity, Sensor):
     """Representation of a Kodi Sensor entity."""
+
+    ENTITY_NAME = "sensor"
+    SENSOR_NAME: LGSensors
 
     def __init__(
         self,
@@ -58,48 +61,62 @@ class LGSensor(LGEntity, Sensor):
         """Return the device identifier."""
         return self._device.id
 
-    def update_attributes(self, update: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Return the updated attributes of current sensor entity."""
+    @property
+    def state(self) -> States:
+        """Return sensor state."""
+        raise self._state
+
+    @property
+    def sensor_value(self) -> str | float:
+        """Return sensor value."""
         raise NotImplementedError()
-
-
-class LGSensorInputSource(LGSensor):
-    """Current input source sensor entity."""
-
-    ENTITY_NAME = "sensor_input_source"
-
-    def __init__(self, config_device: LGConfigDevice, device: lg.LGDevice):
-        """Initialize the class."""
-        entity_id = f"{create_entity_id(config_device.id, EntityTypes.SENSOR)}.{LGSensorInputSource.ENTITY_NAME}"
-        # TODO : dict instead of name to report language names
-        self._device = device
-        self._config_device = config_device
-        super().__init__(entity_id, {"en": "Input source", "fr": "Entrée source"}, config_device, device)
 
     def update_attributes(self, update: dict[str, Any] | None = None) -> dict[str, Any] | None:
         """Return updated sensor value from full update if provided or sensor value if no udpate is provided."""
         attributes: dict[str, Any] = {}
         if update:
             if ucapi.media_player.Attributes.STATE in update:
-                attributes[Attributes.STATE] = SENSOR_STATE_MAPPING.get(update[ucapi.media_player.Attributes.STATE])
-            if LGSensors.SENSOR_INPUT_SOURCE in update:
-                attributes[Attributes.VALUE] = update[LGSensors.SENSOR_INPUT_SOURCE]
+                new_state = SENSOR_STATE_MAPPING.get(update[ucapi.media_player.Attributes.STATE])
+                if new_state != self._state:
+                    self._state = new_state
+                    attributes[Attributes.STATE] = self._state
+            if self.SENSOR_NAME in update:
+                attributes[Attributes.VALUE] = update[self.SENSOR_NAME]
             return attributes
         return {
-            Attributes.VALUE: self._device.source,
+            Attributes.VALUE: self.sensor_value,
             Attributes.STATE: SENSOR_STATE_MAPPING.get(self._device.state),
         }
+
+
+class LGSensorInputSource(LGSensor):
+    """Current input source sensor entity."""
+
+    ENTITY_NAME = "sensor_input_source"
+    SENSOR_NAME = LGSensors.SENSOR_INPUT_SOURCE
+
+    def __init__(self, config_device: LGConfigDevice, device: lg.LGDevice):
+        """Initialize the class."""
+        entity_id = f"{create_entity_id(config_device.id, EntityTypes.SENSOR)}.{self.ENTITY_NAME}"
+        self._device = device
+        self._config_device = config_device
+        super().__init__(entity_id, {"en": "Input source", "fr": "Entrée source"}, config_device, device)
+
+    @property
+    def sensor_value(self) -> str | float:
+        """Return sensor value."""
+        return self._device.source if self._device.source else ""
 
 
 class LGSensorVolume(LGSensor):
     """Current input source sensor entity."""
 
     ENTITY_NAME = "sensor_volume"
+    SENSOR_NAME = LGSensors.SENSOR_VOLUME
 
     def __init__(self, config_device: LGConfigDevice, device: lg.LGDevice):
         """Initialize the class."""
-        entity_id = f"{create_entity_id(config_device.id, EntityTypes.SENSOR)}.{LGSensorVolume.ENTITY_NAME}"
-        # TODO : dict instead of name to report language names
+        entity_id = f"{create_entity_id(config_device.id, EntityTypes.SENSOR)}.{self.ENTITY_NAME}"
         self._device = device
         self._config_device = config_device
         options = {
@@ -109,73 +126,47 @@ class LGSensorVolume(LGSensor):
         }
         super().__init__(entity_id, {"en": "Volume", "fr": "Volume"}, config_device, device, options)
 
-    def update_attributes(self, update: dict[str, Any] | None = None) -> dict[str, Any] | None:
-        """Return updated sensor value from full update if provided or sensor value if no udpate is provided."""
-        attributes: dict[str, Any] = {}
-        if update:
-            if ucapi.media_player.Attributes.STATE in update:
-                attributes[Attributes.STATE] = SENSOR_STATE_MAPPING.get(update[ucapi.media_player.Attributes.STATE])
-            if LGSensors.SENSOR_VOLUME in update:
-                attributes[Attributes.VALUE] = update[LGSensors.SENSOR_VOLUME]
-            return attributes
-        return {
-            Attributes.VALUE: self._device.volume_level,
-            Attributes.STATE: SENSOR_STATE_MAPPING.get(self._device.state),
-        }
+    @property
+    def sensor_value(self) -> str | float:
+        """Return sensor value."""
+        return self._device.volume_level
 
 
 class LGSensorMuted(LGSensor):
     """Current mute state sensor entity."""
 
     ENTITY_NAME = "sensor_muted"
+    SENSOR_NAME = LGSensors.SENSOR_MUTED
 
     def __init__(self, config_device: LGConfigDevice, device: lg.LGDevice):
         """Initialize the class."""
-        entity_id = f"{create_entity_id(config_device.id, EntityTypes.SENSOR)}.{LGSensorMuted.ENTITY_NAME}"
+        entity_id = f"{create_entity_id(config_device.id, EntityTypes.SENSOR)}.{self.ENTITY_NAME}"
         self._device = device
         self._config_device = config_device
         super().__init__(
             entity_id, {"en": "Muted", "fr": "Son coupé"}, config_device, device, None, DeviceClasses.BINARY
         )
 
-    def update_attributes(self, update: dict[str, Any] | None = None) -> dict[str, Any] | None:
-        """Return updated sensor value from full update if provided or sensor value if no udpate is provided."""
-        attributes: dict[str, Any] = {}
-        if update:
-            if ucapi.media_player.Attributes.STATE in update:
-                attributes[Attributes.STATE] = SENSOR_STATE_MAPPING.get(update[ucapi.media_player.Attributes.STATE])
-            if LGSensors.SENSOR_MUTED in update:
-                attributes[Attributes.VALUE] = update[LGSensors.SENSOR_MUTED]
-            return attributes
-        return {
-            Attributes.VALUE: "on" if self._device.is_volume_muted else "off",
-            Attributes.STATE: SENSOR_STATE_MAPPING.get(self._device.state),
-        }
+    @property
+    def sensor_value(self) -> str | float:
+        """Return sensor value."""
+        return "on" if self._device.is_volume_muted else "off"
 
 
 class LGSensorSoundOutput(LGSensor):
     """Current sound output sensor entity."""
 
     ENTITY_NAME = "sensor_sound_output"
+    SENSOR_NAME = LGSensors.SENSOR_SOUND_OUTPUT
 
     def __init__(self, config_device: LGConfigDevice, device: lg.LGDevice):
         """Initialize the class."""
-        entity_id = f"{create_entity_id(config_device.id, EntityTypes.SENSOR)}.{LGSensorSoundOutput.ENTITY_NAME}"
-        # TODO : dict instead of name to report language names
+        entity_id = f"{create_entity_id(config_device.id, EntityTypes.SENSOR)}.{self.ENTITY_NAME}"
         self._device = device
         self._config_device = config_device
         super().__init__(entity_id, {"en": "Sound output", "fr": "Sortie audio"}, config_device, device)
 
-    def update_attributes(self, update: dict[str, Any] | None = None) -> dict[str, Any] | None:
-        """Return updated sensor value from full update if provided or sensor value if no udpate is provided."""
-        attributes: dict[str, Any] = {}
-        if update:
-            if ucapi.media_player.Attributes.STATE in update:
-                attributes[Attributes.STATE] = SENSOR_STATE_MAPPING.get(update[ucapi.media_player.Attributes.STATE])
-            if LGSensors.SENSOR_SOUND_OUTPUT in update:
-                attributes[Attributes.VALUE] = update[LGSensors.SENSOR_SOUND_OUTPUT]
-            return attributes
-        return {
-            Attributes.VALUE: self._device.sound_output,
-            Attributes.STATE: SENSOR_STATE_MAPPING.get(self._device.state),
-        }
+    @property
+    def sensor_value(self) -> str | float:
+        """Return sensor value."""
+        return self._device.sound_output if self._device.sound_output else ""
