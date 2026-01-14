@@ -13,6 +13,7 @@ import io
 import json
 import logging
 import queue
+import socket
 import sys
 import threading
 import tkinter as tk
@@ -35,6 +36,14 @@ class Events(StrEnum):
     EXITING = "EXITING"
 
 
+def get_local_ip() -> str:
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    ip = s.getsockname()[0]
+    s.close()
+    return ip
+
+
 def load_image_from_url(url: str, max_size=(500, 500)) -> ImageTk.PhotoImage:
     # Télécharge l'image
     resp = requests.get(url, timeout=10)
@@ -54,7 +63,7 @@ if sys.platform == "win32":
 _LOOP = asyncio.new_event_loop()
 asyncio.set_event_loop(_LOOP)
 
-DRIVER_URL = "ws://192.168.1.36:9090/ws"
+DRIVER_URL = f"ws://{get_local_ip()}:9090/ws"
 MAIN_WS_MAX_MSG_SIZE = 8 * 1024 * 1024  # 8Mb
 WS_TIMEOUT = 5
 
@@ -307,7 +316,7 @@ class RemoteInterface(tk.Tk):
         # self._left_frame.grid(row=0, column=3, padx=10, pady=5)
         self._right_frame = ttk.Frame(self, width=650, height=600)
         self._right_frame.pack(side="right", fill="both", padx=10, pady=5, expand=True)
-        self._image_label = ttk.Label(self._right_frame, text="Image")
+        self._image_label = ttk.Label(self._right_frame, text="Artwork")
         self._image_label.pack(anchor="w")
         # self._right_frame.grid(row=0, column=1, padx=10, pady=5)
 
@@ -319,18 +328,41 @@ class RemoteInterface(tk.Tk):
         self._state.grid(row=2, column=0, columnspan=2)  # .pack(anchor="w", pady=(0, 10))
         self._volume = ttk.Label(self._left_frame, text="Volume")
         self._volume.grid(row=2, column=2)  # .pack(anchor="w", pady=(0, 10))
+        command = ttk.Button(self._left_frame, text="Off", command=lambda: self.media_player_command("off"))
+        command.grid(row=3, column=0)
         self._command_on = ttk.Button(self._left_frame, text="On", command=lambda: self.media_player_command("on"))
-        self._command_on.grid(row=3, column=0)
+        self._command_on.grid(row=3, column=1)
         self._command_play_pause = ttk.Button(
             self._left_frame, text="Play/pause", command=lambda: self.media_player_command("play_pause")
         )
-        self._command_play_pause.grid(row=3, column=1)
         self._command_stop = ttk.Button(
             self._left_frame, text="Stop", command=lambda: self.media_player_command("stop")
         )
-        self._command_stop.grid(row=3, column=2)
+        self._command_stop.grid(row=4, column=0)
+        self._command_play_pause.grid(row=4, column=1)
+        command = ttk.Button(self._left_frame, text="Mute", command=lambda: self.media_player_command("mute_toggle"))
+        command.grid(row=5, column=0)
+        command = ttk.Button(self._left_frame, text="Vol-", command=lambda: self.media_player_command("volume_down"))
+        command.grid(row=5, column=1)
+        command = ttk.Button(self._left_frame, text="Vol+", command=lambda: self.media_player_command("volume_up"))
+        command.grid(row=5, column=2)
+        command = ttk.Button(self._left_frame, text="Back", command=lambda: self.media_player_command("back"))
+        command.grid(row=6, column=0)
+        command = ttk.Button(self._left_frame, text="Up", command=lambda: self.media_player_command("cursor_up"))
+        command.grid(row=6, column=1)
+        command = ttk.Button(self._left_frame, text="Home", command=lambda: self.media_player_command("home"))
+        command.grid(row=6, column=2)
+        command = ttk.Button(self._left_frame, text="Left", command=lambda: self.media_player_command("cursor_left"))
+        command.grid(row=7, column=0)
+        command = ttk.Button(self._left_frame, text="OK", command=lambda: self.media_player_command("cursor_enter"))
+        command.grid(row=7, column=1)
+        command = ttk.Button(self._left_frame, text="Right", command=lambda: self.media_player_command("cursor_right"))
+        command.grid(row=7, column=2)
+        command = ttk.Button(self._left_frame, text="Down", command=lambda: self.media_player_command("cursor_down"))
+        command.grid(row=8, column=1)
+
         self._info_label = ttk.Label(self._left_frame, text="")
-        self._info_label.grid(row=4, column=0, columnspan=3)
+        self._info_label.grid(row=9, column=0, columnspan=3)
         self._loop = asyncio.get_running_loop()
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.after(50, self.poll_queue)
@@ -462,7 +494,7 @@ class WorkerThread(threading.Thread):
 
     async def entity_changed(self, msg: dict[str, Any]) -> None:
         _LOG.debug("Entity changed : %s", msg)
-        updated_data: dict[str, Any]|None = msg.get("msg_data", None)
+        updated_data: dict[str, Any] | None = msg.get("msg_data", None)
         if updated_data is None:
             return
         print_json(json=json.dumps(msg))

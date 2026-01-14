@@ -9,9 +9,11 @@ This module implements the AVR AVR receiver communication of the Remote Two inte
 import ast
 import asyncio
 import logging
+import os
 import re
 import socket
 import struct
+import sys
 import time
 from asyncio import AbstractEventLoop, CancelledError, Lock, shield
 from enum import IntEnum
@@ -875,6 +877,8 @@ class LGDevice:
                 broadcast = self._device_config.broadcast
             socket_instance = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             socket_instance.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            if sys.platform == "win32":
+                socket_instance.bind((os.getenv("UC_INTEGRATION_INTERFACE"), 0))
             for msg in messages:
                 socket_instance.sendto(msg, (broadcast, wol_port))
             socket_instance.close()
