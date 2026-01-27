@@ -51,6 +51,7 @@ from const import (
     LG_SOUND_OUTPUTS,
     LIVE_TV_APP_ID,
     WEBOSTV_EXCEPTIONS,
+    LGSelects,
     LGSensors,
 )
 
@@ -355,12 +356,16 @@ class LGDevice:
             if len(new_source_list) != len(old_source_list):
                 _LOG.debug("[%s] Source list updated: %s", self._device_config.address, new_source_list)
                 updated_data[MediaAttr.SOURCE_LIST] = new_source_list
+                updated_data[LGSelects.SELECT_INPUT_SOURCE] = {"options": new_source_list}
 
         if active_source != self._active_source:
             _LOG.debug("[%s] Active source %s", self._device_config.address, active_source)
             self._active_source = active_source
             updated_data[MediaAttr.SOURCE] = self._active_source
             updated_data[LGSensors.SENSOR_INPUT_SOURCE] = self._active_source
+            select_data = updated_data.get(LGSelects.SELECT_INPUT_SOURCE, {})
+            select_data["current_option"] = self._active_source
+            updated_data[LGSelects.SELECT_INPUT_SOURCE] = select_data
 
     async def _update_states(self, data: WebOsClient | None) -> None:
         """Update entity state attributes."""
@@ -670,6 +675,7 @@ class LGDevice:
             LGSensors.SENSOR_INPUT_SOURCE: self._active_source,
             LGSensors.SENSOR_VOLUME: self.volume_level,
             LGSensors.SENSOR_MUTED: "on" if self.is_volume_muted else "off",
+            LGSelects.SELECT_INPUT_SOURCE: {"options": self.source_list, "current_option": self.source},
         }
         if self.source_list:
             updated_data[MediaAttr.SOURCE_LIST] = self.source_list

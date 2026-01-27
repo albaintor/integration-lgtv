@@ -26,6 +26,12 @@ class LGSensors(str, Enum):
     SENSOR_SOUND_OUTPUT = "sensor_sound_output"
 
 
+class LGSelects(str, Enum):
+    """LG select values."""
+
+    SELECT_INPUT_SOURCE = "select_input_source"
+
+
 LIVE_TV_APP_ID = "com.webos.app.livetv"
 
 LG_ADDITIONAL_ENDPOINTS = {

@@ -24,10 +24,12 @@ import config
 import lg
 import media_player
 import remote
+import selector
 import sensor
 import setup_flow
 from config import LGEntity
 from const import WEBOSTV_EXCEPTIONS
+from selector import LGInputSourceSelect
 from sensor import (
     LGSensorInputSource,
     LGSensorMuted,
@@ -109,11 +111,13 @@ async def connect_device(device: lg.LGDevice):
                 api.configured_entities.update_attributes(
                     entity_id, filter_attributes(device.attributes, ucapi.media_player.Attributes)
                 )
-            if isinstance(entity, remote.LGRemote):
+            elif isinstance(entity, remote.LGRemote):
                 api.configured_entities.update_attributes(
                     entity_id, {ucapi.remote.Attributes.STATE: remote.LG_REMOTE_STATE_MAPPING.get(state)}
                 )
-            if isinstance(entity, sensor.LGSensor):
+            elif isinstance(entity, sensor.LGSensor):
+                api.configured_entities.update_attributes(entity_id, entity.update_attributes())
+            elif isinstance(entity, selector.LGInputSourceSelect):
                 api.configured_entities.update_attributes(entity_id, entity.update_attributes())
 
     except RuntimeError as ex:
@@ -161,6 +165,8 @@ async def on_subscribe_entities(entity_ids: list[str]) -> None:
                     entity_id, {ucapi.remote.Attributes.STATE: remote.LG_REMOTE_STATE_MAPPING.get(state)}
                 )
             elif isinstance(entity, sensor.LGSensor):
+                api.configured_entities.update_attributes(entity_id, entity.update_attributes())
+            elif isinstance(entity, selector.LGInputSourceSelect):
                 api.configured_entities.update_attributes(entity_id, entity.update_attributes())
             try:
                 if not device.available:
@@ -379,6 +385,8 @@ async def on_device_update(device_id: str, update: dict[str, Any] | None) -> Non
             attributes = configured_entity.filter_changed_attributes(update)
         elif isinstance(configured_entity, sensor.LGSensor):
             attributes = configured_entity.update_attributes(update)
+        elif isinstance(configured_entity, selector.LGInputSourceSelect):
+            attributes = configured_entity.update_attributes(update)
 
         if attributes:
             api.configured_entities.update_attributes(entity_id, attributes)
@@ -396,6 +404,7 @@ def _entities_from_device_id(device_id: str) -> list[str]:
     return [
         f"media_player.{device_id}",
         f"remote.{device_id}",
+        f"select.{device_id}.{LGInputSourceSelect.ENTITY_NAME}",
         f"sensor.{device_id}.{LGSensorInputSource.ENTITY_NAME}",
         f"sensor.{device_id}.{LGSensorVolume.ENTITY_NAME}",
         f"sensor.{device_id}.{LGSensorMuted.ENTITY_NAME}",
@@ -454,6 +463,7 @@ def _register_available_entities(device_config: config.LGConfigDevice, device: l
     entities = [
         media_player.LGTVMediaPlayer(device_config, device),
         remote.LGRemote(device_config, device),
+        selector.LGInputSourceSelect(device_config, device),
         sensor.LGSensorInputSource(device_config, device),
         sensor.LGSensorVolume(device_config, device),
         sensor.LGSensorMuted(device_config, device),
@@ -546,6 +556,7 @@ async def main():
     logging.getLogger("driver").setLevel(level)
     logging.getLogger("media_player").setLevel(level)
     logging.getLogger("remote").setLevel(level)
+    logging.getLogger("select").setLevel(level)
     logging.getLogger("sensor").setLevel(level)
     logging.getLogger("config").setLevel(level)
     logging.getLogger("setup_flow").setLevel(level)

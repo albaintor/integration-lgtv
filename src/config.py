@@ -11,6 +11,7 @@ import logging
 import os
 from asyncio import Lock
 from dataclasses import dataclass, field, fields
+from enum import Enum
 from typing import Callable, Iterator
 
 from ucapi import Entity, EntityTypes
@@ -20,6 +21,22 @@ import discover
 _LOG = logging.getLogger(__name__)
 
 _CFG_FILENAME = "config.json"
+
+
+class PatchedEntityTypes(str, Enum):
+    """Entity types."""
+
+    COVER = "cover"
+    BUTTON = "button"
+    CLIMATE = "climate"
+    LIGHT = "light"
+    MEDIA_PLAYER = "media_player"
+    REMOTE = "remote"
+    SENSOR = "sensor"
+    SWITCH = "switch"
+    IR_EMITTER = "ir_emitter"
+    VOICE_ASSISTANT = "voice_assistant"
+    SELECT = "select"
 
 
 class LGEntity(Entity):
@@ -63,6 +80,7 @@ class LGConfigDevice:
     wol_port: int | None = field(default=9)
     log: bool | None = field(default=False)
     update_apps_list: bool | None = field(default=True)
+    sensor_include_device_name: bool = field(default=True)
 
     def __post_init__(self):
         """Apply default values on missing fields."""
@@ -73,6 +91,12 @@ class LGConfigDevice:
                 and getattr(self, attribute.name) is None
             ):
                 setattr(self, attribute.name, attribute.default)
+
+    def get_device_part(self) -> str:
+        """Return the device name part to build entity names."""
+        if self.sensor_include_device_name:
+            return self.name + " "
+        return ""
 
 
 class _EnhancedJSONEncoder(json.JSONEncoder):
