@@ -65,7 +65,7 @@ class LGSelect(LGEntity):
     @property
     def deviceid(self) -> str:
         """Return device identifier."""
-        return self._device.id
+        return self._config_device.id
 
     @property
     def current_option(self) -> str:
@@ -168,3 +168,67 @@ class LGInputSourceSelect(LGSelect):
     def select_options(self) -> list[str]:
         """Return selection list."""
         return self._device.source_list
+
+
+class LGPictureModeSelect(LGSelect):
+    """Picture mode selector entity."""
+
+    ENTITY_NAME = "picture_mode"
+    SELECT_NAME = LGSelects.SELECT_PICTURE_MODE
+
+    def __init__(self, config_device: LGConfigDevice, device: lg.LGDevice):
+        """Initialize the class."""
+        # pylint: disable=W1405,R0801
+        entity_id = f"{create_entity_id(config_device.id, PatchedEntityTypes.SELECT)}.{self.ENTITY_NAME}"
+        super().__init__(
+            entity_id,
+            {
+                "en": f"{config_device.get_device_part()}Picture mode",
+                "fr": f"{config_device.get_device_part()}Mode image",
+            },
+            config_device,
+            device,
+            device.set_picture_mode,
+        )
+
+    @property
+    def current_option(self) -> str:
+        """Return selector value."""
+        return self._device.picture_mode
+
+    @property
+    def select_options(self) -> list[str]:
+        """Return selection list."""
+        return self._device.picture_modes
+
+
+class LGSoundOutputSelect(LGSelect):
+    """Picture mode selector entity."""
+
+    ENTITY_NAME = "sound_output"
+    SELECT_NAME = LGSelects.SELECT_SOUND_OUTPUT
+
+    def __init__(self, config_device: LGConfigDevice, device: lg.LGDevice):
+        """Initialize the class."""
+        # pylint: disable=W1405,R0801
+        entity_id = f"{create_entity_id(config_device.id, PatchedEntityTypes.SELECT)}.{self.ENTITY_NAME}"
+        super().__init__(
+            entity_id,
+            {
+                "en": f"{config_device.get_device_part()}Sound output",
+                "fr": f"{config_device.get_device_part()}Sortie son",
+            },
+            config_device,
+            device,
+            device.select_sound_output,
+        )
+
+    @property
+    def current_option(self) -> str:
+        """Return selector value."""
+        return self._device.sound_output if self._device.sound_output else ""
+
+    @property
+    def select_options(self) -> list[str]:
+        """Return selection list."""
+        return self._device.sound_outputs

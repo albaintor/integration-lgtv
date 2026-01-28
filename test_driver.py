@@ -19,10 +19,12 @@ import threading
 import tkinter as tk
 from asyncio import AbstractEventLoop, Future, Queue, Task
 from contextlib import suppress
+from dataclasses import dataclass
 from enum import StrEnum
 from tkinter import ttk
 from typing import Any, Callable
 
+sys.path.insert(1, "src")
 import requests
 from aiohttp import ClientSession, ClientWebSocketResponse, WSMsgType
 from PIL import Image, ImageTk
@@ -34,6 +36,13 @@ class Events(StrEnum):
     """Internal events."""
 
     EXITING = "EXITING"
+
+
+@dataclass
+class Selector:
+    name: str
+    current_option: str
+    options: list[str]
 
 
 def get_local_ip() -> str:
@@ -63,7 +72,8 @@ if sys.platform == "win32":
 _LOOP = asyncio.new_event_loop()
 asyncio.set_event_loop(_LOOP)
 
-DRIVER_URL = f"ws://{get_local_ip()}:9090/ws"
+DRIVER_PORT = 9090
+DRIVER_URL = f"ws://{get_local_ip()}:{DRIVER_PORT}/ws"
 MAIN_WS_MAX_MSG_SIZE = 8 * 1024 * 1024  # 8Mb
 WS_TIMEOUT = 5
 
@@ -157,6 +167,9 @@ class RemoteWebsocket:
             return response
         except asyncio.TimeoutError:
             _LOG.error("Timeout while sending command")
+            return None
+        except Exception as ex:
+            _LOG.error("Command error %s", ex)
             return None
 
     async def _rx_msgs_main_ws(self, web_socket: ClientWebSocketResponse) -> None:
@@ -308,6 +321,7 @@ class RemoteInterface(tk.Tk):
         self.title("Remote Interface")
         # self.geometry("800x600")
         self.maxsize(1920, 1080)
+        self._row = 0
         self._ui_queue: queue.Queue[Callable[[], None]] = queue.Queue()
         # self.container = ttk.Frame(self, padding=12)
         # self.container.pack(fill="both", expand=True)
@@ -321,48 +335,59 @@ class RemoteInterface(tk.Tk):
         # self._right_frame.grid(row=0, column=1, padx=10, pady=5)
 
         self._title_field = ttk.Label(self._left_frame, text="Title")
-        self._title_field.grid(row=0, column=0, columnspan=3)  # pack(anchor="w", pady=(0, 10))
+        self._title_field.grid(row=self._row, column=0, columnspan=3)  # pack(anchor="w", pady=(0, 10))
+        self._row += 1
         self._artist = ttk.Label(self._left_frame, text="Artist")
-        self._artist.grid(row=1, column=0, columnspan=3)  # .pack(anchor="w", pady=(0, 10))
+        self._artist.grid(row=self._row, column=0, columnspan=3)  # .pack(anchor="w", pady=(0, 10))
+        self._row += 1
         self._state = ttk.Label(self._left_frame, text="State")
-        self._state.grid(row=2, column=0, columnspan=2)  # .pack(anchor="w", pady=(0, 10))
+        self._state.grid(row=self._row, column=0, columnspan=2)  # .pack(anchor="w", pady=(0, 10))
         self._volume = ttk.Label(self._left_frame, text="Volume")
-        self._volume.grid(row=2, column=2)  # .pack(anchor="w", pady=(0, 10))
+        self._volume.grid(row=self._row, column=2)  # .pack(anchor="w", pady=(0, 10))
+        self._row += 1
         command = ttk.Button(self._left_frame, text="Off", command=lambda: self.media_player_command("off"))
-        command.grid(row=3, column=0)
+        command.grid(row=self._row, column=0)
         self._command_on = ttk.Button(self._left_frame, text="On", command=lambda: self.media_player_command("on"))
-        self._command_on.grid(row=3, column=1)
+        self._command_on.grid(row=self._row, column=1)
+        self._row += 1
         self._command_play_pause = ttk.Button(
             self._left_frame, text="Play/pause", command=lambda: self.media_player_command("play_pause")
         )
         self._command_stop = ttk.Button(
             self._left_frame, text="Stop", command=lambda: self.media_player_command("stop")
         )
-        self._command_stop.grid(row=4, column=0)
-        self._command_play_pause.grid(row=4, column=1)
+        self._command_stop.grid(row=self._row, column=0)
+        self._command_play_pause.grid(row=self._row, column=1)
+        self._row += 1
         command = ttk.Button(self._left_frame, text="Mute", command=lambda: self.media_player_command("mute_toggle"))
-        command.grid(row=5, column=0)
+        command.grid(row=self._row, column=0)
         command = ttk.Button(self._left_frame, text="Vol-", command=lambda: self.media_player_command("volume_down"))
-        command.grid(row=5, column=1)
+        command.grid(row=self._row, column=1)
         command = ttk.Button(self._left_frame, text="Vol+", command=lambda: self.media_player_command("volume_up"))
-        command.grid(row=5, column=2)
+        command.grid(row=self._row, column=2)
+        self._row += 1
         command = ttk.Button(self._left_frame, text="Back", command=lambda: self.media_player_command("back"))
-        command.grid(row=6, column=0)
+        command.grid(row=self._row, column=0)
         command = ttk.Button(self._left_frame, text="Up", command=lambda: self.media_player_command("cursor_up"))
-        command.grid(row=6, column=1)
+        command.grid(row=self._row, column=1)
         command = ttk.Button(self._left_frame, text="Home", command=lambda: self.media_player_command("home"))
-        command.grid(row=6, column=2)
+        command.grid(row=self._row, column=2)
+        self._row += 1
         command = ttk.Button(self._left_frame, text="Left", command=lambda: self.media_player_command("cursor_left"))
-        command.grid(row=7, column=0)
+        command.grid(row=self._row, column=0)
         command = ttk.Button(self._left_frame, text="OK", command=lambda: self.media_player_command("cursor_enter"))
-        command.grid(row=7, column=1)
+        command.grid(row=self._row, column=1)
         command = ttk.Button(self._left_frame, text="Right", command=lambda: self.media_player_command("cursor_right"))
-        command.grid(row=7, column=2)
+        command.grid(row=self._row, column=2)
+        self._row += 1
         command = ttk.Button(self._left_frame, text="Down", command=lambda: self.media_player_command("cursor_down"))
-        command.grid(row=8, column=1)
-
+        command.grid(row=self._row, column=1)
+        self._row += 1
+        self._sensors: dict[str, ttk.Label] = {}
+        self._selectors: dict[str, ttk.Combobox] = {}
         self._info_label = ttk.Label(self._left_frame, text="")
-        self._info_label.grid(row=9, column=0, columnspan=3)
+        self._info_label.grid(row=self._row, column=0, columnspan=3)
+        self._row += 1
         self._loop = asyncio.get_running_loop()
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.after(50, self.poll_queue)
@@ -378,8 +403,11 @@ class RemoteInterface(tk.Tk):
         if self._worker is None:
             _LOG.error("Media Player Command undefined worker")
             return
-        entity_id = next((x for x in self._worker.entity_ids if x.startswith("media_player.")), None)
+        entity_id = next(
+            (x.get("entity_id", "") for x in self._worker._entities if x.get("entity_type", "") == "media_player")
+        )
         if entity_id is None:
+            _LOG.error("No Media Player entity not found for command %s (%s)", cmd_id, self._worker.entity_ids)
             return
         try:
             asyncio.run_coroutine_threadsafe(
@@ -389,6 +417,34 @@ class RemoteInterface(tk.Tk):
                         "entity_id": entity_id,
                         "entity_type": "media_player",
                         "params": {},
+                    }
+                ),
+                self._worker._loop,
+            )
+        except Exception as ex:
+            _LOG.exception("Send command error %s", ex)
+
+    def selector_command(self, event: Any, entity_id: str, cmd_id: str) -> None:
+        _LOG.debug(
+            "Selector Command %s",
+            {
+                "cmd_id": cmd_id,
+                "entity_id": entity_id,
+                "entity_type": "select",
+                "params": {"option": event.widget.get()},
+            },
+        )
+        if self._worker is None:
+            _LOG.error("Selector Command undefined worker")
+            return
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.send_command(
+                    {
+                        "cmd_id": cmd_id,
+                        "entity_id": entity_id,
+                        "entity_type": "select",
+                        "params": {"option": event.widget.get()},
                     }
                 ),
                 self._worker._loop,
@@ -452,6 +508,35 @@ class RemoteInterface(tk.Tk):
         self._volume["text"] = volume
         self.update()
 
+    def set_sensor(self, entity_id: str, name: str, value: str) -> None:
+        _LOG.debug("Setting sensor %s %s", entity_id, value)
+        if entity_id not in self._sensors:
+            label = self._sensors[entity_id] = ttk.Label(self._left_frame, text="")
+            label.grid(row=self._row, column=0, columnspan=3)
+            self._row += 1
+            self._sensors[entity_id] = label
+        self._sensors[entity_id]["text"] = f"{name}: {value}"
+        self.update()
+
+    def set_selector(self, entity_id: str, name: str, selector: Selector) -> None:
+        _LOG.debug("Setting selector %s %s", entity_id, selector)
+        if entity_id not in self._selectors:
+            label = ttk.Label(self._left_frame, text=f"{name} :")
+            label.grid(row=self._row, column=0, columnspan=3)
+            self._row += 1
+            combo = self._selectors[entity_id] = ttk.Combobox(self._left_frame, state="readonly")
+            combo.bind(
+                "<<ComboboxSelected>>",
+                lambda event, eid=entity_id, cmd_id="select_option": self.selector_command(event, eid, cmd_id),
+            )
+            combo.grid(row=self._row, column=0, columnspan=3)
+            self._row += 1
+            self._selectors[entity_id] = combo
+        combo = self._selectors[entity_id]
+        combo["values"] = selector.options
+        combo.set(selector.current_option)
+        self.update()
+
 
 class WorkerThread(threading.Thread):
 
@@ -462,6 +547,9 @@ class WorkerThread(threading.Thread):
         self._loop_ready = threading.Event()
         self._ws: RemoteWebsocket | None = None
         self._entity_ids: list[str] = []
+        self._sensors: dict[str, str] = {}
+        self._selectors: dict[str, Selector] = {}
+        self._entities: list[dict[str, Any]] = []
         # self.start()
 
     @property
@@ -480,7 +568,6 @@ class WorkerThread(threading.Thread):
         try:
             self._loop.run_forever()
         finally:
-            # 5) Nettoyage: annule toutes les tâches restantes
             pending = asyncio.all_tasks(self._loop)
             for task in pending:
                 task.cancel()
@@ -489,6 +576,7 @@ class WorkerThread(threading.Thread):
 
     async def send_command(self, command: dict[str, Any]) -> dict[str, Any] | None:
         if self._ws is None:
+            _LOG.error("Command %s error : no websocket connected", command)
             return None
         return await self._ws.send_command(command)
 
@@ -500,7 +588,30 @@ class WorkerThread(threading.Thread):
         print_json(json=json.dumps(msg))
         if "attributes" not in updated_data:
             return
-        attributes = updated_data["attributes"]
+        attributes: dict[str, Any] = updated_data["attributes"]
+        entity_id = updated_data["entity_id"]
+        if (
+            updated_data.get("entity_type", "") == "sensor"
+            and entity_id in self._sensors
+            and (value := attributes.get("value", None))
+        ):
+            value = attributes.get("value", None)
+            self._interface._ui_queue.put(
+                lambda eid=entity_id, name=self._sensors[entity_id]: self._interface.set_sensor(eid, name, value)
+            )
+            return
+
+        if updated_data.get("entity_type", "") == "select" and entity_id in self._selectors:
+            entry = self._selectors[entity_id]
+            if "current_option" in attributes:
+                entry.current_option = attributes["current_option"]
+            if "options" in attributes:
+                entry.options = attributes["options"]
+            self._interface._ui_queue.put(
+                lambda eid=entity_id, name=entry.name: self._interface.set_selector(eid, name, entry)
+            )
+            return
+
         if updated_data.get("entity_type", "") != "media_player":
             return
         if "media_image_url" in attributes:
@@ -525,13 +636,23 @@ class WorkerThread(threading.Thread):
             data = await self._ws.get_driver_vertion()
             _LOG.debug("Driver version : %s", data)
             data = await self._ws.get_available_entities()
-            _LOG.debug("Available entities : %s", data)
+            _LOG.debug("Available entities")
+            print_json(json=json.dumps(data))
             self._entity_ids = []
+            self._entities = []
             for entity in data["msg_data"]["available_entities"]:
+                self._entities.append(entity)
                 entity_id: str = entity["entity_id"]
                 self._entity_ids.append(entity_id)
                 if entity_id.startswith("media_player"):
                     media_player_entity_id = entity_id
+                if entity.get("entity_type", "") == "sensor":
+                    self._sensors[entity_id] = entity["name"].get("en", entity_id)
+                if entity.get("entity_type", "") == "select":
+                    self._selectors[entity_id] = Selector(
+                        name=entity["name"].get("en", entity_id), current_option="", options=[]
+                    )
+
             data = await self._ws.subscribe_entities(self._entity_ids)
             _LOG.debug("Subscribed entities : %s", data)
             await asyncio.sleep(5)
@@ -570,8 +691,6 @@ if __name__ == "__main__":
     logging.getLogger("client").setLevel(logging.DEBUG)
     logging.getLogger("media_player").setLevel(logging.DEBUG)
     logging.getLogger("remote").setLevel(logging.DEBUG)
-    logging.getLogger("kodi").setLevel(logging.DEBUG)
-    logging.getLogger("pykodi.kodi").setLevel(logging.DEBUG)
 
     logging.getLogger(__name__).setLevel(logging.DEBUG)
     _LOOP.run_until_complete(main())

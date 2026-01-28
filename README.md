@@ -5,14 +5,14 @@ and [uc-integration-api](https://github.com/aitatoi/integration-python-library)
 
 The driver discovers LG TVs on the network. A media player, a remote entity and several sensors entities are exposed to the core.
 
-Supported attributes:
+**Supported attributes:**
 - State (on, off, playing, paused, unknown)
 - Title
 - Artwork
 - Source
 
 
-Supported commands:
+**Supported commands:**
 - Turn on
 - Turn off
 - Direction pad and enter
@@ -29,7 +29,12 @@ Supported commands:
 - Digit numbers
 - Subtitle/audio language switching
 
-4 sensors are exposed :
+**Dropdown selects :**
+- Input source
+- Sound output
+- Picture preset
+
+**Sensors exposed :**
 - Current input source
 - Current volume level
 - Muted state

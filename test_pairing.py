@@ -6,6 +6,7 @@ import logging
 import sys
 from argparse import ArgumentParser
 
+sys.path.insert(1, "src")
 from aiowebostv import WebOsClient
 
 if sys.platform == "win32":

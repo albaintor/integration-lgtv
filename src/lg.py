@@ -54,6 +54,7 @@ from const import (
     LGSelects,
     LGSensors,
 )
+from picture_modes import DEFAULT_PICTURE_MODE, LG_PICTURE_MODES_GENERATION
 
 _LOG = logging.getLogger(__name__)
 
@@ -269,6 +270,8 @@ class LGDevice:
         self._sound_output = None
         self._retry_wakeonlan = False
         self._media_state: list[dict[str, Any]] | None = None
+        self._picture_mode = ""
+        self._picture_modes: dict[str, str] = {}
 
         _LOG.debug("[%s] LG TV created", device_config.address)
 
@@ -309,7 +312,14 @@ class LGDevice:
             if sound_output:
                 if self._sound_output != sound_output:
                     self._sound_output = sound_output
-                    self.events.emit(Events.UPDATE, self.id, {MediaAttr.SOUND_MODE: self.sound_output})
+                    self.events.emit(
+                        Events.UPDATE,
+                        self.id,
+                        {
+                            MediaAttr.SOUND_MODE: self.sound_output,
+                            LGSelects.SELECT_SOUND_OUTPUT: {"current_option": self.sound_output},
+                        },
+                    )
 
         await self._tv.register_state_update_callback(_on_state_changed)
         await self._tv.subscribe_sound_output(_on_sound_output_changed)
@@ -369,7 +379,8 @@ class LGDevice:
 
     async def _update_states(self, data: WebOsClient | None) -> None:
         """Update entity state attributes."""
-        # pylint: disable = R0915
+        # pylint: disable = R0915,R0914
+        self._update_picture_modes()
         updated_data = {}
         if not self._sources:
             try:
@@ -382,6 +393,19 @@ class LGDevice:
             # pylint: disable = W0718
             except Exception:
                 pass
+
+        if not self._picture_mode:
+            picture_mode = await self.get_picture_mode()
+            picture_mode_name = re.sub(r"([A-Z])", r" \1", picture_mode).strip().title()
+            if picture_mode_name != self.picture_mode:
+                self._picture_mode = picture_mode_name
+                updated_data[LGSelects.SELECT_PICTURE_MODE] = {"current_option": picture_mode_name}
+                if picture_mode not in self._picture_modes.values():
+                    _LOG.debug(
+                        "[%s] Adding missing picture mode in the list : %s", self._device_config.address, picture_mode
+                    )
+                    self._picture_modes[picture_mode_name] = picture_mode
+                    updated_data[LGSelects.SELECT_PICTURE_MODE]["options"] = self.picture_modes
 
         self._update_sources(updated_data)
 
@@ -399,11 +423,13 @@ class LGDevice:
             if self._sound_output != data.tv_state.sound_output:
                 self._sound_output = data.tv_state.sound_output
                 updated_data[MediaAttr.SOUND_MODE] = self.sound_output
+                updated_data[LGSelects.SELECT_SOUND_OUTPUT] = {"current_option": self.sound_output}
         elif self._sound_output is None:
             try:
                 self._sound_output = await self._tv.get_sound_output()
                 if self._sound_output:
                     updated_data[MediaAttr.SOUND_MODE] = self.sound_output
+                    updated_data[LGSelects.SELECT_SOUND_OUTPUT] = {"current_option": self.sound_output}
                 _LOG.debug("[%s] Sound output %s", self._device_config.address, self._sound_output)
             except Exception as ex:
                 _LOG.warning("[%s] Error extraction of sound output %s", self._device_config.address, ex)
@@ -462,6 +488,7 @@ class LGDevice:
         self._sound_output = self._tv.tv_state.sound_output
         if _sound_output != self._sound_output:
             updated_data[MediaAttr.SOUND_MODE] = self.sound_output
+            updated_data[LGSelects.SELECT_SOUND_OUTPUT] = {"current_option": self.sound_output}
 
         if updated_data:
             _LOG.debug("Updated data %s", updated_data)
@@ -498,6 +525,21 @@ class LGDevice:
                 except RuntimeError:
                     pass
 
+    def _update_picture_modes(self) -> None:
+        if not self._picture_modes and (generation := self.model_version):
+            _LOG.debug("[%s] LG model found : %s", self._device_config.address, generation)
+            modes = LG_PICTURE_MODES_GENERATION.get(generation, None)
+            if modes is None:
+                modes = LG_PICTURE_MODES_GENERATION[DEFAULT_PICTURE_MODE]
+            self._picture_modes = {}
+            for mode in modes:
+                self._picture_modes[re.sub(r"([A-Z])", r" \1", mode).strip().title()] = mode
+            self.events.emit(
+                Events.UPDATE,
+                self.id,
+                {LGSelects.SELECT_PICTURE_MODE: {"options": self.picture_modes}},
+            )
+
     async def _connect_loop(self) -> None:
         """Connect loop.
 
@@ -510,6 +552,7 @@ class LGDevice:
                     await self.connect()
                     if self._tv.tv_state.is_on:
                         _LOG.debug("[%s] LG TV connection succeeded", self._device_config.address)
+                        self._update_picture_modes()
                         break
                 except CancelledError:
                     _LOG.debug("[%s] LG TV connect task cancelled", self._device_config.address)
@@ -676,6 +719,8 @@ class LGDevice:
             LGSensors.SENSOR_VOLUME: self.volume_level,
             LGSensors.SENSOR_MUTED: "on" if self.is_volume_muted else "off",
             LGSelects.SELECT_INPUT_SOURCE: {"options": self.source_list, "current_option": self.source},
+            LGSelects.SELECT_PICTURE_MODE: {"options": self.picture_modes, "current_option": self.picture_mode},
+            LGSelects.SELECT_SOUND_OUTPUT: {"options": self.sound_outputs, "current_option": self.sound_output},
         }
         if self.source_list:
             updated_data[MediaAttr.SOURCE_LIST] = self.source_list
@@ -844,6 +889,29 @@ class LGDevice:
         if self._media_state is None or len(self._media_state) == 0:
             return None
         return self._media_state[0]
+
+    @property
+    def picture_modes(self) -> list[str] | None:
+        """Available picture modes."""
+        return list(self._picture_modes.keys())
+
+    @property
+    def picture_mode(self) -> str:
+        """Current picture mode."""
+        return self._picture_mode
+
+    @property
+    def model_version(self) -> str | None:
+        """Current model version."""
+        if self._tv is None or self._tv.tv_info is None or self._tv.tv_info.system is None:
+            return None
+        model = self._tv.tv_info.system.get("modelName", None)
+        if model is None:
+            return None
+        m = re.search(r"OLED\d{2,3}([A-Z])(\d)", model)
+        if m:
+            return f"{m.group(1)}{m.group(2)}"  # ex "G3", "C1"
+        return None
 
     async def power_toggle(self) -> ucapi.StatusCodes:
         """Toggle power."""
@@ -1358,6 +1426,31 @@ class LGDevice:
         await self._tv.request(ep.CLOSE_ALERT, payload={"alertId": alertid})
         return ret
 
+    async def set_settings(self, category, settings, current_app=None):
+        """Set settings for a given category. See available settings docs for details.
+        current_app: bool (required by e.g. truMotionMode, aspectRatio setting)
+        """
+        params = {"category": category, "settings": settings}
+
+        if current_app is not None:
+            params["current_app"] = current_app
+
+        return await self.call_luna_command(ep.LUNA_SET_SYSTEM_SETTINGS, params)
+
+    async def get_system_settings(self, category: str, keys: list[str]):
+        """Get system settings. See available settings docs for details."""
+        payload = {"category": category, "keys": keys}
+        return await self._tv.request(ep.GET_SYSTEM_SETTINGS, payload=payload)
+
+    async def set_system_settings(self, category, settings, current_app=None):
+        """Set system settings for a given category. See available settings docs for details.
+        current_app: bool (required by e.g. truMotionMode, aspectRatio setting)
+        """
+        params = {"category": category, "settings": settings}
+        if current_app is not None:
+            params["current_app"] = current_app
+        return await self._tv.request(LG_ADDITIONAL_ENDPOINTS.get("SET_SYSTEM_SETTINGS"), params)
+
     @retry()
     async def set_picture_setting(self, option: str, value: int, relative=False):
         """Set picture settings for a given picture option and given value.
@@ -1369,12 +1462,17 @@ class LGDevice:
         :returns: UC status code
         """
         if relative:
-            result = await self._tv.request(ep.GET_SYSTEM_SETTINGS, {"category": "picture", "keys": [option]})
+            result = await self.get_system_settings(category="picture", keys=[option])
             current_value: int = int(result["settings"][option])
             value = min(max(current_value + value, 0), 100)
         return await self.call_luna_command(
             ep.LUNA_SET_SYSTEM_SETTINGS, {"category": "picture", "settings": {option: value}}
         )
+
+    @retry()
+    async def set_aspect_ratio(self, value: dict[str, Any]):
+        """Set aspect ratio."""
+        return await self.set_settings("aspectRatio", value)
 
     @retry()
     async def set_channel(self, channel: str) -> ucapi.StatusCodes:
@@ -1420,3 +1518,40 @@ class LGDevice:
             )
             return ucapi.StatusCodes.BAD_REQUEST
         return ucapi.StatusCodes.OK
+
+    async def update_picture_mode(self, new_mode: str | None):
+        """Update picture mode."""
+        try:
+            picture_mode = await self.get_picture_mode()
+            if picture_mode != self.picture_mode:
+                self._picture_mode = picture_mode
+                update = {LGSelects.SELECT_PICTURE_MODE: {"current_option": picture_mode}}
+                if picture_mode not in self._picture_modes.values():
+                    _LOG.debug(
+                        "[%s] Adding missing picture mode in the list : %s", self._device_config.address, picture_mode
+                    )
+                    self._picture_modes[re.sub(r"([A-Z])", r" \1", picture_mode).strip().title()] = picture_mode
+                    update[LGSelects.SELECT_PICTURE_MODE]["options"] = self.picture_modes
+                self.events.emit(Events.UPDATE, self.id, update)
+        # pylint: disable = W0718
+        except Exception as ex:
+            _LOG.exception("[%s] Failed to retrieve picture mode %s", self._device_config.address, ex)
+            if new_mode:
+                self.events.emit(Events.UPDATE, self.id, {LGSelects.SELECT_PICTURE_MODE: {"current_option": new_mode}})
+
+    async def get_picture_mode(self) -> str:
+        """Retrieve current picture mode."""
+        result = await self.get_system_settings("picture", keys=["pictureMode"])
+        return result["settings"]["pictureMode"]
+
+    @retry()
+    async def set_picture_mode(self, picture_mode: str) -> ucapi.StatusCodes:
+        """Set picture mode."""
+        mode = self._picture_modes.get(picture_mode, None)
+        if mode is None:
+            return ucapi.StatusCodes.BAD_REQUEST
+        results: dict[str, Any] | None = await self.set_system_settings("picture", {"pictureMode": mode})
+        if results and results.get("returnValue", None) is True:
+            self.event_loop.create_task(self.update_picture_mode(picture_mode))
+            return ucapi.StatusCodes.OK
+        return ucapi.StatusCodes.BAD_REQUEST

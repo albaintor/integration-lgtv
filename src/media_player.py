@@ -33,6 +33,7 @@ class LGTVMediaPlayer(MediaPlayer, LGEntity):
     def __init__(self, config_device: LGConfigDevice, device: lg.LGDevice):
         """Initialize the class."""
         self._device: lg.LGDevice = device
+        self._config_device = config_device
         entity_id = create_entity_id(config_device.id, EntityTypes.MEDIA_PLAYER)
         features = device.supported_features
         attributes = {
@@ -47,7 +48,6 @@ class LGTVMediaPlayer(MediaPlayer, LGEntity):
             Attributes.MEDIA_TITLE: device.media_title if device.media_title else "",
             Attributes.MEDIA_TYPE: device.media_type,
         }
-        _LOG.debug("LGTVMediaPlayer init %s : %s", entity_id, attributes)
         # Merge static commands with dynamic app commands
         app_commands = device.app_buttons
         simple_commands = list(LG_SIMPLE_COMMANDS) + app_commands
@@ -70,7 +70,7 @@ class LGTVMediaPlayer(MediaPlayer, LGEntity):
     @property
     def deviceid(self) -> str:
         """Return the device identifier."""
-        return self._device.id
+        return self._config_device.id
 
     async def command(self, cmd_id: str, params: dict[str, Any] | None = None, *, websocket: Any) -> StatusCodes:
         """

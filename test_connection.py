@@ -1,12 +1,12 @@
 # pylint: skip-file
 # flake8: noqa
 import asyncio
-import json
 import logging
 import sys
 from typing import Any
 
-from aiohttp import ClientSession
+sys.path.insert(1, "src")
+
 from aiowebostv import WebOsClient, WebOsTvState
 from rich import print_json
 
@@ -92,6 +92,10 @@ async def main():
     client.events.on(Events.UPDATE, on_device_update)
     await client.power_on()
     await client.connect()
+
+    print_json(data=await client.get_system_settings("picture", keys=["pictureMode"]))
+    # print_json(data=await client._tv.get_power_state())
+    # print_json(data=client._tv.tv_info.system)
     # print_json(data=await client._tv.get_software_info())
     # print_json(data=await client._tv.get_power_state())
     # print_json(data=await client._tv.get_current_app())

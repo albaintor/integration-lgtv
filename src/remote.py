@@ -53,7 +53,7 @@ class LGRemote(Remote, LGEntity):
     def __init__(self, config_device: LGConfigDevice, device: LGDevice):
         """Initialize the class."""
         self._device = device
-        _LOG.debug("LgRemote init")
+        self._config_device = config_device
         entity_id = create_entity_id(config_device.id, EntityTypes.REMOTE)
         features = [Features.SEND_CMD, Features.ON_OFF, Features.TOGGLE]
         attributes = {
@@ -98,7 +98,7 @@ class LGRemote(Remote, LGEntity):
     @property
     def deviceid(self) -> str:
         """Return the device identifier."""
-        return self._device.id
+        return self._config_device.id
 
     async def command(self, cmd_id: str, params: dict[str, Any] | None = None, *, websocket: Any) -> StatusCodes:
         """

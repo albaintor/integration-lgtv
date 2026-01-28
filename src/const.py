@@ -30,6 +30,8 @@ class LGSelects(str, Enum):
     """LG select values."""
 
     SELECT_INPUT_SOURCE = "select_input_source"
+    SELECT_PICTURE_MODE = "select_picture_mode"
+    SELECT_SOUND_OUTPUT = "select_sound_output"
 
 
 LIVE_TV_APP_ID = "com.webos.app.livetv"
@@ -46,6 +48,8 @@ LG_ADDITIONAL_ENDPOINTS = {
     "LUNA_SET_TPC": "com.webos.service.oledepl/setTemporalPeakControl",
     "LUNA_SET_GSR": "com.webos.service.oledepl/setGlobalStressReduction",
     "LUNA_SET_WHITE_BALANCE": "com.webos.service.pqcontroller/setWhiteBalance",
+    "SET_SYSTEM_SETTINGS": "settings/setSystemSettings",
+    "REQUEST_REBOOT": "com.webos.service.devicereset/requestReboot",
 }
 
 LG_FEATURES = [

@@ -59,7 +59,7 @@ class LGSensor(LGEntity, Sensor):
     @property
     def deviceid(self) -> str:
         """Return the device identifier."""
-        return self._device.id
+        return self._config_device.id
 
     @property
     def state(self) -> States:
