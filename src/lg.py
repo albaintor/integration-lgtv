@@ -1428,6 +1428,7 @@ class LGDevice:
 
     async def set_settings(self, category, settings, current_app=None):
         """Set settings for a given category. See available settings docs for details.
+
         current_app: bool (required by e.g. truMotionMode, aspectRatio setting)
         """
         params = {"category": category, "settings": settings}
@@ -1444,6 +1445,7 @@ class LGDevice:
 
     async def set_system_settings(self, category, settings, current_app=None):
         """Set system settings for a given category. See available settings docs for details.
+
         current_app: bool (required by e.g. truMotionMode, aspectRatio setting)
         """
         params = {"category": category, "settings": settings}

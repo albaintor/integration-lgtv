@@ -1,5 +1,5 @@
 """
-Picture presets per model
+Picture presets per model.
 
 :copyright: (c) 2026 by Albaintor.
 :license: Mozilla Public License Version 2.0, see LICENSE for more details.
