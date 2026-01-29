@@ -1557,3 +1557,7 @@ class LGDevice:
             self.event_loop.create_task(self.update_picture_mode(picture_mode))
             return ucapi.StatusCodes.OK
         return ucapi.StatusCodes.BAD_REQUEST
+
+    async def get_configs(self) -> dict[str, Any] | None:
+        """Extract device configuration."""
+        return await self._tv.request(ep.GET_CONFIGS, payload={"configNames": ["tv.model.*"]})

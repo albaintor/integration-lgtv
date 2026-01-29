@@ -12,6 +12,7 @@ import asyncio
 import io
 import json
 import logging
+import os
 import queue
 import socket
 import sys
@@ -72,7 +73,7 @@ if sys.platform == "win32":
 _LOOP = asyncio.new_event_loop()
 asyncio.set_event_loop(_LOOP)
 
-DRIVER_PORT = 9090
+DRIVER_PORT = os.getenv("UC_INTEGRATION_HTTP_PORT", 9090)
 DRIVER_URL = f"ws://{get_local_ip()}:{DRIVER_PORT}/ws"
 MAIN_WS_MAX_MSG_SIZE = 8 * 1024 * 1024  # 8Mb
 WS_TIMEOUT = 5
@@ -461,6 +462,7 @@ class RemoteInterface(tk.Tk):
                 _LOG.error("Command error : %s", result)
                 self.update()
             else:
+                self._info_label["text"] = f"Command succeeded"
                 _LOG.debug("Command result : %s", result)
 
         except Exception as ex:
@@ -508,14 +510,14 @@ class RemoteInterface(tk.Tk):
         self._volume["text"] = volume
         self.update()
 
-    def set_sensor(self, entity_id: str, name: str, value: str) -> None:
+    def set_sensor(self, entity_id: str, name: str, value: str, state: str) -> None:
         _LOG.debug("Setting sensor %s %s", entity_id, value)
         if entity_id not in self._sensors:
             label = self._sensors[entity_id] = ttk.Label(self._left_frame, text="")
             label.grid(row=self._row, column=0, columnspan=3)
             self._row += 1
             self._sensors[entity_id] = label
-        self._sensors[entity_id]["text"] = f"{name}: {value}"
+        self._sensors[entity_id]["text"] = f"{name}({state}): {value}"
         self.update()
 
     def set_selector(self, entity_id: str, name: str, selector: Selector) -> None:
@@ -547,7 +549,7 @@ class WorkerThread(threading.Thread):
         self._loop_ready = threading.Event()
         self._ws: RemoteWebsocket | None = None
         self._entity_ids: list[str] = []
-        self._sensors: dict[str, str] = {}
+        self._sensors: dict[str, dict[str, Any]] = {}
         self._selectors: dict[str, Selector] = {}
         self._entities: list[dict[str, Any]] = []
         # self.start()
@@ -590,14 +592,15 @@ class WorkerThread(threading.Thread):
             return
         attributes: dict[str, Any] = updated_data["attributes"]
         entity_id = updated_data["entity_id"]
-        if (
-            updated_data.get("entity_type", "") == "sensor"
-            and entity_id in self._sensors
-            and (value := attributes.get("value", None))
-        ):
-            value = attributes.get("value", None)
+        if updated_data.get("entity_type", "") == "sensor" and entity_id in self._sensors:
+            current_attributes = self._sensors[entity_id]
+            name = attributes.get("name", current_attributes.get("name", ""))
+            value = attributes.get("value", current_attributes.get("value", ""))
+            state = attributes.get("state", current_attributes.get("state", ""))
+            current_attributes["value"] = value
+            current_attributes["state"] = state
             self._interface._ui_queue.put(
-                lambda eid=entity_id, name=self._sensors[entity_id]: self._interface.set_sensor(eid, name, value)
+                lambda eid=entity_id, n=name, v=value, s=state: self._interface.set_sensor(eid, n, v, s)
             )
             return
 
@@ -647,7 +650,7 @@ class WorkerThread(threading.Thread):
                 if entity_id.startswith("media_player"):
                     media_player_entity_id = entity_id
                 if entity.get("entity_type", "") == "sensor":
-                    self._sensors[entity_id] = entity["name"].get("en", entity_id)
+                    self._sensors[entity_id] = {"name": entity["name"].get("en", entity_id), "state": ""}
                 if entity.get("entity_type", "") == "select":
                     self._selectors[entity_id] = Selector(
                         name=entity["name"].get("en", entity_id), current_option="", options=[]
@@ -656,10 +659,10 @@ class WorkerThread(threading.Thread):
             data = await self._ws.subscribe_entities(self._entity_ids)
             _LOG.debug("Subscribed entities : %s", data)
             await asyncio.sleep(5)
-            data = await self._ws.send_command(
-                {"cmd_id": "on", "entity_id": media_player_entity_id, "entity_type": "media_player", "params": {}}
-            )
-            _LOG.debug("Command result : %s", data)
+            # data = await self._ws.send_command(
+            #     {"cmd_id": "on", "entity_id": media_player_entity_id, "entity_type": "media_player", "params": {}}
+            # )
+            # _LOG.debug("Command result : %s", data)
             data = await self._ws.get_entity_states()
             _LOG.debug("Entities states : %s", data)
         except Exception as e:
@@ -688,9 +691,5 @@ if __name__ == "__main__":
     ch.setFormatter(formatter)
     logging.basicConfig(handlers=[ch])
     logging.getLogger(__name__).setLevel(logging.DEBUG)
-    logging.getLogger("client").setLevel(logging.DEBUG)
-    logging.getLogger("media_player").setLevel(logging.DEBUG)
-    logging.getLogger("remote").setLevel(logging.DEBUG)
-
     logging.getLogger(__name__).setLevel(logging.DEBUG)
     _LOOP.run_until_complete(main())

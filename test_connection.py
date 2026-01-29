@@ -12,6 +12,7 @@ from rich import print_json
 
 from config import LGConfigDevice
 from lg import Events, LGDevice
+from aiowebostv import endpoints as ep
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -93,7 +94,9 @@ async def main():
     await client.power_on()
     await client.connect()
 
-    print_json(data=await client.get_system_settings("picture", keys=["pictureMode"]))
+    print_json(data=await client._tv.request(ep.GET_CONFIGS, payload={"configNames": ["tv.model.*"]}))
+
+    # print_json(data=await client.get_system_settings("picture", keys=["pictureModes"]))
     # print_json(data=await client._tv.get_power_state())
     # print_json(data=client._tv.tv_info.system)
     # print_json(data=await client._tv.get_software_info())
@@ -102,6 +105,12 @@ async def main():
     # print_json(data=await client._tv.get_media_foreground_app())
     # print_json(data=await client._tv.get_audio_status())
     # print_json(data=await client._tv.get_input())
+
+    # print_json(
+    #     data=await client.client.request(
+    #         "settings/getSystemSettings", {"category": "picture", "keys": ["pictureModes"]}
+    #     )
+    # )
 
     await asyncio.sleep(50)
     # print_json(data=await client._tv.get_power_state())
