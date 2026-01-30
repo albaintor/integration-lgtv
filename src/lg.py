@@ -272,6 +272,7 @@ class LGDevice:
         self._media_state: list[dict[str, Any]] | None = None
         self._picture_mode = ""
         self._picture_modes: dict[str, str] = {}
+        self._picture_mode_retries = 3
 
         _LOG.debug("[%s] LG TV created", device_config.address)
 
@@ -394,18 +395,29 @@ class LGDevice:
             except Exception:
                 pass
 
-        if not self._picture_mode:
-            picture_mode = await self.get_picture_mode()
-            picture_mode_name = re.sub(r"([A-Z])", r" \1", picture_mode).strip().title()
-            if picture_mode_name != self.picture_mode:
-                self._picture_mode = picture_mode_name
-                updated_data[LGSelects.SELECT_PICTURE_MODE] = {"current_option": picture_mode_name}
-                if picture_mode not in self._picture_modes.values():
-                    _LOG.debug(
-                        "[%s] Adding missing picture mode in the list : %s", self._device_config.address, picture_mode
-                    )
-                    self._picture_modes[picture_mode_name] = picture_mode
-                    updated_data[LGSelects.SELECT_PICTURE_MODE]["options"] = self.picture_modes
+        if not self._picture_mode and self._picture_mode_retries > 0:
+            try:
+                picture_mode = await self.get_picture_mode()
+                picture_mode_name = re.sub(r"([A-Z])", r" \1", picture_mode).strip().title()
+                if picture_mode_name != self.picture_mode:
+                    self._picture_mode = picture_mode_name
+                    updated_data[LGSelects.SELECT_PICTURE_MODE] = {"current_option": picture_mode_name}
+                    if picture_mode not in self._picture_modes.values():
+                        _LOG.debug(
+                            "[%s] Adding missing picture mode in the list : %s",
+                            self._device_config.address,
+                            picture_mode,
+                        )
+                        self._picture_modes[picture_mode_name] = picture_mode
+                        updated_data[LGSelects.SELECT_PICTURE_MODE]["options"] = self.picture_modes
+            except WEBOSTV_EXCEPTIONS as ex:
+                _LOG.debug(
+                    "[%s] Failed to extract current picture mode (unsupported?), will retry %s times : %s",
+                    self._device_config.address,
+                    self._picture_mode_retries,
+                    ex,
+                )
+                self._picture_mode_retries -= 1
 
         self._update_sources(updated_data)
 
