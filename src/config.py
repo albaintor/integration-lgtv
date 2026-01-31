@@ -11,7 +11,6 @@ import logging
 import os
 from asyncio import Lock
 from dataclasses import dataclass, field, fields
-from enum import Enum
 from typing import Callable, Iterator
 
 from ucapi import Entity, EntityTypes
@@ -21,22 +20,6 @@ import discover
 _LOG = logging.getLogger(__name__)
 
 _CFG_FILENAME = "config.json"
-
-
-class PatchedEntityTypes(str, Enum):
-    """Entity types."""
-
-    COVER = "cover"
-    BUTTON = "button"
-    CLIMATE = "climate"
-    LIGHT = "light"
-    MEDIA_PLAYER = "media_player"
-    REMOTE = "remote"
-    SENSOR = "sensor"
-    SWITCH = "switch"
-    IR_EMITTER = "ir_emitter"
-    VOICE_ASSISTANT = "voice_assistant"
-    SELECT = "select"
 
 
 class LGEntity(Entity):

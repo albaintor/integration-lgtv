@@ -9,11 +9,12 @@ import logging
 from enum import Enum
 from typing import Any
 
-from ucapi import StatusCodes
+from ucapi import StatusCodes, EntityTypes
 from ucapi.api_definitions import CommandHandler
+from ucapi.select import Select
 
 import lg
-from config import LGConfigDevice, LGEntity, PatchedEntityTypes, create_entity_id
+from config import LGConfigDevice, LGEntity, create_entity_id
 from const import LGSelects
 
 
@@ -27,7 +28,7 @@ _LOG = logging.getLogger(__name__)
 
 
 # pylint: disable=W1405,R0801
-class LGSelect(LGEntity):
+class LGSelect(LGEntity, Select):
     """Representation of a LG select entity."""
 
     ENTITY_NAME = "select"
@@ -44,7 +45,6 @@ class LGSelect(LGEntity):
     ):
         """Initialize the class."""
         # pylint: disable = R0801
-        features = []
         attributes = dict[Any, Any]()
         self._config_device = config_device
         self._device: lg.LGDevice = device
@@ -53,13 +53,7 @@ class LGSelect(LGEntity):
         super().__init__(
             identifier=entity_id,
             name=name,
-            entity_type=PatchedEntityTypes.SELECT,
-            features=features,
             attributes=attributes,
-            device_class=None,
-            options=None,
-            area=None,
-            cmd_handler=self.command,
         )
 
     @property
@@ -147,7 +141,7 @@ class LGInputSourceSelect(LGSelect):
     def __init__(self, config_device: LGConfigDevice, device: lg.LGDevice):
         """Initialize the class."""
         # pylint: disable=W1405,R0801
-        entity_id = f"{create_entity_id(config_device.id, PatchedEntityTypes.SELECT)}.{self.ENTITY_NAME}"
+        entity_id = f"{create_entity_id(config_device.id, EntityTypes.SELECT)}.{self.ENTITY_NAME}"
         super().__init__(
             entity_id,
             {
@@ -179,7 +173,7 @@ class LGPictureModeSelect(LGSelect):
     def __init__(self, config_device: LGConfigDevice, device: lg.LGDevice):
         """Initialize the class."""
         # pylint: disable=W1405,R0801
-        entity_id = f"{create_entity_id(config_device.id, PatchedEntityTypes.SELECT)}.{self.ENTITY_NAME}"
+        entity_id = f"{create_entity_id(config_device.id, EntityTypes.SELECT)}.{self.ENTITY_NAME}"
         super().__init__(
             entity_id,
             {
@@ -211,7 +205,7 @@ class LGSoundOutputSelect(LGSelect):
     def __init__(self, config_device: LGConfigDevice, device: lg.LGDevice):
         """Initialize the class."""
         # pylint: disable=W1405,R0801
-        entity_id = f"{create_entity_id(config_device.id, PatchedEntityTypes.SELECT)}.{self.ENTITY_NAME}"
+        entity_id = f"{create_entity_id(config_device.id, EntityTypes.SELECT)}.{self.ENTITY_NAME}"
         super().__init__(
             entity_id,
             {

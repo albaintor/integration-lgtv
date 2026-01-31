@@ -16,7 +16,7 @@ import struct
 import sys
 import time
 from asyncio import AbstractEventLoop, CancelledError, Lock, shield
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 from functools import wraps
 from typing import (
     Any,
@@ -81,28 +81,29 @@ class LGState(IntEnum):
     ON = 2
 
 
-class Events(IntEnum):
+class Events(StrEnum):
     """Internal driver events."""
 
-    CONNECTING = 0
-    CONNECTED = 1
-    DISCONNECTED = 2
-    ERROR = 3
-    UPDATE = 4
+    CONNECTING = "CONNECTING"
+    CONNECTED = "CONNECTED"
+    DISCONNECTED = "DISCONNECTED"
+    ERROR = "ERROR"
+    UPDATE = "UPDATE"
     # IP_ADDRESS_CHANGED = 6
 
 
 _LGDeviceT = TypeVar("_LGDeviceT", bound="LGDevice")
 _P = ParamSpec("_P")
+_R = TypeVar("_R", bound=ucapi.StatusCodes)
 
 
 class DeferredCallback(TypedDict):
     """Deferred callback parameters."""
 
-    object: _LGDeviceT | WebOsClient
+    object: "LGDevice | WebOsClient"
     function: Callable[[Any | None], Coroutine]
-    args: NotRequired[_P.args]
-    kwargs: NotRequired[_P.kwargs]
+    args: NotRequired[tuple[Any, ...]]
+    kwargs: NotRequired[dict[str, Any]]
 
 
 async def retry_call_command(
@@ -142,16 +143,16 @@ async def retry_call_command(
 
 
 def retry(*, timeout: float = 5, bufferize=False) -> Callable[
-    [Callable[_P, Awaitable[ucapi.StatusCodes]]],
-    Callable[Concatenate[_LGDeviceT, _P], Coroutine[Any, Any, ucapi.StatusCodes | None]],
+    [Callable[Concatenate[_LGDeviceT, _P], Awaitable[_R]]],
+    Callable[Concatenate[_LGDeviceT, _P], Awaitable[_R]],
 ]:
     """Retry command."""
 
     def decorator(
-        func: Callable[Concatenate[_LGDeviceT, _P], Awaitable[ucapi.StatusCodes | None]],
-    ) -> Callable[Concatenate[_LGDeviceT, _P], Coroutine[Any, Any, ucapi.StatusCodes | None]]:
+        func: Callable[Concatenate[_LGDeviceT, _P], Awaitable[_R | None]],
+    ) -> Callable[Concatenate[_LGDeviceT, _P], Coroutine[Any, Any, _R | None]]:
         @wraps(func)
-        async def wrapper(obj: _LGDeviceT, *args: _P.args, **kwargs: _P.kwargs) -> ucapi.StatusCodes:
+        async def wrapper(obj: _LGDeviceT, *args: _P.args, **kwargs: _P.kwargs) -> _R:
             """Wrap all command methods."""
             # pylint: disable = W0212
             try:
