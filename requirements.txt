@@ -1,6 +1,7 @@
 pyee~=13.0.0
 aiowebostv~=0.7.5
-ucapi~=0.5.2
+ucapi
+ file:./src/ucapi-0.5.3.dev8+gd0eae3cf8.d20260203-py3-none-any.whl
 httpx~=0.28.1
 defusedxml~=0.7.1
 aiohttp~=3.13.3

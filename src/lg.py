@@ -40,6 +40,7 @@ from aiowebostv.webos_client import MAIN_WS_MAX_MSG_SIZE, WS_PORT, WSS_PORT
 from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr
 from ucapi.media_player import Features, MediaType, States
+from ucapi.select import Attributes as SelectAttributes
 from ucapi.ui import UiPage
 
 from config import LGConfigDevice
@@ -319,7 +320,7 @@ class LGDevice:
                         self.id,
                         {
                             MediaAttr.SOUND_MODE: self.sound_output,
-                            LGSelects.SELECT_SOUND_OUTPUT: {"current_option": self.sound_output},
+                            LGSelects.SELECT_SOUND_OUTPUT: {SelectAttributes.CURRENT_OPTION: self.sound_output},
                         },
                     )
 
@@ -368,7 +369,7 @@ class LGDevice:
             if len(new_source_list) != len(old_source_list):
                 _LOG.debug("[%s] Source list updated: %s", self._device_config.address, new_source_list)
                 updated_data[MediaAttr.SOURCE_LIST] = new_source_list
-                updated_data[LGSelects.SELECT_INPUT_SOURCE] = {"options": new_source_list}
+                updated_data[LGSelects.SELECT_INPUT_SOURCE] = {SelectAttributes.OPTIONS: new_source_list}
 
         if active_source != self._active_source:
             _LOG.debug("[%s] Active source %s", self._device_config.address, active_source)
@@ -376,7 +377,7 @@ class LGDevice:
             updated_data[MediaAttr.SOURCE] = self._active_source
             updated_data[LGSensors.SENSOR_INPUT_SOURCE] = self._active_source
             select_data = updated_data.get(LGSelects.SELECT_INPUT_SOURCE, {})
-            select_data["current_option"] = self._active_source
+            select_data[SelectAttributes.CURRENT_OPTION] = self._active_source
             updated_data[LGSelects.SELECT_INPUT_SOURCE] = select_data
 
     async def _update_states(self, data: WebOsClient | None) -> None:
@@ -402,7 +403,7 @@ class LGDevice:
                 picture_mode_name = re.sub(r"([A-Z])", r" \1", picture_mode).strip().title()
                 if picture_mode_name != self.picture_mode:
                     self._picture_mode = picture_mode_name
-                    updated_data[LGSelects.SELECT_PICTURE_MODE] = {"current_option": picture_mode_name}
+                    updated_data[LGSelects.SELECT_PICTURE_MODE] = {SelectAttributes.CURRENT_OPTION: picture_mode_name}
                     if picture_mode not in self._picture_modes.values():
                         _LOG.debug(
                             "[%s] Adding missing picture mode in the list : %s",
@@ -410,7 +411,7 @@ class LGDevice:
                             picture_mode,
                         )
                         self._picture_modes[picture_mode_name] = picture_mode
-                        updated_data[LGSelects.SELECT_PICTURE_MODE]["options"] = self.picture_modes
+                        updated_data[LGSelects.SELECT_PICTURE_MODE][SelectAttributes.OPTIONS] = self.picture_modes
             except WEBOSTV_EXCEPTIONS as ex:
                 _LOG.debug(
                     "[%s] Failed to extract current picture mode (unsupported?), will retry %s times : %s",
@@ -436,13 +437,13 @@ class LGDevice:
             if self._sound_output != data.tv_state.sound_output:
                 self._sound_output = data.tv_state.sound_output
                 updated_data[MediaAttr.SOUND_MODE] = self.sound_output
-                updated_data[LGSelects.SELECT_SOUND_OUTPUT] = {"current_option": self.sound_output}
+                updated_data[LGSelects.SELECT_SOUND_OUTPUT] = {SelectAttributes.CURRENT_OPTION: self.sound_output}
         elif self._sound_output is None:
             try:
                 self._sound_output = await self._tv.get_sound_output()
                 if self._sound_output:
                     updated_data[MediaAttr.SOUND_MODE] = self.sound_output
-                    updated_data[LGSelects.SELECT_SOUND_OUTPUT] = {"current_option": self.sound_output}
+                    updated_data[LGSelects.SELECT_SOUND_OUTPUT] = {SelectAttributes.CURRENT_OPTION: self.sound_output}
                 _LOG.debug("[%s] Sound output %s", self._device_config.address, self._sound_output)
             except Exception as ex:
                 _LOG.warning("[%s] Error extraction of sound output %s", self._device_config.address, ex)
@@ -501,7 +502,7 @@ class LGDevice:
         self._sound_output = self._tv.tv_state.sound_output
         if _sound_output != self._sound_output:
             updated_data[MediaAttr.SOUND_MODE] = self.sound_output
-            updated_data[LGSelects.SELECT_SOUND_OUTPUT] = {"current_option": self.sound_output}
+            updated_data[LGSelects.SELECT_SOUND_OUTPUT] = {SelectAttributes.CURRENT_OPTION: self.sound_output}
 
         if updated_data:
             _LOG.debug("Updated data %s", updated_data)
@@ -550,7 +551,7 @@ class LGDevice:
             self.events.emit(
                 Events.UPDATE,
                 self.id,
-                {LGSelects.SELECT_PICTURE_MODE: {"options": self.picture_modes}},
+                {LGSelects.SELECT_PICTURE_MODE: {SelectAttributes.OPTIONS: self.picture_modes}},
             )
 
     async def _connect_loop(self) -> None:
@@ -731,9 +732,18 @@ class LGDevice:
             LGSensors.SENSOR_INPUT_SOURCE: self._active_source,
             LGSensors.SENSOR_VOLUME: self.volume_level,
             LGSensors.SENSOR_MUTED: "on" if self.is_volume_muted else "off",
-            LGSelects.SELECT_INPUT_SOURCE: {"options": self.source_list, "current_option": self.source},
-            LGSelects.SELECT_PICTURE_MODE: {"options": self.picture_modes, "current_option": self.picture_mode},
-            LGSelects.SELECT_SOUND_OUTPUT: {"options": self.sound_outputs, "current_option": self.sound_output},
+            LGSelects.SELECT_INPUT_SOURCE: {
+                SelectAttributes.OPTIONS: self.source_list,
+                SelectAttributes.CURRENT_OPTION: self.source,
+            },
+            LGSelects.SELECT_PICTURE_MODE: {
+                SelectAttributes.OPTIONS: self.picture_modes,
+                SelectAttributes.CURRENT_OPTION: self.picture_mode,
+            },
+            LGSelects.SELECT_SOUND_OUTPUT: {
+                SelectAttributes.OPTIONS: self.sound_outputs,
+                SelectAttributes.CURRENT_OPTION: self.sound_output,
+            },
         }
         if self.source_list:
             updated_data[MediaAttr.SOURCE_LIST] = self.source_list
@@ -1540,19 +1550,21 @@ class LGDevice:
             picture_mode = await self.get_picture_mode()
             if picture_mode != self.picture_mode:
                 self._picture_mode = picture_mode
-                update = {LGSelects.SELECT_PICTURE_MODE: {"current_option": picture_mode}}
+                update = {LGSelects.SELECT_PICTURE_MODE: {SelectAttributes.CURRENT_OPTION: picture_mode}}
                 if picture_mode not in self._picture_modes.values():
                     _LOG.debug(
                         "[%s] Adding missing picture mode in the list : %s", self._device_config.address, picture_mode
                     )
                     self._picture_modes[re.sub(r"([A-Z])", r" \1", picture_mode).strip().title()] = picture_mode
-                    update[LGSelects.SELECT_PICTURE_MODE]["options"] = self.picture_modes
+                    update[LGSelects.SELECT_PICTURE_MODE][SelectAttributes.OPTIONS] = self.picture_modes
                 self.events.emit(Events.UPDATE, self.id, update)
         # pylint: disable = W0718
         except Exception as ex:
             _LOG.exception("[%s] Failed to retrieve picture mode %s", self._device_config.address, ex)
             if new_mode:
-                self.events.emit(Events.UPDATE, self.id, {LGSelects.SELECT_PICTURE_MODE: {"current_option": new_mode}})
+                self.events.emit(
+                    Events.UPDATE, self.id, {LGSelects.SELECT_PICTURE_MODE: {SelectAttributes.CURRENT_OPTION: new_mode}}
+                )
 
     async def get_picture_mode(self) -> str:
         """Retrieve current picture mode."""

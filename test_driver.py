@@ -32,6 +32,22 @@ from PIL import Image, ImageTk
 from pyee.asyncio import AsyncIOEventEmitter
 from rich import print_json
 
+# localization_cfg = {
+#     "country_code": "EN",
+#     "language_code": "en_US",
+#     "measurement_unit": "METRIC",
+#     "time_format_24h": True,
+#     "time_zone": "Europe/Paris",
+# }
+
+localization_cfg = {
+    "country_code": "FR",
+    "language_code": "fr_FR",
+    "measurement_unit": "METRIC",
+    "time_format_24h": True,
+    "time_zone": "Europe/Paris",
+}
+
 
 class Events(StrEnum):
     """Internal events."""
@@ -179,7 +195,6 @@ class RemoteWebsocket:
             _LOG.debug("receive: %s", raw_msg)
             if raw_msg.type is not WSMsgType.TEXT:
                 break
-
             self._process_text_message(raw_msg.data)
 
     async def _handle_auth(self):
@@ -188,6 +203,115 @@ class RemoteWebsocket:
             {"kind": "resp", "req_id": self._id, "code": 200, "msg": "authentication", "msg_data": {}}
         )
         self._id += 1
+
+    async def _handle_request(self, msg: dict[str, Any]):
+        # {"kind": "req", "msg": "get_supported_entity_types"}
+        msg_type = msg.get("msg", "")
+        req_id = msg.get("id", "")
+        if msg_type == "get_supported_entity_types":
+            await self._send_json(
+                {
+                    "kind": "resp",
+                    "req_id": req_id,
+                    "code": 200,
+                    "msg": "supported_entity_types",
+                    "msg_data": [
+                        "cover",
+                        "button",
+                        "climate",
+                        "light",
+                        "media_player",
+                        "remote",
+                        "select",
+                        "sensor",
+                        "switch",
+                        "ir_emitter",
+                        "voice_assistant",
+                    ],
+                }
+            )
+        elif msg_type == "get_version":
+            await self._send_json(
+                {
+                    "kind": "resp",
+                    "req_id": req_id,
+                    "code": 200,
+                    "msg": "version",
+                    "msg_data": {
+                        "address": "AA:BB:CC:DD:EE:FF",
+                        "api": "0.16.0",
+                        "core": "0.69.1-bt",
+                        "device_name": "Remote 3",
+                        "hostname": "Remote3-aabbccdd.local",
+                        "model": "UCR3",
+                        "os": "2.8.3",
+                        "ui": "0.69.1",
+                    },
+                }
+            )
+        elif msg_type == "get_localization_cfg":
+            await self._send_json(
+                {
+                    "kind": "resp",
+                    "req_id": req_id,
+                    "code": 200,
+                    "msg": "localization_cfg",
+                    "msg_data": localization_cfg,
+                }
+            )
+        elif msg_type == "get_driver_metadata":
+            # {"id":2,"kind":"req","msg":"get_driver_metadata"}
+            with open("driver.json", "r") as file:
+                file_content = json.load(file)
+                await self._send_json(
+                    {
+                        "kind": "resp",
+                        "req_id": req_id,
+                        "code": 200,
+                        "msg": "driver_metadata",
+                        "msg_data": json.dumps(file_content),
+                    }
+                )
+
+        elif msg_type == "setup_driver":
+            # {"kind":"req","id":3,"msg":"setup_driver","msg_data":{"reconfigure":false,"setup_data":{}}}
+            await self._send_json(
+                {
+                    "kind": "resp",
+                    "req_id": req_id,
+                    "code": 200,
+                    "msg": "result",
+                    "msg_data": {},
+                }
+            )
+            await asyncio.sleep(1)
+            await self._send_json(
+                {
+                    "kind": "event",
+                    "msg": "driver_setup_change",
+                    "msg_data": {"event_type": "SETUP", "state": "SETUP"},
+                    "cat": "DEVICE",
+                }
+            )
+            await asyncio.sleep(1)
+            await self._send_json(
+                {
+                    "kind": "event",
+                    "msg": "driver_setup_change",
+                    "msg_data": {"event_type": "SETUP", "state": "OK"},
+                    "cat": "DEVICE",
+                }
+            )
+        else:
+            await self._send_json(
+                {
+                    "kind": "resp",
+                    "req_id": req_id,
+                    "code": 400,
+                    "msg": f"{msg_type}",
+                    "msg_data": f"Unknown message type: {msg_type}",
+                }
+            )
 
     async def _send_json(self, msg: dict) -> None:
         _LOG.debug("Send json: %s", msg)
@@ -234,6 +358,8 @@ class RemoteWebsocket:
         kind = msg.get("kind", "")
         if kind == "event" and (callback_queue := self.callback_queues.get(msg_type)):
             callback_queue.put_nowait(msg)
+        elif kind == "req":
+            asyncio.create_task(self._handle_request(msg))
         else:
             uid = msg.get("req_id", None)
             if uid is None:

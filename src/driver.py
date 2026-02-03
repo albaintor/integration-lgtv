@@ -7,7 +7,6 @@ This module implements a Remote Two integration driver for LG TV receivers.
 """
 
 import asyncio
-import json
 import logging
 import os
 import sys
@@ -15,9 +14,6 @@ from enum import Enum
 from typing import Any, Type
 
 import ucapi
-import ucapi.api_definitions as uc
-import websockets
-from ucapi.api import IntegrationAPI
 from ucapi.media_player import Attributes as MediaAttr
 
 import config
@@ -499,29 +495,6 @@ async def _async_remove(device: lg.LGDevice) -> None:
     device.events.remove_all_listeners()
 
 
-async def patched_broadcast_ws_event(self, msg: str, msg_data: dict[str, Any], category: uc.EventCategory) -> None:
-    """
-    Send the given event-message to all connected WebSocket clients.
-
-    If a client is no longer connected, a log message is printed and the remaining
-    clients are notified.
-
-    :param msg: event message name
-    :param msg_data: message data payload
-    :param category: event category
-    """
-    data = {"kind": "event", "msg": msg, "msg_data": msg_data, "cat": category}
-    data_dump = json.dumps(data)
-    # pylint: disable = W0212
-    for websocket in self._clients.copy():
-        if _LOG.isEnabledFor(logging.DEBUG):
-            _LOG.debug("[%s] ->: %s", websocket.remote_address, data_dump)
-        try:
-            await websocket.send(data_dump)
-        except websockets.exceptions.WebSocketException:
-            pass
-
-
 async def main():
     """Start the Remote Two integration driver."""
     logging.basicConfig()
@@ -544,12 +517,7 @@ async def main():
 
     _LOOP.create_task(config.devices.handle_address_change())
 
-    # pylint: disable = W0212
-    # Patched broadcast websocket event to avoid crash when using as external integration
-    # See https://discord.com/channels/553671366411288576/1163576491775361095/1395075829339394070
-    if os.getenv("UC_EXTERNAL"):
-        IntegrationAPI._broadcast_ws_event = patched_broadcast_ws_event
-    await api.init("driver.json", setup_flow.driver_setup_handler)
+    await api.init("driver.json", setup_flow.SetupFlow(api).driver_setup_handler)
 
 
 if __name__ == "__main__":

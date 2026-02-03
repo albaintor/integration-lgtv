@@ -16,6 +16,7 @@ from aiowebostv import WebOsClient
 from ucapi import (
     AbortDriverSetup,
     DriverSetupRequest,
+    IntegrationAPI,
     IntegrationSetupError,
     RequestUserConfirmation,
     RequestUserInput,
@@ -52,688 +53,523 @@ class SetupSteps(IntEnum):
     BACKUP_RESTORE = 7
 
 
-_setup_step = SetupSteps.INIT
-_cfg_add_device: bool = False
-_discovered_devices: list[dict[str, str]] = []
-_pairing_lg_tv: WebOsClient | None = None
-_reconfigured_device: LGConfigDevice | None = None
-_user_input_discovery = RequestUserInput(
-    {"en": "Setup mode", "de": "Setup Modus"},
-    [
-        {
-            "id": "info",
-            "label": {
-                "en": "Discover or connect to LG TV devices",
-                "de": "Suche oder Verbinde auf LG TV Gerät",
-                "fr": "Découverte ou connexion à votre TV LG",
-            },
-            "field": {
-                "label": {
-                    "value": {
-                        "en": "Leave blank to use auto-discovery.",
-                        "de": "Leer lassen, um automatische Erkennung zu verwenden.",
-                        "fr": "Laissez le champ vide pour utiliser la découverte automatique.",
-                    }
-                }
-            },
-        },
-        {
-            "field": {"text": {"value": ""}},
-            "id": "address",
-            "label": {"en": "IP address", "de": "IP-Adresse", "fr": "Adresse IP"},
-        },
-    ],
-)
+class SetupFlow:
+    """Setup flow for LG TV integration."""
 
-
-# pylint: disable=R0911
-async def driver_setup_handler(msg: SetupDriver) -> SetupAction:
-    """
-    Dispatch driver setup requests to corresponding handlers.
-
-    Either start the setup process or handle the selected LG TV device.
-
-    :param msg: the setup driver request object, either DriverSetupRequest or UserDataResponse
-    :return: the setup action on how to continue
-    """
-    global _setup_step
-    global _cfg_add_device
-
-    if isinstance(msg, DriverSetupRequest):
-        _setup_step = SetupSteps.INIT
-        _cfg_add_device = False
-        return await handle_driver_setup(msg)
-    if isinstance(msg, UserDataResponse):
-        _LOG.debug("Setup handler message : step %s, message : %s", _setup_step, msg)
-        if _setup_step == SetupSteps.WORKFLOW_MODE:
-            if msg.input_values.get("configuration_mode", "") == "normal":
-                _setup_step = SetupSteps.DEVICE_CONFIGURATION_MODE
-                _LOG.debug("Starting normal setup workflow")
-                return _user_input_discovery
-            _LOG.debug("User requested backup/restore of configuration")
-            return await _handle_backup_restore_step()
-        if _setup_step == SetupSteps.DEVICE_CONFIGURATION_MODE:
-            if "action" in msg.input_values:
-                _LOG.debug("Setup flow starts with existing configuration")
-                return await handle_configuration_mode(msg)
-            _LOG.debug("Setup flow configuration mode")
-            return await _handle_discovery(msg)
-        # if _setup_step == SetupSteps.DEVICE_CONFIGURATION_MODE and "action" in msg.input_values:
-        #     return await handle_configuration_mode(msg)
-        if _setup_step == SetupSteps.DISCOVER and "address" in msg.input_values:
-            return await _handle_discovery(msg)
-        if _setup_step == SetupSteps.DEVICE_CHOICE and "choice" in msg.input_values:
-            return await handle_device_choice(msg)
-        if _setup_step == SetupSteps.ADDITIONAL_SETTINGS and "mac_address" in msg.input_values:
-            return await handle_additional_settings(msg)
-        if _setup_step == SetupSteps.TEST_WAKEONLAN and "mac_address" in msg.input_values:
-            return await handle_wake_on_lan(msg)
-        if _setup_step == SetupSteps.BACKUP_RESTORE:
-            return await _handle_backup_restore(msg)
-        _LOG.error("No or invalid user response was received: %s", msg)
-    elif isinstance(msg, UserConfirmationResponse):
-        if _setup_step == SetupSteps.TEST_WAKEONLAN:
-            if msg.confirm:
-                return get_wakeonlan_settings()
-            return get_additional_settings(_reconfigured_device)
-
-    elif isinstance(msg, AbortDriverSetup):
-        _LOG.info("Setup was aborted with code: %s", msg.error)
-        if _pairing_lg_tv is not None:
-            await _pairing_lg_tv.disconnect()
-        _setup_step = SetupSteps.INIT
-
-    # user confirmation not used in setup process
-    # if isinstance(msg, UserConfirmationResponse):
-    #     return handle_user_confirmation(msg)
-
-    return SetupError()
-
-
-async def handle_driver_setup(msg: DriverSetupRequest) -> RequestUserInput | SetupError:
-    """
-    Start driver setup.
-
-    Initiated by Remote Two to set up the driver.
-    Ask user to enter ip-address for manual configuration, otherwise auto-discovery is used.
-
-    :param msg: not used, we don't have any input fields in the first setup screen.
-    :return: the setup action on how to continue
-    """
-    global _setup_step
-
-    # workaround for web-configurator not picking up first response
-    await asyncio.sleep(1)
-
-    reconfigure = msg.reconfigure
-    _LOG.debug("Handle driver setup, reconfigure=%s", reconfigure)
-    if reconfigure:
-        _setup_step = SetupSteps.DEVICE_CONFIGURATION_MODE
-
-        # get all configured devices for the user to choose from
-        dropdown_devices = []
-        for device in config.devices.all():
-            dropdown_devices.append({"id": device.id, "label": {"en": f"{device.name} ({device.id})"}})
-
-        # TODO #12 externalize language texts
-        # build user actions, based on available devices
-        dropdown_actions = [
-            {
-                "id": "add",
-                "label": {
-                    "en": "Add a new device",
-                    "de": "Neues Gerät hinzufügen",
-                    "fr": "Ajouter un nouvel appareil",
-                },
-            },
-        ]
-
-        # add remove & reset actions if there's at least one configured device
-        if dropdown_devices:
-            dropdown_actions.append(
+    def __init__(self, api: IntegrationAPI):
+        self._api = api
+        self._setup_step = SetupSteps.INIT
+        self._cfg_add_device: bool = False
+        self._discovered_devices: list[dict[str, str]] = []
+        self._pairing_lg_tv: WebOsClient | None = None
+        self._reconfigured_device: LGConfigDevice | None = None
+        self._user_input_discovery = RequestUserInput(
+            {"en": "Setup mode", "de": "Setup Modus"},
+            [
                 {
-                    "id": "configure",
+                    "id": "info",
                     "label": {
-                        "en": "Configure selected device",
-                        "fr": "Configurer l'appareil sélectionné",
+                        "en": "Discover or connect to LG TV devices",
+                        "de": "Suche oder Verbinde auf LG TV Gerät",
+                        "fr": "Découverte ou connexion à votre TV LG",
+                    },
+                    "field": {
+                        "label": {
+                            "value": {
+                                "en": "Leave blank to use auto-discovery.",
+                                "de": "Leer lassen, um automatische Erkennung zu verwenden.",
+                                "fr": "Laissez le champ vide pour utiliser la découverte automatique.",
+                            }
+                        }
                     },
                 },
-            )
-            dropdown_actions.append(
                 {
-                    "id": "remove",
-                    "label": {
-                        "en": "Delete selected device",
-                        "de": "Selektiertes Gerät löschen",
-                        "fr": "Supprimer l'appareil sélectionné",
-                    },
+                    "field": {"text": {"value": ""}},
+                    "id": "address",
+                    "label": {"en": "IP address", "de": "IP-Adresse", "fr": "Adresse IP"},
                 },
-            )
-            dropdown_actions.append(
-                {
-                    "id": "reset",
-                    "label": {
-                        "en": "Reset configuration and reconfigure",
-                        "de": "Konfiguration zurücksetzen und neu konfigurieren",
-                        "fr": "Réinitialiser la configuration et reconfigurer",
-                    },
-                },
-            )
-        else:
-            # dummy entry if no devices are available
-            dropdown_devices.append({"id": "", "label": {"en": "---"}})
-
-        dropdown_actions.append(
-            {
-                "id": "backup_restore",
-                "label": {
-                    "en": "Backup or restore devices configuration",
-                    "fr": "Sauvegarder ou restaurer la configuration des appareils",
-                },
-            },
+            ],
         )
 
+    # pylint: disable=R0911
+    async def driver_setup_handler(self, msg: SetupDriver) -> SetupAction:
+        """
+        Dispatch driver setup requests to corresponding handlers.
+
+        Either start the setup process or handle the selected LG TV device.
+
+        :param msg: the setup driver request object, either DriverSetupRequest or UserDataResponse
+        :return: the setup action on how to continue
+        """
+        if isinstance(msg, DriverSetupRequest):
+            self._setup_step = SetupSteps.INIT
+            self._cfg_add_device = False
+            return await self.handle_driver_setup(msg)
+        if isinstance(msg, UserDataResponse):
+            _LOG.debug("Setup handler message : step %s, message : %s", self._setup_step, msg)
+            if self._setup_step == SetupSteps.WORKFLOW_MODE:
+                if msg.input_values.get("configuration_mode", "") == "normal":
+                    self._setup_step = SetupSteps.DEVICE_CONFIGURATION_MODE
+                    _LOG.debug("Starting normal setup workflow")
+                    return self._user_input_discovery
+                _LOG.debug("User requested backup/restore of configuration")
+                return await self._handle_backup_restore_step()
+            if self._setup_step == SetupSteps.DEVICE_CONFIGURATION_MODE:
+                if "action" in msg.input_values:
+                    _LOG.debug("Setup flow starts with existing configuration")
+                    return await self.handle_configuration_mode(msg)
+                _LOG.debug("Setup flow configuration mode")
+                return await self._handle_discovery(msg)
+            # if self._setup_step == SetupSteps.DEVICE_CONFIGURATION_MODE and "action" in msg.input_values:
+            #     return await handle_configuration_mode(msg)
+            if self._setup_step == SetupSteps.DISCOVER and "address" in msg.input_values:
+                return await self._handle_discovery(msg)
+            if self._setup_step == SetupSteps.DEVICE_CHOICE and "choice" in msg.input_values:
+                return await self.handle_device_choice(msg)
+            if self._setup_step == SetupSteps.ADDITIONAL_SETTINGS and "mac_address" in msg.input_values:
+                return await self.handle_additional_settings(msg)
+            if self._setup_step == SetupSteps.TEST_WAKEONLAN and "mac_address" in msg.input_values:
+                return await self.handle_wake_on_lan(msg)
+            if self._setup_step == SetupSteps.BACKUP_RESTORE:
+                return await self._handle_backup_restore(msg)
+            _LOG.error("No or invalid user response was received: %s", msg)
+        elif isinstance(msg, UserConfirmationResponse):
+            if self._setup_step == SetupSteps.TEST_WAKEONLAN:
+                if msg.confirm:
+                    return self.get_wakeonlan_settings()
+                return self.get_additional_settings(self._reconfigured_device)
+
+        elif isinstance(msg, AbortDriverSetup):
+            _LOG.info("Setup was aborted with code: %s", msg.error)
+            if self._pairing_lg_tv is not None:
+                await self._pairing_lg_tv.disconnect()
+            self._setup_step = SetupSteps.INIT
+
+        # user confirmation not used in setup process
+        # if isinstance(msg, UserConfirmationResponse):
+        #     return handle_user_confirmation(msg)
+
+        return SetupError()
+
+    async def handle_driver_setup(self, msg: DriverSetupRequest) -> RequestUserInput | SetupError:
+        """
+        Start driver setup.
+
+        Initiated by Remote Two to set up the driver.
+        Ask user to enter ip-address for manual configuration, otherwise auto-discovery is used.
+
+        :param msg: not used, we don't have any input fields in the first setup screen.
+        :return: the setup action on how to continue
+        """
+        # workaround for web-configurator not picking up first response
+        await asyncio.sleep(1)
+
+        reconfigure = msg.reconfigure
+        _LOG.debug("Handle driver setup, reconfigure=%s", reconfigure)
+        if reconfigure:
+            self._setup_step = SetupSteps.DEVICE_CONFIGURATION_MODE
+
+            # get all configured devices for the user to choose from
+            dropdown_devices = []
+            for device in config.devices.all():
+                dropdown_devices.append({"id": device.id, "label": {"en": f"{device.name} ({device.id})"}})
+
+            # TODO #12 externalize language texts
+            # build user actions, based on available devices
+            dropdown_actions = [
+                {
+                    "id": "add",
+                    "label": {
+                        "en": "Add a new device",
+                        "de": "Neues Gerät hinzufügen",
+                        "fr": "Ajouter un nouvel appareil",
+                    },
+                },
+            ]
+
+            # add remove & reset actions if there's at least one configured device
+            if dropdown_devices:
+                dropdown_actions.append(
+                    {
+                        "id": "configure",
+                        "label": {
+                            "en": "Configure selected device",
+                            "fr": "Configurer l'appareil sélectionné",
+                        },
+                    },
+                )
+                dropdown_actions.append(
+                    {
+                        "id": "remove",
+                        "label": {
+                            "en": "Delete selected device",
+                            "de": "Selektiertes Gerät löschen",
+                            "fr": "Supprimer l'appareil sélectionné",
+                        },
+                    },
+                )
+                dropdown_actions.append(
+                    {
+                        "id": "reset",
+                        "label": {
+                            "en": "Reset configuration and reconfigure",
+                            "de": "Konfiguration zurücksetzen und neu konfigurieren",
+                            "fr": "Réinitialiser la configuration et reconfigurer",
+                        },
+                    },
+                )
+            else:
+                # dummy entry if no devices are available
+                dropdown_devices.append({"id": "", "label": {"en": "---"}})
+
+            dropdown_actions.append(
+                {
+                    "id": "backup_restore",
+                    "label": {
+                        "en": "Backup or restore devices configuration",
+                        "fr": "Sauvegarder ou restaurer la configuration des appareils",
+                    },
+                },
+            )
+
+            return RequestUserInput(
+                {"en": "Configuration mode", "de": "Konfigurations-Modus"},
+                [
+                    {
+                        "field": {
+                            "dropdown": {
+                                "value": dropdown_devices[0]["id"],
+                                "items": dropdown_devices,
+                            }
+                        },
+                        "id": "choice",
+                        "label": {
+                            "en": "Configured devices",
+                            "de": "Konfigurierte Geräte",
+                            "fr": "Appareils configurés",
+                        },
+                    },
+                    {
+                        "field": {
+                            "dropdown": {
+                                "value": dropdown_actions[0]["id"],
+                                "items": dropdown_actions,
+                            }
+                        },
+                        "id": "action",
+                        "label": {
+                            "en": "Action",
+                            "de": "Aktion",
+                            "fr": "Appareils configurés",
+                        },
+                    },
+                ],
+            )
+
+        # Initial setup, make sure we have a clean configuration
+        config.devices.clear()  # triggers device instance removal
+        self._setup_step = SetupSteps.WORKFLOW_MODE
         return RequestUserInput(
             {"en": "Configuration mode", "de": "Konfigurations-Modus"},
             [
                 {
                     "field": {
                         "dropdown": {
-                            "value": dropdown_devices[0]["id"],
-                            "items": dropdown_devices,
+                            "value": "normal",
+                            "items": [
+                                {
+                                    "id": "normal",
+                                    "label": {
+                                        "en": "Start the configuration of the integration",
+                                        "fr": "Démarrer la configuration de l'intégration",
+                                    },
+                                },
+                                {
+                                    "id": "backup_restore",
+                                    "label": {
+                                        "en": "Backup or restore devices configuration",
+                                        "fr": "Sauvegarder ou restaurer la configuration des appareils",
+                                    },
+                                },
+                            ],
                         }
                     },
-                    "id": "choice",
+                    "id": "configuration_mode",
                     "label": {
-                        "en": "Configured devices",
-                        "de": "Konfigurierte Geräte",
-                        "fr": "Appareils configurés",
+                        "en": "Configuration mode",
+                        "fr": "Mode de configuration",
+                    },
+                }
+            ],
+        )
+
+    async def handle_configuration_mode(self, msg: UserDataResponse) -> RequestUserInput | SetupComplete | SetupError:
+        """
+        Process user data response in a setup process.
+
+        If ``address`` field is set by the user: try connecting to device and retrieve model information.
+        Otherwise, start Android TV discovery and present the found devices to the user to choose from.
+
+        :param msg: response data from the requested user data
+        :return: the setup action on how to continue
+        """
+        action = msg.input_values["action"]
+
+        _LOG.debug("Handle configuration mode")
+
+        # workaround for web-configurator not picking up first response
+        await asyncio.sleep(1)
+
+        match action:
+            case "add":
+                self._cfg_add_device = True
+            case "remove":
+                choice = msg.input_values["choice"]
+                if not config.devices.remove(choice):
+                    _LOG.warning("Could not remove device from configuration: %s", choice)
+                    return SetupError(error_type=IntegrationSetupError.OTHER)
+                config.devices.store()
+                return SetupComplete()
+            case "configure":
+                choice = msg.input_values["choice"]
+                if not config.devices.contains(choice):
+                    _LOG.warning("Could not configure existing device from configuration: %s", choice)
+                    return SetupError(error_type=IntegrationSetupError.OTHER)
+                self._reconfigured_device = config.devices.get(choice)
+                return self.get_additional_settings(self._reconfigured_device)
+            case "reset":
+                config.devices.clear()  # triggers device instance removal
+            case "backup_restore":
+                return await self._handle_backup_restore_step()
+            case _:
+                _LOG.error("Invalid configuration action: %s", action)
+                return SetupError(error_type=IntegrationSetupError.OTHER)
+
+        self._setup_step = SetupSteps.DISCOVER
+        return self._user_input_discovery
+
+    async def _handle_discovery(self, msg: UserDataResponse) -> RequestUserInput | SetupError:
+        """
+        Process user data response in a setup process.
+
+        If ``address`` field is set by the user: try connecting to device and retrieve model information.
+        Otherwise, start LG TV discovery and present the found devices to the user to choose from.
+
+        :param msg: response data from the requested user data
+        :return: the setup action on how to continue
+        """
+        # pylint: disable=W0718
+        # clear all configured devices and any previous pairing attempt
+        if self._pairing_lg_tv:
+            await self._pairing_lg_tv.disconnect()
+            self._pairing_lg_tv = None
+
+        dropdown_items = []
+        _LOG.debug("Handle driver setup with discovery")
+
+        address = msg.input_values["address"]
+        if address:
+            _LOG.debug("Starting manual driver setup for %s", address)
+            try:
+                # simple connection check
+                self._pairing_lg_tv = WebOsClient(address)
+                await self._pairing_lg_tv.connect()
+                try:
+                    info = await self._pairing_lg_tv.get_system_info()
+                    model_name = info.get("modelName")
+                except Exception as exc:
+                    _LOG.info(
+                        "Cannot get system info, trying to retrieve the model name either way %s: %s", address, exc
+                    )
+                    info = self._pairing_lg_tv.tv_info
+                    model_name = info.system.get("modelName", "LG")
+                    # unique_id = info.software.get("device_id")
+
+                dropdown_items.append({"id": address, "label": {"en": f"{model_name} [{address}]"}})
+                await self._pairing_lg_tv.disconnect()
+            except WEBOSTV_EXCEPTIONS as ex:
+                _LOG.error("Cannot connect to manually entered address %s: %s", address, ex)
+                return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
+        else:
+            _LOG.debug("Starting auto-discovery driver setup")
+            self._discovered_devices = await discover.async_identify_lg_devices()
+            for device in self._discovered_devices:
+                device_data = {
+                    "id": device.get("host"),
+                    "label": {"en": f"{device.get('friendlyName')} [{device.get('host')}]"},
+                }
+                dropdown_items.append(device_data)
+
+        if not dropdown_items:
+            _LOG.warning("No LG TVs found")
+            return SetupError(error_type=IntegrationSetupError.NOT_FOUND)
+
+        self._setup_step = SetupSteps.DEVICE_CHOICE
+        return RequestUserInput(
+            {
+                "en": "Please choose your LG TV",
+                "de": "Bitte LG TV auswählen",
+                "fr": "Sélectionnez votre TV LG",
+            },
+            [
+                {
+                    "id": "info",
+                    "label": {
+                        "en": "Please choose your LG TV",
+                        "fr": "Sélectionnez votre TV LG",
+                    },
+                    "field": {
+                        "label": {
+                            "value": {
+                                "en": "After clicking next you may be prompted to confirm pairing on your TV",
+                                "fr": "Après avoir cliqué sur suivant, un message de confirmation d'apparairage peut "
+                                "s'afficher sur la TV",
+                            }
+                        }
                     },
                 },
                 {
                     "field": {
                         "dropdown": {
-                            "value": dropdown_actions[0]["id"],
-                            "items": dropdown_actions,
+                            "value": dropdown_items[0]["id"],
+                            "items": dropdown_items,
                         }
                     },
-                    "id": "action",
+                    "id": "choice",
                     "label": {
-                        "en": "Action",
-                        "de": "Aktion",
-                        "fr": "Appareils configurés",
+                        "en": "Choose your LG TV",
+                        "de": "Wähle deinen LG TV",
+                        "fr": "Choisissez votre LG TV",
                     },
                 },
             ],
         )
 
-    # Initial setup, make sure we have a clean configuration
-    config.devices.clear()  # triggers device instance removal
-    _setup_step = SetupSteps.WORKFLOW_MODE
-    return RequestUserInput(
-        {"en": "Configuration mode", "de": "Konfigurations-Modus"},
-        [
-            {
-                "field": {
-                    "dropdown": {
-                        "value": "normal",
-                        "items": [
-                            {
-                                "id": "normal",
-                                "label": {
-                                    "en": "Start the configuration of the integration",
-                                    "fr": "Démarrer la configuration de l'intégration",
-                                },
-                            },
-                            {
-                                "id": "backup_restore",
-                                "label": {
-                                    "en": "Backup or restore devices configuration",
-                                    "fr": "Sauvegarder ou restaurer la configuration des appareils",
-                                },
-                            },
-                        ],
-                    }
-                },
-                "id": "configuration_mode",
-                "label": {
-                    "en": "Configuration mode",
-                    "fr": "Mode de configuration",
-                },
-            }
-        ],
-    )
+    async def handle_device_choice(self, msg: UserDataResponse) -> RequestUserInput | SetupError:
+        """
+        Process user data response in a setup process.
 
+        Driver setup callback to provide requested user data during the setup process.
 
-async def handle_configuration_mode(msg: UserDataResponse) -> RequestUserInput | SetupComplete | SetupError:
-    """
-    Process user data response in a setup process.
+        :param msg: response data from the requested user data
+        :return: the setup action on how to continue: SetupComplete if a valid LG TV device was chosen.
+        """
+        discovered_device = None
+        host = msg.input_values["choice"]
+        mac_address = None
+        mac_address2 = None
+        # pylint: disable=W0718
 
-    If ``address`` field is set by the user: try connecting to device and retrieve model information.
-    Otherwise, start Android TV discovery and present the found devices to the user to choose from.
+        if self._discovered_devices:
+            for device in self._discovered_devices:
+                if device.get("host", None) == host:
+                    discovered_device = device
+                    if device.get("wiredMac"):
+                        mac_address = device.get("wiredMac")
+                    if device.get("wifiMac"):
+                        mac_address2 = device.get("wifiMac")
 
-    :param msg: response data from the requested user data
-    :return: the setup action on how to continue
-    """
-    global _setup_step
-    global _cfg_add_device
-    global _reconfigured_device
-
-    action = msg.input_values["action"]
-
-    _LOG.debug("Handle configuration mode")
-
-    # workaround for web-configurator not picking up first response
-    await asyncio.sleep(1)
-
-    match action:
-        case "add":
-            _cfg_add_device = True
-        case "remove":
-            choice = msg.input_values["choice"]
-            if not config.devices.remove(choice):
-                _LOG.warning("Could not remove device from configuration: %s", choice)
-                return SetupError(error_type=IntegrationSetupError.OTHER)
-            config.devices.store()
-            return SetupComplete()
-        case "configure":
-            choice = msg.input_values["choice"]
-            if not config.devices.contains(choice):
-                _LOG.warning("Could not configure existing device from configuration: %s", choice)
-                return SetupError(error_type=IntegrationSetupError.OTHER)
-            _reconfigured_device = config.devices.get(choice)
-            return get_additional_settings(_reconfigured_device)
-        case "reset":
-            config.devices.clear()  # triggers device instance removal
-        case "backup_restore":
-            return await _handle_backup_restore_step()
-        case _:
-            _LOG.error("Invalid configuration action: %s", action)
-            return SetupError(error_type=IntegrationSetupError.OTHER)
-
-    _setup_step = SetupSteps.DISCOVER
-    return _user_input_discovery
-
-
-async def _handle_discovery(msg: UserDataResponse) -> RequestUserInput | SetupError:
-    """
-    Process user data response in a setup process.
-
-    If ``address`` field is set by the user: try connecting to device and retrieve model information.
-    Otherwise, start LG TV discovery and present the found devices to the user to choose from.
-
-    :param msg: response data from the requested user data
-    :return: the setup action on how to continue
-    """
-    global _pairing_lg_tv
-    global _setup_step
-    global _discovered_devices
-    # pylint: disable=W0718
-
-    # clear all configured devices and any previous pairing attempt
-    if _pairing_lg_tv:
-        await _pairing_lg_tv.disconnect()
-        _pairing_lg_tv = None
-
-    dropdown_items = []
-    _LOG.debug("Handle driver setup with discovery")
-
-    address = msg.input_values["address"]
-    if address:
-        _LOG.debug("Starting manual driver setup for %s", address)
+        _LOG.debug(
+            "Chosen LG TV: %s (wired mac %s, wifi mac %s). Trying to connect and retrieve device information...",
+            host,
+            mac_address,
+            mac_address2,
+        )
         try:
             # simple connection check
-            _pairing_lg_tv = WebOsClient(address)
-            await _pairing_lg_tv.connect()
+            self._pairing_lg_tv = WebOsClient(host)
+            await self._pairing_lg_tv.connect()
+            key = self._pairing_lg_tv.client_key
             try:
-                info = await _pairing_lg_tv.get_system_info()
+                info = await self._pairing_lg_tv.get_system_info()
                 model_name = info.get("modelName")
-            except Exception as exc:
-                _LOG.info("Cannot get system info, trying to retrieve the model name either way %s: %s", address, exc)
-                info = _pairing_lg_tv.tv_info
+                # serial_number = info.get("serialNumber")
+                info = await self._pairing_lg_tv.get_software_info()
+                unique_id = info.get("device_id")
+            except Exception as ex:
+                _LOG.info("Cannot get system info, trying to retrieve the model name either way %s: %s", host, ex)
+                info = self._pairing_lg_tv.tv_info
                 model_name = info.system.get("modelName", "LG")
-                # unique_id = info.software.get("device_id")
+                unique_id = info.software.get("device_id")
 
-            dropdown_items.append({"id": address, "label": {"en": f"{model_name} [{address}]"}})
-            await _pairing_lg_tv.disconnect()
+            if discovered_device and discovered_device.get("friendlyName"):
+                model_name = discovered_device.get("friendlyName")
+
+            if mac_address is None:
+                mac_address = unique_id
         except WEBOSTV_EXCEPTIONS as ex:
-            _LOG.error("Cannot connect to manually entered address %s: %s", address, ex)
+            _LOG.error("Cannot connect to %s: %s", host, ex)
             return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
-    else:
-        _LOG.debug("Starting auto-discovery driver setup")
-        _discovered_devices = await discover.async_identify_lg_devices()
-        for device in _discovered_devices:
-            device_data = {
-                "id": device.get("host"),
-                "label": {"en": f"{device.get('friendlyName')} [{device.get('host')}]"},
-            }
-            dropdown_items.append(device_data)
 
-    if not dropdown_items:
-        _LOG.warning("No LG TVs found")
-        return SetupError(error_type=IntegrationSetupError.NOT_FOUND)
+        self._reconfigured_device = LGConfigDevice(
+            id=unique_id,
+            name=model_name,
+            address=host,
+            key=key,
+            mac_address=mac_address,
+            mac_address2=mac_address2,
+            interface="0.0.0.0",
+            broadcast=None,
+            wol_port=9,
+            update_apps_list=True,
+            log=False,
+        )
 
-    _setup_step = SetupSteps.DEVICE_CHOICE
-    return RequestUserInput(
-        {
-            "en": "Please choose your LG TV",
-            "de": "Bitte LG TV auswählen",
-            "fr": "Sélectionnez votre TV LG",
-        },
-        [
+        return self.get_additional_settings(self._reconfigured_device)
+
+    def get_additional_settings(self, config_device: LGConfigDevice) -> RequestUserInput:
+        """Extract additional settings for device registration."""
+        self._setup_step = SetupSteps.ADDITIONAL_SETTINGS
+        if config_device.mac_address2 is None:
+            config_device.mac_address2 = ""
+        _LOG.debug("get_additional_settings")
+
+        additional_fields = [
             {
                 "id": "info",
                 "label": {
-                    "en": "Please choose your LG TV",
-                    "fr": "Sélectionnez votre TV LG",
+                    "en": "Additional settings",
+                    "fr": "Paramètres supplémentaires",
                 },
                 "field": {
                     "label": {
                         "value": {
-                            "en": "After clicking next you may be prompted to confirm pairing on your TV",
-                            "fr": "Après avoir cliqué sur suivant, un message de confirmation d'apparairage peut "
-                            "s'afficher sur la TV",
+                            "en": "Mac address is necessary to turn on the TV, check the displayed value",
+                            "fr": "L'adresse mac est nécessaire pour allumer la TV, vérifiez la valeur affichée",
                         }
                     }
                 },
             },
             {
-                "field": {
-                    "dropdown": {
-                        "value": dropdown_items[0]["id"],
-                        "items": dropdown_items,
-                    }
-                },
-                "id": "choice",
-                "label": {
-                    "en": "Choose your LG TV",
-                    "de": "Wähle deinen LG TV",
-                    "fr": "Choisissez votre LG TV",
-                },
-            },
-        ],
-    )
-
-
-async def handle_device_choice(msg: UserDataResponse) -> RequestUserInput | SetupError:
-    """
-    Process user data response in a setup process.
-
-    Driver setup callback to provide requested user data during the setup process.
-
-    :param msg: response data from the requested user data
-    :return: the setup action on how to continue: SetupComplete if a valid LG TV device was chosen.
-    """
-    global _pairing_lg_tv
-    global _reconfigured_device
-    discovered_device = None
-    host = msg.input_values["choice"]
-    mac_address = None
-    mac_address2 = None
-    # pylint: disable=W0718
-
-    if _discovered_devices:
-        for device in _discovered_devices:
-            if device.get("host", None) == host:
-                discovered_device = device
-                if device.get("wiredMac"):
-                    mac_address = device.get("wiredMac")
-                if device.get("wifiMac"):
-                    mac_address2 = device.get("wifiMac")
-
-    _LOG.debug(
-        "Chosen LG TV: %s (wired mac %s, wifi mac %s). Trying to connect and retrieve device information...",
-        host,
-        mac_address,
-        mac_address2,
-    )
-    try:
-        # simple connection check
-        _pairing_lg_tv = WebOsClient(host)
-        await _pairing_lg_tv.connect()
-        key = _pairing_lg_tv.client_key
-        try:
-            info = await _pairing_lg_tv.get_system_info()
-            model_name = info.get("modelName")
-            # serial_number = info.get("serialNumber")
-            info = await _pairing_lg_tv.get_software_info()
-            unique_id = info.get("device_id")
-        except Exception as ex:
-            _LOG.info("Cannot get system info, trying to retrieve the model name either way %s: %s", host, ex)
-            info = _pairing_lg_tv.tv_info
-            model_name = info.system.get("modelName", "LG")
-            unique_id = info.software.get("device_id")
-
-        if discovered_device and discovered_device.get("friendlyName"):
-            model_name = discovered_device.get("friendlyName")
-
-        if mac_address is None:
-            mac_address = unique_id
-    except WEBOSTV_EXCEPTIONS as ex:
-        _LOG.error("Cannot connect to %s: %s", host, ex)
-        return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
-
-    _reconfigured_device = LGConfigDevice(
-        id=unique_id,
-        name=model_name,
-        address=host,
-        key=key,
-        mac_address=mac_address,
-        mac_address2=mac_address2,
-        interface="0.0.0.0",
-        broadcast=None,
-        wol_port=9,
-        update_apps_list=True,
-        log=False,
-    )
-
-    return get_additional_settings(_reconfigured_device)
-
-
-def get_additional_settings(config_device: LGConfigDevice) -> RequestUserInput:
-    """Extract additional settings for device registration."""
-    global _setup_step
-    _setup_step = SetupSteps.ADDITIONAL_SETTINGS
-    if config_device.mac_address2 is None:
-        config_device.mac_address2 = ""
-    _LOG.debug("get_additional_settings")
-
-    additional_fields = [
-        {
-            "id": "info",
-            "label": {
-                "en": "Additional settings",
-                "fr": "Paramètres supplémentaires",
-            },
-            "field": {
-                "label": {
-                    "value": {
-                        "en": "Mac address is necessary to turn on the TV, check the displayed value",
-                        "fr": "L'adresse mac est nécessaire pour allumer la TV, vérifiez la valeur affichée",
-                    }
-                }
-            },
-        },
-        {
-            "field": {"text": {"value": config_device.address}},
-            "id": "address",
-            "label": {"en": "IP address", "fr": "Adresse IP"},
-        },
-        {
-            "field": {"text": {"value": config_device.mac_address}},
-            "id": "mac_address",
-            "label": {"en": "Mac address (wired)", "fr": "Adresse Mac (cablé)"},
-        },
-        {
-            "field": {"text": {"value": config_device.mac_address2}},
-            "id": "mac_address2",
-            "label": {"en": "Mac address (wifi)", "fr": "Adresse Mac (wifi)"},
-        },
-        {
-            "field": {"text": {"value": config_device.interface}},
-            "id": "interface",
-            "label": {"en": "Interface to use for magic packet", "fr": 'Interface à utiliser pour le "magic packet"'},
-        },
-        {
-            "field": {"text": {"value": config_device.broadcast}},
-            "id": "broadcast",
-            "label": {
-                "en": "Broadcast address to use for magic packet (blank by default)",
-                "fr": "Plage d'adresse à utiliser pour le magic packet (vide par défaut)",
-            },
-        },
-        {
-            "id": "wolport",
-            "label": {
-                "en": "Wake on lan port",
-                "fr": "Numéro de port pour wake on lan",
-            },
-            "field": {"number": {"value": config_device.wol_port, "min": 1, "max": 65535, "steps": 1, "decimals": 0}},
-        },
-        {
-            "id": "test_wakeonlan",
-            "label": {
-                "en": "Test turn on your configured TV (through wake on lan, TV should be off since 15 minutes at "
-                "least)",
-                "fr": "Tester la mise en marche de votre TV (via wake on lan, votre TV doit être éteinte depuis au "
-                "moins 15 minutes)",
-            },
-            "field": {"checkbox": {"value": False}},
-        },
-        {
-            "id": "pairing",
-            "label": {
-                "en": "Regenerate the pairing key and test connection",
-                "fr": "Régénérer la clé d'appairage et tester la connection",
-            },
-            "field": {"checkbox": {"value": False}},
-        },
-        {
-            "id": "update_apps_list",
-            "label": {
-                "en": "Update apps list and re-register entities if necessary",
-                "fr": "Maintenir la liste des apps à jour et enregistrer les entités à nouveau si nécessaire",
-            },
-            "field": {"checkbox": {"value": True}},
-        },
-        {
-            "id": "log",
-            "label": {
-                "en": "Enable additional traces for debugging",
-                "fr": "Activer les traces additionnalles pour l'analyse",
-            },
-            "field": {"checkbox": {"value": False}},
-        },
-    ]
-
-    return RequestUserInput(
-        title={
-            "en": "Additional settings",
-            "fr": "Paramètres supplémentaires",
-        },
-        settings=additional_fields,
-    )
-
-
-async def _handle_backup_restore_step() -> RequestUserInput:
-    global _setup_step
-
-    _setup_step = SetupSteps.BACKUP_RESTORE
-    current_config = config.devices.export()
-
-    _LOG.debug("Handle backup/restore step")
-
-    return RequestUserInput(
-        {
-            "en": "Backup or restore devices configuration (all existing devices will be removed)",
-            "fr": "Sauvegarder ou restaurer la configuration des appareils (tous les appareils existants "
-            "seront supprimés)",
-        },
-        [
-            {
-                "field": {
-                    "textarea": {
-                        "value": current_config,
-                    }
-                },
-                "id": "config",
-                "label": {
-                    "en": "Devices configuration",
-                    "fr": "Configuration des appareils",
-                },
-            },
-        ],
-    )
-
-
-def _is_ipv6_address(ip_address: str) -> bool:
-    """Check if this is an IPV6 address."""
-    try:
-        return isinstance(ipaddress.ip_address(ip_address), ipaddress.IPv6Address)
-    except ValueError:
-        return False
-
-
-def get_wakeonlan_settings() -> RequestUserInput:
-    """Set settings for wake on lan."""
-    # pylint: disable = W0718
-    broadcast = ""
-    interface = ""
-    try:
-        interface = os.getenv("UC_INTEGRATION_INTERFACE")
-        if interface is None or interface == "127.0.0.1":
-            interface = None
-            ips = [i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None)]
-            for ip_addr in ips:
-                if ip_addr is None or ip_addr == "127.0.0.1" or _is_ipv6_address(ip_addr):
-                    continue
-                interface = ip_addr
-                break
-        if interface is not None:
-            broadcast = interface[: interface.rfind(".") + 1] + "255"
-    except Exception:
-        pass
-
-    return RequestUserInput(
-        title={
-            "en": "Test switching on your LG TV",
-            "fr": "Test de mise en marche de votre TV LG",
-        },
-        settings=[
-            {
-                "id": "info",
-                "label": {
-                    "en": "Test switching on your LG TV",
-                    "fr": "Test de mise en marche de votre TV LG",
-                },
-                "field": {
-                    "label": {
-                        "value": {
-                            "en": f"Remote interface {interface} : suggested broadcast {broadcast}",
-                            "fr": f"Adresse de la télécommande {interface} : broadcast suggéré {broadcast}",
-                        }
-                    }
-                },
+                "field": {"text": {"value": config_device.address}},
+                "id": "address",
+                "label": {"en": "IP address", "fr": "Adresse IP"},
             },
             {
-                "field": {"text": {"value": _reconfigured_device.mac_address}},
+                "field": {"text": {"value": config_device.mac_address}},
                 "id": "mac_address",
-                "label": {"en": "First mac address", "fr": "Première adresse Mac"},
+                "label": {"en": "Mac address (wired)", "fr": "Adresse Mac (cablé)"},
             },
             {
-                "field": {"text": {"value": _reconfigured_device.mac_address2}},
+                "field": {"text": {"value": config_device.mac_address2}},
                 "id": "mac_address2",
-                "label": {"en": "Second mac address", "fr": "Deuxième adresse Mac"},
+                "label": {"en": "Mac address (wifi)", "fr": "Adresse Mac (wifi)"},
             },
             {
-                "field": {"text": {"value": _reconfigured_device.interface}},
+                "field": {"text": {"value": config_device.interface}},
                 "id": "interface",
-                "label": {"en": "Interface (optional)", "fr": "Interface (optionnel)"},
+                "label": {
+                    "en": "Interface to use for magic packet",
+                    "fr": 'Interface à utiliser pour le "magic packet"',
+                },
             },
             {
-                "field": {"text": {"value": _reconfigured_device.broadcast}},
+                "field": {"text": {"value": config_device.broadcast}},
                 "id": "broadcast",
-                "label": {"en": "Broadcast (optional)", "fr": "Broadcast (optionnel)"},
+                "label": {
+                    "en": "Broadcast address to use for magic packet (blank by default)",
+                    "fr": "Plage d'adresse à utiliser pour le magic packet (vide par défaut)",
+                },
             },
             {
                 "id": "wolport",
@@ -742,14 +578,26 @@ def get_wakeonlan_settings() -> RequestUserInput:
                     "fr": "Numéro de port pour wake on lan",
                 },
                 "field": {
-                    "number": {
-                        "value": _reconfigured_device.wol_port,
-                        "min": 1,
-                        "max": 65535,
-                        "steps": 1,
-                        "decimals": 0,
-                    }
+                    "number": {"value": config_device.wol_port, "min": 1, "max": 65535, "steps": 1, "decimals": 0}
                 },
+            },
+            {
+                "id": "test_wakeonlan",
+                "label": {
+                    "en": "Test turn on your configured TV (through wake on lan, TV should be off since 15 minutes at "
+                    "least)",
+                    "fr": "Tester la mise en marche de votre TV (via wake on lan, votre TV doit être éteinte depuis au "
+                    "moins 15 minutes)",
+                },
+                "field": {"checkbox": {"value": False}},
+            },
+            {
+                "id": "pairing",
+                "label": {
+                    "en": "Regenerate the pairing key and test connection",
+                    "fr": "Régénérer la clé d'appairage et tester la connection",
+                },
+                "field": {"checkbox": {"value": False}},
             },
             {
                 "id": "update_apps_list",
@@ -757,7 +605,7 @@ def get_wakeonlan_settings() -> RequestUserInput:
                     "en": "Update apps list and re-register entities if necessary",
                     "fr": "Maintenir la liste des apps à jour et enregistrer les entités à nouveau si nécessaire",
                 },
-                "field": {"checkbox": {"value": _reconfigured_device.update_apps_list}},
+                "field": {"checkbox": {"value": True}},
             },
             {
                 "id": "log",
@@ -765,148 +613,283 @@ def get_wakeonlan_settings() -> RequestUserInput:
                     "en": "Enable additional traces for debugging",
                     "fr": "Activer les traces additionnalles pour l'analyse",
                 },
-                "field": {"checkbox": {"value": _reconfigured_device.log}},
+                "field": {"checkbox": {"value": False}},
             },
-        ],
-    )
+        ]
 
+        return RequestUserInput(
+            title={
+                "en": "Additional settings",
+                "fr": "Paramètres supplémentaires",
+            },
+            settings=additional_fields,
+        )
 
-async def handle_additional_settings(msg: UserDataResponse) -> RequestUserConfirmation | SetupComplete | SetupError:
-    """Handle setup flow for additional settings."""
-    global _pairing_lg_tv
-    global _setup_step
-    address = msg.input_values.get("address", "")
-    mac_address = msg.input_values.get("mac_address", "")
-    mac_address2 = msg.input_values.get("mac_address2", "")
-    interface = msg.input_values.get("interface", "")
-    broadcast = msg.input_values.get("broadcast", "")
-    test_wakeonlan = msg.input_values.get("test_wakeonlan", "false") == "true"
-    pairing = msg.input_values.get("pairing", "false") == "true"
-    update_apps_list = msg.input_values.get("update_apps_list", "false") == "true"
-    log = msg.input_values.get("log", "false") == "true"
-    _LOG.debug("Handle additional settings")
+    async def _handle_backup_restore_step(self) -> RequestUserInput:
+        self._setup_step = SetupSteps.BACKUP_RESTORE
+        current_config = config.devices.export()
 
-    try:
-        wolport = int(msg.input_values.get("wolport", 9))
-    except ValueError:
-        return SetupError(error_type=IntegrationSetupError.OTHER)
+        _LOG.debug("Handle backup/restore step")
 
-    if address != "":
-        _reconfigured_device.address = address
-    if mac_address == "":
-        mac_address = None
-    if mac_address2 == "":
-        mac_address2 = None
-    if broadcast == "":
-        broadcast = None
-    if interface == "":
-        interface = None
+        return RequestUserInput(
+            {
+                "en": "Backup or restore devices configuration (all existing devices will be removed)",
+                "fr": "Sauvegarder ou restaurer la configuration des appareils (tous les appareils existants "
+                "seront supprimés)",
+            },
+            [
+                {
+                    "field": {
+                        "textarea": {
+                            "value": current_config,
+                        }
+                    },
+                    "id": "config",
+                    "label": {
+                        "en": "Devices configuration",
+                        "fr": "Configuration des appareils",
+                    },
+                },
+            ],
+        )
 
-    _reconfigured_device.mac_address = mac_address
-    _reconfigured_device.mac_address2 = mac_address2
-    _reconfigured_device.interface = interface
-    _reconfigured_device.broadcast = broadcast
-    _reconfigured_device.wol_port = wolport
-    _reconfigured_device.log = log
-    _reconfigured_device.update_apps_list = update_apps_list
+    def _is_ipv6_address(self, ip_address: str) -> bool:
+        """Check if this is an IPV6 address."""
+        try:
+            return isinstance(ipaddress.ip_address(ip_address), ipaddress.IPv6Address)
+        except ValueError:
+            return False
 
-    if pairing:
-        client = WebOsClient(_reconfigured_device.address)
-        await client.connect()
-        _reconfigured_device.key = client.client_key
-        await client.disconnect()
+    def get_wakeonlan_settings(self) -> RequestUserInput:
+        """Set settings for wake on lan."""
+        # pylint: disable = W0718
+        broadcast = ""
+        interface = ""
+        try:
+            interface = os.getenv("UC_INTEGRATION_INTERFACE")
+            if interface is None or interface == "127.0.0.1":
+                interface = None
+                ips = [i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None)]
+                for ip_addr in ips:
+                    if ip_addr is None or ip_addr == "127.0.0.1" or self._is_ipv6_address(ip_addr):
+                        continue
+                    interface = ip_addr
+                    break
+            if interface is not None:
+                broadcast = interface[: interface.rfind(".") + 1] + "255"
+        except Exception:
+            pass
 
-    _LOG.info("Setup updated settings %s", _reconfigured_device)
-    config.devices.add_or_update(_reconfigured_device)
-    # triggers LG TV instance creation
+        return RequestUserInput(
+            title={
+                "en": "Test switching on your LG TV",
+                "fr": "Test de mise en marche de votre TV LG",
+            },
+            settings=[
+                {
+                    "id": "info",
+                    "label": {
+                        "en": "Test switching on your LG TV",
+                        "fr": "Test de mise en marche de votre TV LG",
+                    },
+                    "field": {
+                        "label": {
+                            "value": {
+                                "en": f"Remote interface {interface} : suggested broadcast {broadcast}",
+                                "fr": f"Adresse de la télécommande {interface} : broadcast suggéré {broadcast}",
+                            }
+                        }
+                    },
+                },
+                {
+                    "field": {"text": {"value": self._reconfigured_device.mac_address}},
+                    "id": "mac_address",
+                    "label": {"en": "First mac address", "fr": "Première adresse Mac"},
+                },
+                {
+                    "field": {"text": {"value": self._reconfigured_device.mac_address2}},
+                    "id": "mac_address2",
+                    "label": {"en": "Second mac address", "fr": "Deuxième adresse Mac"},
+                },
+                {
+                    "field": {"text": {"value": self._reconfigured_device.interface}},
+                    "id": "interface",
+                    "label": {"en": "Interface (optional)", "fr": "Interface (optionnel)"},
+                },
+                {
+                    "field": {"text": {"value": self._reconfigured_device.broadcast}},
+                    "id": "broadcast",
+                    "label": {"en": "Broadcast (optional)", "fr": "Broadcast (optionnel)"},
+                },
+                {
+                    "id": "wolport",
+                    "label": {
+                        "en": "Wake on lan port",
+                        "fr": "Numéro de port pour wake on lan",
+                    },
+                    "field": {
+                        "number": {
+                            "value": self._reconfigured_device.wol_port,
+                            "min": 1,
+                            "max": 65535,
+                            "steps": 1,
+                            "decimals": 0,
+                        }
+                    },
+                },
+                {
+                    "id": "update_apps_list",
+                    "label": {
+                        "en": "Update apps list and re-register entities if necessary",
+                        "fr": "Maintenir la liste des apps à jour et enregistrer les entités à nouveau si nécessaire",
+                    },
+                    "field": {"checkbox": {"value": self._reconfigured_device.update_apps_list}},
+                },
+                {
+                    "id": "log",
+                    "label": {
+                        "en": "Enable additional traces for debugging",
+                        "fr": "Activer les traces additionnalles pour l'analyse",
+                    },
+                    "field": {"checkbox": {"value": self._reconfigured_device.log}},
+                },
+            ],
+        )
 
-    if _pairing_lg_tv:
-        await _pairing_lg_tv.disconnect()
-        _pairing_lg_tv = None
+    async def handle_additional_settings(
+        self, msg: UserDataResponse
+    ) -> RequestUserConfirmation | SetupComplete | SetupError:
+        """Handle setup flow for additional settings."""
+        address = msg.input_values.get("address", "")
+        mac_address = msg.input_values.get("mac_address", "")
+        mac_address2 = msg.input_values.get("mac_address2", "")
+        interface = msg.input_values.get("interface", "")
+        broadcast = msg.input_values.get("broadcast", "")
+        test_wakeonlan = msg.input_values.get("test_wakeonlan", "false") == "true"
+        pairing = msg.input_values.get("pairing", "false") == "true"
+        update_apps_list = msg.input_values.get("update_apps_list", "false") == "true"
+        log = msg.input_values.get("log", "false") == "true"
+        _LOG.debug("Handle additional settings")
 
-    if test_wakeonlan:
-        _setup_step = SetupSteps.TEST_WAKEONLAN
-        return await handle_wake_on_lan(msg)
+        try:
+            wolport = int(msg.input_values.get("wolport", 9))
+        except ValueError:
+            return SetupError(error_type=IntegrationSetupError.OTHER)
 
-    # LG TV device connection will be triggered with subscribe_entities request
-    await asyncio.sleep(1)
-    _LOG.info("Setup successfully completed for %s (%s)", _reconfigured_device.name, _reconfigured_device.id)
-    return SetupComplete()
+        if address != "":
+            self._reconfigured_device.address = address
+        if mac_address == "":
+            mac_address = None
+        if mac_address2 == "":
+            mac_address2 = None
+        if broadcast == "":
+            broadcast = None
+        if interface == "":
+            interface = None
 
+        self._reconfigured_device.mac_address = mac_address
+        self._reconfigured_device.mac_address2 = mac_address2
+        self._reconfigured_device.interface = interface
+        self._reconfigured_device.broadcast = broadcast
+        self._reconfigured_device.wol_port = wolport
+        self._reconfigured_device.log = log
+        self._reconfigured_device.update_apps_list = update_apps_list
 
-async def handle_wake_on_lan(msg: UserDataResponse) -> RequestUserConfirmation | SetupError:
-    """Handle wake on lan test."""
-    mac_address = msg.input_values.get("mac_address", "")
-    mac_address2 = msg.input_values.get("mac_address2", "")
-    interface = msg.input_values.get("interface", "")
-    broadcast = msg.input_values.get("broadcast", "")
-    # test_wakeonlan = msg.input_values.get("test_wakeonlan", False)
-    _LOG.debug("Handle wake on lan")
-    wolport = 9
-    try:
-        wolport = int(msg.input_values.get("wolport", wolport))
-    except ValueError:
-        return SetupError(error_type=IntegrationSetupError.OTHER)
+        if pairing:
+            client = WebOsClient(self._reconfigured_device.address)
+            await client.connect()
+            self._reconfigured_device.key = client.client_key
+            await client.disconnect()
 
-    if mac_address == "":
-        mac_address = None
-    if mac_address2 == "":
-        mac_address2 = None
-    if broadcast == "":
-        broadcast = None
-    if interface == "":
-        interface = None
+        _LOG.info("Setup updated settings %s", self._reconfigured_device)
+        config.devices.add_or_update(self._reconfigured_device)
+        # triggers LG TV instance creation
 
-    _reconfigured_device.mac_address = mac_address
-    _reconfigured_device.mac_address2 = mac_address2
-    _reconfigured_device.interface = interface
-    _reconfigured_device.broadcast = broadcast
-    _reconfigured_device.wol_port = wolport
+        if self._pairing_lg_tv:
+            await self._pairing_lg_tv.disconnect()
+            self._pairing_lg_tv = None
 
-    _LOG.info("Setup updated settings %s", _reconfigured_device)
-    config.devices.add_or_update(_reconfigured_device)
-    # triggers LG TV instance creation
-    config.devices.store()
+        if test_wakeonlan:
+            self._setup_step = SetupSteps.TEST_WAKEONLAN
+            return await self.handle_wake_on_lan(msg)
 
-    requests = 0
-    if _reconfigured_device.mac_address:
-        requests += 1
-    if _reconfigured_device.mac_address2:
-        requests += 1
+        # LG TV device connection will be triggered with subscribe_entities request
+        await asyncio.sleep(1)
+        _LOG.info(
+            "Setup successfully completed for %s (%s)", self._reconfigured_device.name, self._reconfigured_device.id
+        )
+        return SetupComplete()
 
-    device = LGDevice(device_config=_reconfigured_device)
-    device.wakeonlan()
+    async def handle_wake_on_lan(self, msg: UserDataResponse) -> RequestUserConfirmation | SetupError:
+        """Handle wake on lan test."""
+        mac_address = msg.input_values.get("mac_address", "")
+        mac_address2 = msg.input_values.get("mac_address2", "")
+        interface = msg.input_values.get("interface", "")
+        broadcast = msg.input_values.get("broadcast", "")
+        # test_wakeonlan = msg.input_values.get("test_wakeonlan", False)
+        _LOG.debug("Handle wake on lan")
+        wolport = 9
+        try:
+            wolport = int(msg.input_values.get("wolport", wolport))
+        except ValueError:
+            return SetupError(error_type=IntegrationSetupError.OTHER)
 
-    return RequestUserConfirmation(
-        title={
-            "en": f"{requests} requests sent to the TV",
-            "fr": f"{requests} requêtes envoyées au téléviseur",
-        },
-        header={
-            "en": "Do you want to try another configuration ?",
-            "fr": "Voulez-vous essayer une autre configuration ?",
-        },
-    )
+        if mac_address == "":
+            mac_address = None
+        if mac_address2 == "":
+            mac_address2 = None
+        if broadcast == "":
+            broadcast = None
+        if interface == "":
+            interface = None
 
+        self._reconfigured_device.mac_address = mac_address
+        self._reconfigured_device.mac_address2 = mac_address2
+        self._reconfigured_device.interface = interface
+        self._reconfigured_device.broadcast = broadcast
+        self._reconfigured_device.wol_port = wolport
 
-async def _handle_backup_restore(msg: UserDataResponse) -> SetupComplete | SetupError:
-    """
-    Process import of configuration
+        _LOG.info("Setup updated settings %s", self._reconfigured_device)
+        config.devices.add_or_update(self._reconfigured_device)
+        # triggers LG TV instance creation
+        config.devices.store()
 
-    :param msg: response data from the requested user data
-    :return: the setup action on how to continue: SetupComplete after updating configuration
-    """
-    # flake8: noqa:F824
-    # pylint: disable=W0602
-    global _reconfigured_device
+        requests = 0
+        if self._reconfigured_device.mac_address:
+            requests += 1
+        if self._reconfigured_device.mac_address2:
+            requests += 1
 
-    _LOG.debug("Handle backup/restore")
-    updated_config = msg.input_values["config"]
-    _LOG.info("Replacing configuration with : %s", updated_config)
-    if not config.devices.import_config(updated_config):
-        _LOG.error("Setup error : unable to import updated configuration %s", updated_config)
-        return SetupError(error_type=IntegrationSetupError.OTHER)
-    _LOG.debug("Configuration imported successfully")
+        device = LGDevice(device_config=self._reconfigured_device)
+        device.wakeonlan()
 
-    await asyncio.sleep(1)
-    return SetupComplete()
+        return RequestUserConfirmation(
+            title={
+                "en": f"{requests} requests sent to the TV",
+                "fr": f"{requests} requêtes envoyées au téléviseur",
+            },
+            header={
+                "en": "Do you want to try another configuration ?",
+                "fr": "Voulez-vous essayer une autre configuration ?",
+            },
+        )
+
+    async def _handle_backup_restore(self, msg: UserDataResponse) -> SetupComplete | SetupError:
+        """
+        Process import of configuration
+
+        :param msg: response data from the requested user data
+        :return: the setup action on how to continue: SetupComplete after updating configuration
+        """
+        # flake8: noqa:F824
+        # pylint: disable=W0602
+        _LOG.debug("Handle backup/restore")
+        updated_config = msg.input_values["config"]
+        _LOG.info("Replacing configuration with : %s", updated_config)
+        if not config.devices.import_config(updated_config):
+            _LOG.error("Setup error : unable to import updated configuration %s", updated_config)
+            return SetupError(error_type=IntegrationSetupError.OTHER)
+        _LOG.debug("Configuration imported successfully")
+
+        await asyncio.sleep(1)
+        return SetupComplete()

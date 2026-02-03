@@ -6,23 +6,15 @@ Select entity functions.
 """
 
 import logging
-from enum import Enum
 from typing import Any
 
-from ucapi import StatusCodes, EntityTypes
+from ucapi import EntityTypes, Select, StatusCodes
 from ucapi.api_definitions import CommandHandler
-from ucapi.select import Select
+from ucapi.select import Attributes, Commands, States
 
 import lg
 from config import LGConfigDevice, LGEntity, create_entity_id
 from const import LGSelects
-
-
-class States(str, Enum):
-    """Select entity states."""
-
-    ON = "ON"
-
 
 _LOG = logging.getLogger(__name__)
 
@@ -78,22 +70,23 @@ class LGSelect(LGEntity, Select):
                 return update[self.SELECT_NAME]
             return None
         return {
-            "current_option": self.current_option,
-            "options": self.select_options,
+            Attributes.CURRENT_OPTION: self.current_option,
+            Attributes.OPTIONS: self.select_options,
+            Attributes.STATE: States.ON,
         }
 
     async def command(self, cmd_id: str, params: dict[str, Any] | None = None, *, websocket: Any) -> StatusCodes:
         """Process selector command."""
         # pylint: disable=R0911
-        if cmd_id == "select_option" and params:
+        if cmd_id == Commands.SELECT_OPTION and params:
             option = params.get("option", None)
             return await self._select_handler(option)
         options = self.select_options
-        if cmd_id == "select_first" and len(options) > 0:
+        if cmd_id == Commands.SELECT_FIRST and len(options) > 0:
             return await self._select_handler(options[0])
-        if cmd_id == "select_last" and len(options) > 0:
+        if cmd_id == Commands.SELECT_LAST and len(options) > 0:
             return await self._select_handler(options[len(options) - 1])
-        if cmd_id == "select_next" and len(options) > 0:
+        if cmd_id == Commands.SELECT_NEXT and len(options) > 0:
             cycle = params.get("cycle", False)
             try:
                 index = options.index(self.current_option) + 1
@@ -111,7 +104,7 @@ class LGSelect(LGEntity, Select):
                     ex,
                 )
                 return StatusCodes.BAD_REQUEST
-        if cmd_id == "select_previous" and len(options) > 0:
+        if cmd_id == Commands.SELECT_PREVIOUS and len(options) > 0:
             cycle = params.get("cycle", False)
             try:
                 index = options.index(self.current_option) - 1
