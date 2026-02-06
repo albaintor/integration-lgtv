@@ -135,7 +135,7 @@ class LGTVMediaPlayer(MediaPlayer, LGEntity):
         elif cmd_id == Commands.BACK:
             res = await self._device.button("BACK")
         elif cmd_id == Commands.HOME:
-            res = await self._device.button("HOME")
+            res = await self._device.button_retry("HOME")
         elif cmd_id == Commands.SETTINGS:
             res = await self._device.button("QMENU")
         elif cmd_id == Commands.MENU:

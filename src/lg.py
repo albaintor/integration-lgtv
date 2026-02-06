@@ -63,7 +63,7 @@ DEFAULT_TIMEOUT = 5
 BUFFER_LIFETIME = 30
 CONNECTION_RETRIES = 20
 CONNECT_LOCK_TIMEOUT = 20
-INIT_APPS_LAUNCH_DELAY = 10
+# INIT_APPS_LAUNCH_DELAY = 10
 ERROR_OS_WAIT = 0.5
 
 SOURCE_IS_APP = "isApp"
@@ -118,6 +118,7 @@ async def retry_call_command(
     """Retry call command when failed."""
     # Launch reconnection task if not active
     # pylint: disable = W0212
+    obj._reconnect_retry = 0
     if not obj._connect_task:
         obj._connect_task = asyncio.create_task(obj._connect_loop())
         await asyncio.sleep(0)
@@ -1037,13 +1038,6 @@ class LGDevice:
             # This method power_on seems to no longer be supported
             # self._buffered_callbacks[time.time()] = {"object": self._tv, "function": WebOsClient.power_on}
             self.event_loop.create_task(self.check_connect())
-            # try:
-            #     _LOG.debug(
-            #         "[%s] Sends power on command in case of TV is already connected", self._device_config.address
-            #     )
-            #     await self._tv.power_on()
-            # except Exception as ex:
-            #     _LOG.error("[%s] LG TV error power on command %s", self._device_config.address, ex)
             return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("[%s] LG TV error power_on %s", self._device_config.address, ex)
@@ -1155,35 +1149,6 @@ class LGDevice:
             await self._tv.rewind()
         return ucapi.StatusCodes.OK
 
-    async def select_source_deferred(self, source: str | None, delay: int = 0) -> ucapi.StatusCodes:
-        """Send input_source command to LG TV."""
-        if not source:
-            return ucapi.StatusCodes.BAD_REQUEST
-        _LOG.debug("[%s] LG TV set input: %s", self._device_config.address, source)
-        try:
-            if delay > 0:
-                await asyncio.sleep(delay)
-            if not self._tv.tv_state.is_on:
-                raise WebOsTvCommandError
-            # If sources is empty, device is not connected so raise error to trigger connection
-            if not self._sources:
-                raise WebOsTvCommandError
-            if (source_dict := self._sources.get(source)) is None:
-                _LOG.warning("[%s] Source %s not found for %s", self._device_config.address, source, self._sources)
-                return ucapi.StatusCodes.BAD_REQUEST
-            if source_dict.get("title"):
-                await self._tv.launch_app(source_dict["id"])
-            elif source_dict.get("label"):
-                await self._tv.set_input(source_dict["id"])
-            _LOG.debug("[%s] LG TV set input: %s succeeded", self._device_config.address, source)
-            return ucapi.StatusCodes.OK
-        except WEBOSTV_EXCEPTIONS as ex:
-            _LOG.error("[%s] LG TV error select_source %s", self._device_config.address, ex)
-        # pylint: disable = W0718
-        except Exception as ex:
-            _LOG.error("[%s] LG TV unknown error select_source %s", self._device_config.address, ex)
-        return ucapi.StatusCodes.BAD_REQUEST
-
     async def select_source_next(self) -> ucapi.StatusCodes:
         """Switch to next source."""
         if self._tv is None:
@@ -1211,37 +1176,27 @@ class LGDevice:
                 current_source = sources[0]["id"]
         return await self.select_source(current_source)
 
-    async def select_source(self, source: str | None, delay: int = 0) -> ucapi.StatusCodes:
+    @retry(bufferize=True)
+    async def select_source(self, source: str | None) -> ucapi.StatusCodes:
+        """Send input_source command to LG TV."""
         """Send input_source command to LG TV."""
         if not source:
             return ucapi.StatusCodes.BAD_REQUEST
         _LOG.debug("[%s] LG TV set input: %s", self._device_config.address, source)
-        launch_app = False
         try:
-            res = await self.select_source_deferred(source, delay)
-            if res != ucapi.StatusCodes.OK:
+            if not self._tv.tv_state.is_on:
                 raise WebOsTvCommandError
-            return res
-        except WebOsTvCommandError:
-            await self.power_on()
-            if launch_app:
-                self._buffered_callbacks[time.time()] = {
-                    "object": self,
-                    "function": LGDevice.select_source_deferred,
-                    "args": [source, INIT_APPS_LAUNCH_DELAY],
-                }
-            else:
-                self._buffered_callbacks[time.time()] = {
-                    "object": self,
-                    "function": LGDevice.select_source_deferred,
-                    "args": [source, 0],
-                }
-            _LOG.info(
-                "[%s] Device is not ready to accept command, buffering it : %s",
-                self._device_config.address,
-                self._buffered_callbacks,
-            )
-            self.event_loop.create_task(self.reconnect())
+            # If sources is empty, device is not connected so raise error to trigger connection
+            if not self._sources:
+                raise WebOsTvCommandError
+            if (source_dict := self._sources.get(source)) is None:
+                _LOG.warning("[%s] Source %s not found for %s", self._device_config.address, source, self._sources)
+                return ucapi.StatusCodes.BAD_REQUEST
+            if source_dict.get("title"):
+                await self._tv.launch_app(source_dict["id"])
+            elif source_dict.get("label"):
+                await self._tv.set_input(source_dict["id"])
+            _LOG.debug("[%s] LG TV set input: %s succeeded", self._device_config.address, source)
             return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("[%s] LG TV error select_source %s", self._device_config.address, ex)
@@ -1289,12 +1244,7 @@ class LGDevice:
         _LOG.warning("[%s] App not found: %s", self._device_config.address, app_name)
         return ucapi.StatusCodes.NOT_FOUND
 
-    async def select_sound_output_deferred(self, sound_output: str | None) -> ucapi.StatusCodes:
-        """Set sound output."""
-        _LOG.debug("[%s] LG set sound output to %s", self._device_config.address, sound_output)
-        await self._tv.change_sound_output(sound_output)
-        return ucapi.StatusCodes.OK
-
+    @retry(bufferize=True)
     async def select_sound_output(self, mode: str | None) -> ucapi.StatusCodes:
         """Set sound output."""
         if mode is None:
@@ -1305,35 +1255,18 @@ class LGDevice:
         if sound_output is None:
             _LOG.debug("[%s] LG TV invalid sound output %s from list (%s)", self._device_config.address, mode, inv_map)
             return ucapi.StatusCodes.BAD_REQUEST
-        try:
-            res = await self.select_sound_output_deferred(sound_output)
-            if res != ucapi.StatusCodes.OK:
-                raise WebOsTvCommandError
-            return res
-        except WebOsTvCommandError:
-            await self.power_on()
-            self._buffered_callbacks[time.time()] = {
-                "object": self,
-                "function": LGDevice.select_sound_output_deferred,
-                "args": [sound_output],
-            }
-            _LOG.info(
-                "[%s] Device is not ready to accept command, buffering it : %s",
-                self._device_config.address,
-                self._buffered_callbacks,
-            )
-            self.event_loop.create_task(self.reconnect())
-            return ucapi.StatusCodes.OK
-        except WEBOSTV_EXCEPTIONS as ex:
-            _LOG.error("[%s] LG TV error select_sound_output %s", self._device_config.address, ex)
-        # pylint: disable = W0718
-        except Exception as ex:
-            _LOG.error("[%s] LG TV unknown error select_sound_output %s", self._device_config.address, ex)
-        return ucapi.StatusCodes.BAD_REQUEST
+        await self._tv.change_sound_output(sound_output)
+        return ucapi.StatusCodes.OK
 
     @retry()
     async def button(self, button: str) -> ucapi.StatusCodes:
         """Send a button command."""
+        await self._tv.button(button)
+        return ucapi.StatusCodes.OK
+
+    @retry(bufferize=True)
+    async def button_retry(self, button: str) -> ucapi.StatusCodes:
+        """Send a button command and bufferize until connection is resolved."""
         await self._tv.button(button)
         return ucapi.StatusCodes.OK
 
