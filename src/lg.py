@@ -41,6 +41,7 @@ from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr
 from ucapi.media_player import Features, MediaType, States
 from ucapi.select import Attributes as SelectAttributes
+from ucapi.select import States as SelectStates
 from ucapi.ui import UiPage
 
 from config import LGConfigDevice
@@ -736,14 +737,17 @@ class LGDevice:
             LGSelects.SELECT_INPUT_SOURCE: {
                 SelectAttributes.OPTIONS: self.source_list,
                 SelectAttributes.CURRENT_OPTION: self.source,
+                SelectAttributes.STATE: SelectStates.ON,
             },
             LGSelects.SELECT_PICTURE_MODE: {
                 SelectAttributes.OPTIONS: self.picture_modes,
                 SelectAttributes.CURRENT_OPTION: self.picture_mode,
+                SelectAttributes.STATE: SelectStates.ON,
             },
             LGSelects.SELECT_SOUND_OUTPUT: {
                 SelectAttributes.OPTIONS: self.sound_outputs,
                 SelectAttributes.CURRENT_OPTION: self.sound_output,
+                SelectAttributes.STATE: SelectStates.ON,
             },
         }
         if self.source_list:
