@@ -138,7 +138,6 @@ class SetupFlow:
                 if msg.confirm:
                     return self.get_wakeonlan_settings()
                 return self.get_additional_settings(self._reconfigured_device)
-
         elif isinstance(msg, AbortDriverSetup):
             _LOG.info("Setup was aborted with code: %s", msg.error)
             if self._pairing_lg_tv is not None:
@@ -801,8 +800,8 @@ class SetupFlow:
             self._reconfigured_device.key = client.client_key
             await client.disconnect()
 
-        _LOG.info("Setup updated settings %s", self._reconfigured_device)
-        config.devices.add_or_update(self._reconfigured_device)
+        _LOG.info("[Additional settings] Setup updated settings %s", self._reconfigured_device)
+        config.devices.add_or_update(self._reconfigured_device, test_wakeonlan == False)
         # triggers LG TV instance creation
 
         if self._pairing_lg_tv:
@@ -810,6 +809,7 @@ class SetupFlow:
             self._pairing_lg_tv = None
 
         if test_wakeonlan:
+            _LOG.debug("Testing Wake On Lan")
             self._setup_step = SetupSteps.TEST_WAKEONLAN
             return await self.handle_wake_on_lan(msg)
 
@@ -849,8 +849,8 @@ class SetupFlow:
         self._reconfigured_device.broadcast = broadcast
         self._reconfigured_device.wol_port = wolport
 
-        _LOG.info("Setup updated settings %s", self._reconfigured_device)
-        config.devices.add_or_update(self._reconfigured_device)
+        _LOG.info("[Wake on lan] Setup updated settings %s", self._reconfigured_device)
+        config.devices.add_or_update(self._reconfigured_device, False)
         # triggers LG TV instance creation
         config.devices.store()
 
@@ -861,7 +861,11 @@ class SetupFlow:
             requests += 1
 
         device = LGDevice(device_config=self._reconfigured_device)
-        device.wakeonlan()
+        try:
+            device.wakeonlan()
+        except Exception as ex:
+            _LOG.exception("Error during wake on lan %s", ex)
+            raise ex
 
         return RequestUserConfirmation(
             title={

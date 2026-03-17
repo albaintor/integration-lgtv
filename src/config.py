@@ -131,18 +131,18 @@ class Devices:
                 return True
         return False
 
-    def add_or_update(self, atv: LGConfigDevice) -> None:
+    def add_or_update(self, atv: LGConfigDevice, notify_update=True) -> None:
         """Add a new configured device."""
         if self.contains(atv.id):
             _LOG.debug("Existing config %s, updating it %s", atv.id, atv)
             self.update(atv)
-            if self._update_handler is not None:
+            if self._update_handler is not None and notify_update:
                 self._update_handler(atv)
         else:
             _LOG.debug("Adding new config %s", atv)
             self._config.append(atv)
             self.store()
-        if self._add_handler is not None:
+        if self._add_handler is not None and notify_update:
             self._add_handler(atv)
 
     def get(self, avr_id: str) -> LGConfigDevice | None:
