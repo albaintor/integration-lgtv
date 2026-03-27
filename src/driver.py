@@ -10,8 +10,7 @@ import asyncio
 import logging
 import os
 import sys
-from enum import Enum
-from typing import Any, Type
+from typing import Any
 
 import ucapi
 from ucapi.media_player import Attributes as MediaAttr
@@ -24,7 +23,7 @@ import selector
 import sensor
 import setup_flow
 from config import LGEntity
-from const import WEBOSTV_EXCEPTIONS
+from const import WEBOSTV_EXCEPTIONS, filter_attributes
 
 _LOG = logging.getLogger("driver")  # avoid having __main__ in log messages
 if sys.platform == "win32":
@@ -75,11 +74,6 @@ async def on_enter_standby() -> None:
     _LOG.debug("Enter standby event: disconnecting device(s)")
     for configured in _configured_devices.values():
         await configured.disconnect()
-
-
-def filter_attributes(attributes, attribute_type: Type[Enum]) -> dict[str, Any]:
-    """Filter attributes based on an Enum class."""
-    return {k: v for k, v in attributes.items() if k in attribute_type}
 
 
 async def connect_device(device: lg.LGDevice):

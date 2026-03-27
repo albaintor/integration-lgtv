@@ -145,7 +145,7 @@ async def retry_call_command(
     return ucapi.StatusCodes.OK
 
 
-def retry(*, timeout: float = 5, bufferize=False) -> Callable[
+def retry(*, timeout: float = 5, bufferize=False, no_error=False) -> Callable[
     [Callable[Concatenate[_LGDeviceT, _P], Awaitable[_R]]],
     Callable[Concatenate[_LGDeviceT, _P], Awaitable[_R]],
 ]:
@@ -190,6 +190,8 @@ def retry(*, timeout: float = 5, bufferize=False) -> Callable[
                         obj._name,
                         wex,
                     )
+                    if no_error:
+                        return ucapi.StatusCodes.OK
                     return ucapi.StatusCodes.BAD_REQUEST
             # pylint: disable = W0718
             # except Exception as ex:
@@ -1183,7 +1185,6 @@ class LGDevice:
     @retry(bufferize=True)
     async def select_source(self, source: str | None) -> ucapi.StatusCodes:
         """Send input_source command to LG TV."""
-        """Send input_source command to LG TV."""
         if not source:
             return ucapi.StatusCodes.BAD_REQUEST
         _LOG.debug("[%s] LG TV set input: %s", self._device_config.address, source)
@@ -1274,7 +1275,7 @@ class LGDevice:
         await self._tv.button(button)
         return ucapi.StatusCodes.OK
 
-    @retry(timeout=1)
+    @retry(timeout=0.5, no_error=True)
     async def turn_screen_off(self, webos_ver="") -> ucapi.StatusCodes:
         """Turn TV Screen off."""
         epname = f"TURN_OFF_SCREEN_WO{webos_ver}" if webos_ver else "TURN_OFF_SCREEN"
@@ -1288,7 +1289,7 @@ class LGDevice:
         await self._tv.request(endpoint, {"standbyMode": "active"})
         return ucapi.StatusCodes.OK
 
-    @retry(timeout=1)
+    @retry(timeout=0.5, no_error=True)
     async def turn_screen_on(self, webos_ver="") -> ucapi.StatusCodes:
         """Turn TV Screen on."""
         epname = f"TURN_ON_SCREEN_WO{webos_ver}" if webos_ver else "TURN_ON_SCREEN"

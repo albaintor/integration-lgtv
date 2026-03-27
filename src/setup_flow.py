@@ -6,11 +6,13 @@ Setup flow for LG TV integration.
 """
 
 import asyncio
+import copy
 import ipaddress
 import logging
 import os
 import socket
 from enum import IntEnum
+from typing import Any
 
 from aiowebostv import WebOsClient
 from ucapi import (
@@ -33,6 +35,7 @@ import discover
 from config import LGConfigDevice
 from const import WEBOSTV_EXCEPTIONS
 from lg import LGDevice
+from setup_fields import SETUP_DEVICE_FIELDS, SETUP_FIELDS, TEST_SETUP_FIELDS
 
 _LOG = logging.getLogger(__name__)
 
@@ -51,6 +54,16 @@ class SetupSteps(IntEnum):
     ADDITIONAL_SETTINGS = 5
     TEST_WAKEONLAN = 6
     BACKUP_RESTORE = 7
+
+
+def set_setup_field(fields: list[dict[str, Any]], field_id: str, value: Any):
+    """Set field value from field id."""
+    for field in fields:
+        if field.get("id") == field_id and (field_entry := field.get("field")):
+            if isinstance(field_entry, dict):
+                for val in field_entry.values():
+                    if isinstance(val, dict):
+                        val["value"] = value
 
 
 class SetupFlow:
@@ -539,82 +552,15 @@ class SetupFlow:
                     }
                 },
             },
-            {
-                "field": {"text": {"value": config_device.address}},
-                "id": "address",
-                "label": {"en": "IP address", "fr": "Adresse IP"},
-            },
-            {
-                "field": {"text": {"value": config_device.mac_address}},
-                "id": "mac_address",
-                "label": {"en": "Mac address (wired)", "fr": "Adresse Mac (cablé)"},
-            },
-            {
-                "field": {"text": {"value": config_device.mac_address2}},
-                "id": "mac_address2",
-                "label": {"en": "Mac address (wifi)", "fr": "Adresse Mac (wifi)"},
-            },
-            {
-                "field": {"text": {"value": config_device.interface}},
-                "id": "interface",
-                "label": {
-                    "en": "Interface to use for magic packet",
-                    "fr": 'Interface à utiliser pour le "magic packet"',
-                },
-            },
-            {
-                "field": {"text": {"value": config_device.broadcast}},
-                "id": "broadcast",
-                "label": {
-                    "en": "Broadcast address to use for magic packet (blank by default)",
-                    "fr": "Plage d'adresse à utiliser pour le magic packet (vide par défaut)",
-                },
-            },
-            {
-                "id": "wolport",
-                "label": {
-                    "en": "Wake on lan port",
-                    "fr": "Numéro de port pour wake on lan",
-                },
-                "field": {
-                    "number": {"value": config_device.wol_port, "min": 1, "max": 65535, "steps": 1, "decimals": 0}
-                },
-            },
-            {
-                "id": "test_wakeonlan",
-                "label": {
-                    "en": "Test turn on your configured TV (through wake on lan, TV should be off since 15 minutes at "
-                    "least)",
-                    "fr": "Tester la mise en marche de votre TV (via wake on lan, votre TV doit être éteinte depuis au "
-                    "moins 15 minutes)",
-                },
-                "field": {"checkbox": {"value": False}},
-            },
-            {
-                "id": "pairing",
-                "label": {
-                    "en": "Regenerate the pairing key and test connection",
-                    "fr": "Régénérer la clé d'appairage et tester la connection",
-                },
-                "field": {"checkbox": {"value": False}},
-            },
-            {
-                "id": "update_apps_list",
-                "label": {
-                    "en": "Update apps list and re-register entities if necessary",
-                    "fr": "Maintenir la liste des apps à jour et enregistrer les entités à nouveau si nécessaire",
-                },
-                "field": {"checkbox": {"value": True}},
-            },
-            {
-                "id": "log",
-                "label": {
-                    "en": "Enable additional traces for debugging",
-                    "fr": "Activer les traces additionnalles pour l'analyse",
-                },
-                "field": {"checkbox": {"value": False}},
-            },
+            *copy.deepcopy(SETUP_DEVICE_FIELDS),
+            *copy.deepcopy(SETUP_FIELDS),
         ]
+        set_setup_field(additional_fields, "address", config_device.address)
+        set_setup_field(additional_fields, "mac_address", config_device.mac_address)
+        set_setup_field(additional_fields, "mac_address2", config_device.mac_address2)
+        set_setup_field(additional_fields, "interface", config_device.interface)
+        set_setup_field(additional_fields, "broadcast", config_device.broadcast)
+        set_setup_field(additional_fields, "wol_port", config_device.wol_port)
 
         return RequestUserInput(
             title={
@@ -679,7 +625,7 @@ class SetupFlow:
         except Exception:
             pass
 
-        return RequestUserInput(
+        user_input = RequestUserInput(
             title={
                 "en": "Test switching on your LG TV",
                 "fr": "Test de mise en marche de votre TV LG",
@@ -700,60 +646,20 @@ class SetupFlow:
                         }
                     },
                 },
-                {
-                    "field": {"text": {"value": self._reconfigured_device.mac_address}},
-                    "id": "mac_address",
-                    "label": {"en": "First mac address", "fr": "Première adresse Mac"},
-                },
-                {
-                    "field": {"text": {"value": self._reconfigured_device.mac_address2}},
-                    "id": "mac_address2",
-                    "label": {"en": "Second mac address", "fr": "Deuxième adresse Mac"},
-                },
-                {
-                    "field": {"text": {"value": self._reconfigured_device.interface}},
-                    "id": "interface",
-                    "label": {"en": "Interface (optional)", "fr": "Interface (optionnel)"},
-                },
-                {
-                    "field": {"text": {"value": self._reconfigured_device.broadcast}},
-                    "id": "broadcast",
-                    "label": {"en": "Broadcast (optional)", "fr": "Broadcast (optionnel)"},
-                },
-                {
-                    "id": "wolport",
-                    "label": {
-                        "en": "Wake on lan port",
-                        "fr": "Numéro de port pour wake on lan",
-                    },
-                    "field": {
-                        "number": {
-                            "value": self._reconfigured_device.wol_port,
-                            "min": 1,
-                            "max": 65535,
-                            "steps": 1,
-                            "decimals": 0,
-                        }
-                    },
-                },
-                {
-                    "id": "update_apps_list",
-                    "label": {
-                        "en": "Update apps list and re-register entities if necessary",
-                        "fr": "Maintenir la liste des apps à jour et enregistrer les entités à nouveau si nécessaire",
-                    },
-                    "field": {"checkbox": {"value": self._reconfigured_device.update_apps_list}},
-                },
-                {
-                    "id": "log",
-                    "label": {
-                        "en": "Enable additional traces for debugging",
-                        "fr": "Activer les traces additionnalles pour l'analyse",
-                    },
-                    "field": {"checkbox": {"value": self._reconfigured_device.log}},
-                },
+                *copy.deepcopy(SETUP_FIELDS),
+                *copy.deepcopy(TEST_SETUP_FIELDS),
             ],
         )
+        set_setup_field(user_input.settings, "address", self._reconfigured_device.address)
+        set_setup_field(user_input.settings, "mac_address", self._reconfigured_device.mac_address)
+        set_setup_field(user_input.settings, "mac_address2", self._reconfigured_device.mac_address2)
+        set_setup_field(user_input.settings, "interface", self._reconfigured_device.interface)
+        set_setup_field(user_input.settings, "broadcast", self._reconfigured_device.broadcast)
+        set_setup_field(user_input.settings, "wol_port", self._reconfigured_device.wol_port)
+        set_setup_field(user_input.settings, "update_apps_list", self._reconfigured_device.update_apps_list)
+        set_setup_field(user_input.settings, "log", self._reconfigured_device.log)
+
+        return user_input
 
     async def handle_additional_settings(
         self, msg: UserDataResponse
@@ -801,8 +707,7 @@ class SetupFlow:
             await client.disconnect()
 
         _LOG.info("[Additional settings] Setup updated settings %s", self._reconfigured_device)
-        config.devices.add_or_update(self._reconfigured_device, test_wakeonlan == False)
-        # triggers LG TV instance creation
+        config.devices.add_or_update(self._reconfigured_device, test_wakeonlan is False)
 
         if self._pairing_lg_tv:
             await self._pairing_lg_tv.disconnect()

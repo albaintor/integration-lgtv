@@ -1,4 +1,4 @@
-pyee~=13.0.0
+pyee~=13.0.1
 aiowebostv~=0.7.5
 ucapi
  file:./src/ucapi-0.5.3.dev11+ge80291de2.d20260204-py3-none-any.whl

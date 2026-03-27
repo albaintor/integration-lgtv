@@ -9,6 +9,7 @@ Test connection script for Kodi integration driver.
 # flake8: noqa
 
 import asyncio
+import base64
 import datetime
 import io
 import json
@@ -111,11 +112,18 @@ def get_entity_name(entity: dict[str, Any]) -> str:
 
 
 def load_image_from_url(url: str, max_size=(500, 500)) -> ImageTk.PhotoImage:
-    # Download image
-    resp = requests.get(url, timeout=10)
-    resp.raise_for_status()
+    if url.startswith("data:image/"):
+        # Buffer image base64
+        header, b64_data = url.split(",", 1)
+        image_bytes = base64.b64decode(b64_data)
+    else:
+        # Image URL to download
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        image_bytes = resp.content
+
     # Open image from bytes data
-    img = Image.open(io.BytesIO(resp.content))
+    img = Image.open(io.BytesIO(image_bytes))
     # Resize image
     img.thumbnail(max_size)
     return ImageTk.PhotoImage(img)
@@ -134,6 +142,7 @@ MAIN_WS_MAX_MSG_SIZE = 8 * 1024 * 1024  # 8Mb
 WS_TIMEOUT = 5
 BROWSING_PAGINATION = 12
 BROWSING_CELL_WIDTH = 60
+DUMP_MAX_LENGTH = 64
 
 
 class RemoteWebsocket:
@@ -1057,7 +1066,13 @@ class RemoteInterface(tk.Tk):
                 "limit": browsing_data.limit,
             },
         )
-        print_json(json=json.dumps(results))
+        dump_msg = json.loads(json.dumps(results))
+        if media:=dump_msg.get("msg_data", {}).get("media"):
+            for item in media.get("items", []):
+                if (url:=item.get("thumbnail")) and len(url) > DUMP_MAX_LENGTH:
+                    item["thumbnail"] = url[:DUMP_MAX_LENGTH] + "..."
+
+        print_json(json=json.dumps(dump_msg))
         if results and (msg_data := results.get("msg_data", {})):
             pagination = msg_data.get("pagination", {})
             media = msg_data.get("media", {})
@@ -1081,7 +1096,12 @@ class RemoteInterface(tk.Tk):
                 "limit": self._media_search_data.limit,
             },
         )
-        print_json(json=json.dumps(results))
+        dump_msg = json.loads(json.dumps(results))
+        if media:=dump_msg.get("msg_data", {}).get("media"):
+            for item in media:
+                if (url:=item.get("thumbnail")) and len(url) > DUMP_MAX_LENGTH:
+                    item["thumbnail"] = url[:DUMP_MAX_LENGTH] + "..."
+        print_json(json=json.dumps(dump_msg))
         if results and (msg_data := results.get("msg_data", {})):
             pagination = msg_data.get("pagination", {})
             media = msg_data.get("media", [])
@@ -1114,7 +1134,11 @@ class RemoteInterface(tk.Tk):
                     self._worker._loop,
                 )
             return
-        _LOG.debug("Browse item %s", item)
+        dump_item = json.loads(json.dumps(item))
+        if dump_item and (url:=item.get("thumbnail")) and len(url) > DUMP_MAX_LENGTH:
+            dump_item["thumbnail"] = url[:DUMP_MAX_LENGTH] + "..."
+
+        _LOG.debug("Browse item %s", dump_item)
         entity_id = self._worker.get_media_player_entity_id()
         browsing_data.page = 1
         browsing_data.limit = BROWSING_PAGINATION
@@ -1201,9 +1225,12 @@ class RemoteInterface(tk.Tk):
             row += 1
 
         for item in browsing_data.items:
+            title = item.get("title", "")
+            if item.get("subtitle"):
+                title += "\n" + item.get("subtitle")
             button = ttk.Button(
                 browsing_data.window,
-                text=item.get("title"),
+                text=title,
                 width=BROWSING_CELL_WIDTH,
                 command=lambda item=item.copy(), data=browsing_data: self.browse(None, item, data),
                 # height=200,
@@ -1661,11 +1688,14 @@ class WorkerThread(threading.Thread):
         await asyncio.sleep(0)
 
     async def entity_changed(self, msg: dict[str, Any]) -> None:
-        _LOG.debug("Entity changed : %s", msg)
+        dump_msg = json.loads(json.dumps(msg))
+        if (attributes := dump_msg.get("msg_data", {}).get("attributes", {})) and (url:=attributes.get("media_image_url")) and len(url) > DUMP_MAX_LENGTH:
+            attributes["media_image_url"] = url[:DUMP_MAX_LENGTH]
+        _LOG.debug("Entity changed : %s", dump_msg)
         updated_data: dict[str, Any] | None = msg.get("msg_data", None)
         if updated_data is None:
             return
-        print_json(json=json.dumps(msg))
+        print_json(json=json.dumps(dump_msg))
         await self.update_attributes(updated_data)
 
     async def driver_setup_changed(self, msg: dict[str, Any]) -> None:
@@ -1692,7 +1722,8 @@ class WorkerThread(threading.Thread):
                 if attributes is None:
                     return
                 _LOG.debug("Reloading attributes for new entity %s : %s", entity_id, attributes)
-                self._interface.browsing_support(self.has_feature(entity_id, "browse_media"))
+                browsing_support = self.has_feature(entity_id, "browse_media")
+                self._interface.browsing_support(browsing_support)
                 self._interface.media_search_support(self.has_feature(entity_id, "search_media"))
                 asyncio.run_coroutine_threadsafe(
                     self.update_attributes(entity | {"attributes": attributes}),
@@ -1728,12 +1759,6 @@ class WorkerThread(threading.Thread):
                     self._selectors[entity_id] = Selector(
                         name=entity["name"].get("en", entity_id), current_option="", options=[]
                     )
-            self._interface.set_media_players(media_players)
-            if len(media_players) > 0:
-                self._interface.set_media_player(media_players[0])
-                event = tk.Event()
-                event.widget = self._interface._media_players
-                self._interface.change_media_player(event)
 
             data = await self._ws.subscribe_entities(self._entity_ids)
             _LOG.debug("Subscribed entities : %s", data)
@@ -1746,6 +1771,12 @@ class WorkerThread(threading.Thread):
             _LOG.debug("Entities states : %s", data)
             for entity_state in data["msg_data"]:
                 self._loop.create_task(self.update_attributes(entity_state))
+            self._interface.set_media_players(media_players)
+            if len(media_players) > 0:
+                self._interface.set_media_player(media_players[0])
+                event = tk.Event()
+                event.widget = self._interface._media_players
+                self._interface.change_media_player(event)
 
         except Exception as e:
             _LOG.exception("Error launching websocket server %s", e)

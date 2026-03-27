@@ -20,7 +20,7 @@ from ucapi.media_player import (
 
 import lg
 from config import LGConfigDevice, LGEntity, create_entity_id
-from const import LG_SIMPLE_COMMANDS, LG_SIMPLE_COMMANDS_CUSTOM
+from const import LG_SIMPLE_COMMANDS, LG_SIMPLE_COMMANDS_CUSTOM, filter_attributes
 
 # pylint: disable = R0801
 
@@ -36,18 +36,6 @@ class LGTVMediaPlayer(MediaPlayer, LGEntity):
         self._config_device = config_device
         entity_id = create_entity_id(config_device.id, EntityTypes.MEDIA_PLAYER)
         features = device.supported_features
-        attributes = {
-            Attributes.STATE: device.state,
-            Attributes.VOLUME: device.volume_level,
-            Attributes.MUTED: device.is_volume_muted,
-            Attributes.SOURCE: device.source if device.source else "",
-            Attributes.SOURCE_LIST: device.source_list,
-            Attributes.SOUND_MODE: device.sound_output if device.sound_output else "",
-            Attributes.SOUND_MODE_LIST: device.sound_outputs,
-            Attributes.MEDIA_IMAGE_URL: device.media_image_url if device.media_image_url else "",
-            Attributes.MEDIA_TITLE: device.media_title if device.media_title else "",
-            Attributes.MEDIA_TYPE: device.media_type,
-        }
         # Merge static commands with dynamic app commands
         app_commands = device.app_buttons
         simple_commands = list(LG_SIMPLE_COMMANDS) + app_commands
@@ -62,7 +50,7 @@ class LGTVMediaPlayer(MediaPlayer, LGEntity):
             entity_id,
             config_device.name,
             features,
-            attributes,
+            filter_attributes(device.attributes, Attributes),
             device_class=DeviceClasses.RECEIVER,
             options=options,
         )

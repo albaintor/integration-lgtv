@@ -2,6 +2,7 @@
 
 import asyncio
 from enum import Enum
+from typing import Any, Type
 from xmlrpc.client import ProtocolError
 
 from aiohttp import (
@@ -435,3 +436,9 @@ LG_REMOTE_UI_PAGES: list[UiPage] = [
         }
     ),
 ]
+
+
+def filter_attributes(attributes, attribute_type: Type[Enum]) -> dict[str, Any]:
+    """Filter attributes based on an Enum class."""
+    valid_keys = {e.value for e in attribute_type}
+    return {k: v for k, v in attributes.items() if k in valid_keys}
