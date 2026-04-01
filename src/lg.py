@@ -39,7 +39,9 @@ from aiowebostv import WebOsClient, WebOsTvCommandError, WebOsTvState
 from aiowebostv.webos_client import MAIN_WS_MAX_MSG_SIZE, WS_PORT, WSS_PORT
 from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr
-from ucapi.media_player import Features, MediaType, States
+from ucapi.media_player import Features
+from ucapi.media_player import MediaContentType as MediaType
+from ucapi.media_player import States
 from ucapi.select import Attributes as SelectAttributes
 from ucapi.select import States as SelectStates
 from ucapi.ui import UiPage
@@ -477,7 +479,7 @@ class LGDevice:
 
         media_type = MediaType.VIDEO
         if self._tv.tv_state.current_app_id == LIVE_TV_APP_ID:
-            media_type = MediaType.TVSHOW
+            media_type = MediaType.TV_SHOW
 
         if media_type != self._media_type:
             self._media_type = media_type

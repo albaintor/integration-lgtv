@@ -13,7 +13,7 @@ from ucapi.media_player import (
     Attributes,
     Commands,
     DeviceClasses,
-    MediaType,
+    MediaContentType,
     Options,
     States,
 )
@@ -235,7 +235,7 @@ class LGTVMediaPlayer(MediaPlayer, LGEntity):
             if attributes[Attributes.STATE] == States.OFF:
                 attributes[Attributes.MEDIA_IMAGE_URL] = ""
                 attributes[Attributes.MEDIA_TITLE] = ""
-                attributes[Attributes.MEDIA_TYPE] = MediaType.VIDEO
+                attributes[Attributes.MEDIA_TYPE] = MediaContentType.VIDEO
                 attributes[Attributes.SOURCE] = ""
         _LOG.debug("LGTVMediaPlayer update attributes %s -> %s", update, attributes)
         return attributes
