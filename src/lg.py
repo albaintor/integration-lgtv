@@ -15,7 +15,8 @@ import socket
 import struct
 import sys
 import time
-from asyncio import AbstractEventLoop, CancelledError, Lock, shield
+from asyncio import AbstractEventLoop, CancelledError, Future, Lock, Task, shield
+from dataclasses import dataclass, field
 from enum import IntEnum, StrEnum
 from functools import wraps
 from typing import (
@@ -24,9 +25,7 @@ from typing import (
     Callable,
     Concatenate,
     Coroutine,
-    NotRequired,
     ParamSpec,
-    TypedDict,
     TypeVar,
     cast,
 )
@@ -68,6 +67,7 @@ CONNECTION_RETRIES = 20
 CONNECT_LOCK_TIMEOUT = 20
 # INIT_APPS_LAUNCH_DELAY = 10
 ERROR_OS_WAIT = 0.5
+MAX_DEFERRED_COMMANDS = 100
 
 SOURCE_IS_APP = "isApp"
 
@@ -101,13 +101,20 @@ _P = ParamSpec("_P")
 _R = TypeVar("_R", bound=ucapi.StatusCodes)
 
 
-class DeferredCallback(TypedDict):
-    """Deferred callback parameters."""
+@dataclass(slots=True)
+class DeferredCommand:
+    """Deferred command executed when the device becomes reachable again."""
 
-    object: "LGDevice | WebOsClient"
-    function: Callable[[Any | None], Coroutine]
-    args: NotRequired[tuple[Any, ...]]
-    kwargs: NotRequired[dict[str, Any]]
+    callback: Callable[..., Awaitable[Any]]
+    args: tuple[Any, ...] = ()
+    kwargs: dict[str, Any] = field(default_factory=dict)
+    created_at: float = field(default_factory=time.monotonic)
+    ttl: float = BUFFER_LIFETIME
+    future: Future[Any] | None = None
+
+    def expired(self) -> bool:
+        """Return True when the deferred command exceeded its lifetime."""
+        return time.monotonic() - self.created_at > self.ttl
 
 
 async def retry_call_command(
@@ -122,18 +129,17 @@ async def retry_call_command(
     # Launch reconnection task if not active
     # pylint: disable = W0212
     obj._reconnect_retry = 0
-    if not obj._connect_task:
-        obj._connect_task = asyncio.create_task(obj._connect_loop())
-        await asyncio.sleep(0)
+    connect_task = obj._ensure_connect_task()
+    await asyncio.sleep(0)
     # If the command should be bufferized (and retried later) add it to the list and returns OK
     if bufferize:
         _LOG.debug("[%s] Bufferize command %s %s", obj._device_config.address, func, args)
-        obj._buffered_callbacks[time.time()] = {"object": obj, "function": func, "args": args, "kwargs": kwargs}
+        await obj.defer_command(func, obj, *args, **kwargs)
         return ucapi.StatusCodes.OK
     try:
         # Else (no bufferize) wait (not more than "timeout" seconds) for the connection to complete
         async with asyncio.timeout(max(timeout - 1, 1)):
-            await shield(obj._connect_task)
+            await shield(connect_task)
     except asyncio.TimeoutError:
         # (Re)connection failed at least at given time
         if obj.state == States.OFF:
@@ -147,7 +153,7 @@ async def retry_call_command(
     return ucapi.StatusCodes.OK
 
 
-def retry(*, timeout: float = 5, bufferize=False, no_error=False) -> Callable[
+def retry(*, timeout: float = 5, bufferize=False, no_error=False, power_on=False) -> Callable[
     [Callable[Concatenate[_LGDeviceT, _P], Awaitable[_R]]],
     Callable[Concatenate[_LGDeviceT, _P], Awaitable[_R]],
 ]:
@@ -167,6 +173,8 @@ def retry(*, timeout: float = 5, bufferize=False, no_error=False) -> Callable[
                 _LOG.debug(
                     "[%s] Device is unavailable, connecting before executing command...", obj._device_config.address
                 )
+                if power_on:
+                    await obj.power_on()
                 return await retry_call_command(timeout, bufferize, func, obj, *args, **kwargs)
             # New bug "Received message 8:1008 is not WSMsgType.TEXT" for some commands (power_off at least)
             # pylint: disable = W0718
@@ -183,6 +191,8 @@ def retry(*, timeout: float = 5, bufferize=False, no_error=False) -> Callable[
                     ex,
                 )
                 try:
+                    if power_on:
+                        await obj.power_on()
                     return await retry_call_command(timeout, bufferize, func, obj, *args, **kwargs)
                 except Exception as wex:
                     log_function(
@@ -228,11 +238,13 @@ async def patched_create_main_ws(self):
     # pylint: disable=W0212
     try:
         uri = f"ws://{self.host}:{WS_PORT}"
+        # _LOG.debug("Connecting to %s", uri)
         return await self._ws_connect(uri, MAIN_WS_MAX_MSG_SIZE)
     # ClientConnectionError is raised when firmware reject WS_PORT
     # WSServerHandshakeError is raised when firmware enforce using ssl
     except (aiohttp.ClientConnectionError, aiohttp.WSServerHandshakeError, TimeoutError):
         uri = f"wss://{self.host}:{WSS_PORT}"
+        # _LOG.debug("Connecting to %s", uri)
         return await self._ws_connect(uri, MAIN_WS_MAX_MSG_SIZE)
 
 
@@ -270,8 +282,9 @@ class LGDevice:
         self._media_title = ""
         self._media_image_url = ""
         self._attr_state = States.OFF
-        self._connect_task = None
-        self._buffered_callbacks: dict[float, DeferredCallback] = {}
+        self._connect_task: Task[None] | None = None
+        self._background_tasks: set[Task[Any]] = set()
+        self._deferred_commands: asyncio.Queue[DeferredCommand] = asyncio.Queue()
         self._connect_lock = Lock()
         self._connect_lock_time: float = 0
         self._reconnect_retry = 0
@@ -287,6 +300,87 @@ class LGDevice:
     def update_config(self, device_config: LGConfigDevice):
         """Update existing configuration."""
         self._device_config = device_config
+
+    def _track_task(self, task: Task[Any]) -> Task[Any]:
+        """Track background tasks to prevent lost exceptions and allow cancellation."""
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        return task
+
+    def _ensure_connect_task(self) -> Task[None]:
+        """Return the current connect task, creating it when needed."""
+        if self._connect_task is None or self._connect_task.done():
+            self._connect_task = self._track_task(asyncio.create_task(self._connect_loop()))
+        return self._connect_task
+
+    async def defer_command(
+        self,
+        callback: Callable[..., Awaitable[Any]],
+        *args: Any,
+        ttl: float = BUFFER_LIFETIME,
+        **kwargs: Any,
+    ) -> Future[Any]:
+        """Schedule a command to run later and expose its completion through a Future."""
+        if self._deferred_commands.qsize() >= MAX_DEFERRED_COMMANDS:
+            raise RuntimeError(f"Deferred command queue is full ({MAX_DEFERRED_COMMANDS})")
+        future: Future[Any] = self.event_loop.create_future()
+        await self._deferred_commands.put(
+            DeferredCommand(callback=callback, args=args, kwargs=kwargs, ttl=ttl, future=future)
+        )
+        return future
+
+    async def _drain_deferred_commands(self) -> None:
+        """Execute queued deferred commands in FIFO order."""
+        if self._deferred_commands.empty():
+            return
+
+        _LOG.debug("[%s] Connected, executing deferred commands", self._device_config.address)
+        while not self._deferred_commands.empty():
+            cmd = await self._deferred_commands.get()
+            try:
+                if cmd.future and cmd.future.cancelled():
+                    continue
+                if cmd.expired():
+                    _LOG.debug("[%s] Deferred command expired: %s", self._device_config.address, cmd.callback)
+                    if cmd.future and not cmd.future.done():
+                        cmd.future.set_exception(asyncio.TimeoutError("Deferred command expired"))
+                    continue
+
+                result = await cmd.callback(*cmd.args, **cmd.kwargs)
+                if cmd.future and not cmd.future.done():
+                    cmd.future.set_result(result)
+            except CancelledError:
+                _LOG.warning("[%s] Cancelled deferred command", self._device_config.address)
+                if cmd.future and not cmd.future.done():
+                    cmd.future.cancel()
+                raise
+            except Exception as ex:  # pylint: disable=W0718
+                _LOG.warning("[%s] Error while calling deferred command %s", self._device_config.address, ex)
+                if cmd.future and not cmd.future.done():
+                    cmd.future.set_exception(ex)
+            finally:
+                self._deferred_commands.task_done()
+
+    async def _cancel_background_tasks(self) -> None:
+        """Cancel all tracked background tasks except the current one."""
+        current_task = asyncio.current_task()
+        tasks = [task for task in list(self._background_tasks) if task is not current_task]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._background_tasks.clear()
+        if current_task is not None:
+            self._background_tasks.add(current_task)
+
+    async def _wait_until_connected(self, timeout: float = 5.0) -> bool:
+        """Wait until the TV websocket is ready."""
+        start = time.monotonic()
+        while time.monotonic() - start < timeout:
+            if self.available and self._tv.connection is not None:
+                return True
+            await asyncio.sleep(0.1)
+        return False
 
     async def register_websocket_events(self):
         """Activate websocket for listening if wanted. the websocket has to be recreated when the device goes off."""
@@ -515,35 +609,11 @@ class LGDevice:
             self.events.emit(Events.UPDATE, self.id, updated_data)
 
     async def _run_buffered_commands(self):
-        # Handle awaiting commands to process
-        # pylint: disable = R1702
-        if self._buffered_callbacks:
-            _LOG.debug("[%s] Connected, executing buffered commands", self._device_config.address)
-            while self._buffered_callbacks:
-                items = dict(sorted(self._buffered_callbacks.items()))
-                try:
-                    for timestamp, value in items.items():
-                        del self._buffered_callbacks[timestamp]
-                        if time.time() - timestamp <= BUFFER_LIFETIME:
-                            _LOG.debug("[%s] Calling buffered command %s", self._device_config.address, value)
-                            try:
-                                if "kwargs" in value and len(value["kwargs"]) > 0:
-                                    await value["function"](value["object"], *value["args"], **value["kwargs"])
-                                elif "args" in value and len(value["args"]) > 0:
-                                    await value["function"](value["object"], *value["args"])
-                                else:
-                                    await value["function"](value["object"])
-                            # pylint: disable = W0718
-                            except Exception as ex:
-                                _LOG.warning(
-                                    "[%s] Error while calling buffered command %s", self._device_config.address, ex
-                                )
-                        else:
-                            _LOG.debug(
-                                "[%s] Buffered command too old %s, dropping it", self._device_config.address, value
-                            )
-                except RuntimeError:
-                    pass
+        """Backward-compatible wrapper around deferred command execution."""
+        try:
+            await self._drain_deferred_commands()
+        except RuntimeError:
+            pass
 
     def _update_picture_modes(self) -> None:
         if not self._picture_modes and (generation := self.model_version):
@@ -605,9 +675,9 @@ class LGDevice:
         # pylint: disable = R1702, R0915
         if self._connect_lock.locked():
             _LOG.debug("[%s] Connect already in progress", self._device_config.address)
-            if time.time() - self._connect_lock_time > CONNECT_LOCK_TIMEOUT:
+            if time.monotonic() - self._connect_lock_time > CONNECT_LOCK_TIMEOUT:
                 _LOG.warning(
-                    "[%s] Connect is locked since a too long time, unlock it anyway", self._device_config.address
+                    "[%s] Connect lock timeout reached, skipping duplicate connect", self._device_config.address
                 )
                 try:
                     self._connect_lock.release()
@@ -616,70 +686,53 @@ class LGDevice:
             else:
                 return
         try:
-            await self._connect_lock.acquire()
-            self._connect_lock_time = time.time()
-            _LOG.debug("[%s] Connect", self._device_config.address)
-            self._connecting = True
-            self._tv = WebOsClient(host=self._device_config.address, client_key=self._device_config.key)
-            try:
-                result = await self._tv.connect()
-            except WEBOSTV_EXCEPTIONS as ex:
-                if isinstance(ex, ClientOSError):
-                    _LOG.warning(
-                        "[%s] OS error, waiting %ss and retry connection", self._device_config.address, ERROR_OS_WAIT
-                    )
-                    await asyncio.sleep(ERROR_OS_WAIT)
-                    result = await self._tv.connect()
-                else:
-                    raise ex
-
-            if not result or self._tv.connection is None:
-                _LOG.error(
-                    "[%s] Connection process done but the connection is not available", self._device_config.address
-                )
+            async with self._connect_lock:
+                self._connect_lock_time = time.monotonic()
+                _LOG.debug("[%s] Connect", self._device_config.address)
+                self._connecting = True
+                tv = WebOsClient(host=self._device_config.address, client_key=self._device_config.key)
                 try:
-                    self._connect_lock.release()
-                except RuntimeError:
-                    pass
-                raise WebOsTvCommandError("Connection process done but the connection is not available")
+                    result = await tv.connect()
+                except WEBOSTV_EXCEPTIONS as ex:
+                    if isinstance(ex, ClientOSError):
+                        _LOG.warning(
+                            "[%s] OS error, waiting %ss and retry connection",
+                            self._device_config.address,
+                            ERROR_OS_WAIT,
+                        )
+                        await asyncio.sleep(ERROR_OS_WAIT)
+                        result = await tv.connect()
+                    else:
+                        raise
 
-            _LOG.debug("[%s] Connection succeeded", self._device_config.address)
-            await self._update_states(None)
-            if not self._device_config.mac_address:
-                await self._update_system()
-            await self.register_websocket_events()
-            self._available = True
-            await self._run_buffered_commands()
+                if not result or tv.connection is None:
+                    _LOG.error(
+                        "[%s] Connection process done but the connection is not available", self._device_config.address
+                    )
+                    raise WebOsTvCommandError("Connection process done but the connection is not available")
+
+                _LOG.debug("[%s] Connection succeeded", self._device_config.address)
+                self._tv = tv
+                await self._update_states(None)
+                if not self._device_config.mac_address:
+                    await self._update_system()
+                await self.register_websocket_events()
+                self._available = True
+                await self._run_buffered_commands()
         except WEBOSTV_EXCEPTIONS as ex:
             self._available = False
             _LOG.error("[%s] Unable to connect : %s (%s)", self._device_config.address, ex, repr(ex))
-            if not self._connect_task:
-                _LOG.warning(
-                    "[%s] Unable to update, LG TV probably off: running connect task %s",
-                    self._device_config.address,
-                    ex,
-                )
-                self._connect_task = asyncio.create_task(self._connect_loop())
+            self._ensure_connect_task()
         # pylint: disable=W0718
         except Exception as ex:
             self._available = False
             _LOG.error("[%s] Unknown error, unable to connect : %s", self._device_config.address, ex)
-            if not self._connect_task:
-                _LOG.warning(
-                    "[%s] Unable to update, LG TV probably off: running connect task %s",
-                    self._device_config.address,
-                    ex,
-                )
-                self._connect_task = asyncio.create_task(self._connect_loop())
+            self._ensure_connect_task()
         finally:
             # Always emit connected event even if the device is unreachable (off)
             self.events.emit(Events.CONNECTED, self.id)
             self._connecting = False
             _LOG.debug("[%s] Connection task ends", self._device_config.address)
-            try:
-                self._connect_lock.release()
-            except RuntimeError:
-                pass
 
     async def reconnect(self):
         """Occurs when the TV has been turned off and on : the client has to be reset."""
@@ -705,6 +758,8 @@ class LGDevice:
         try:
             if self._connect_task:
                 self._connect_task.cancel()
+                await asyncio.gather(self._connect_task, return_exceptions=True)
+            await self._cancel_background_tasks()
             self._tv.clear_state_update_callbacks()
             await self._tv.disconnect()
         except WEBOSTV_EXCEPTIONS as ex:
@@ -712,17 +767,17 @@ class LGDevice:
             self._available = False
         finally:
             self._connect_task = None
-            if self._connect_lock.locked():
-                try:
-                    self._connect_lock.release()
-                except RuntimeError:
-                    pass
             self.reset()
 
     @property
-    def unique_id(self) -> str:
+    def unique_id(self) -> str | None:
         """Return the unique ID of the device (serial number or mac address if none)."""
         return self._unique_id
+
+    @property
+    def is_connected(self) -> bool:
+        """Connected state."""
+        return self._tv.connection is not None and self._available
 
     @property
     def attributes(self) -> dict[str, Any]:
@@ -1018,7 +1073,7 @@ class LGDevice:
                 _LOG.warning(
                     "[%s] Unable to update, LG TV probably off, running connect task", self._device_config.address
                 )
-                self._connect_task = asyncio.create_task(self._connect_loop())
+                self._ensure_connect_task()
         else:
             _LOG.debug("[%s] TV is connected", self._device_config.address)
         return lg_state
@@ -1041,11 +1096,10 @@ class LGDevice:
             )
             self.wakeonlan()
             # Send another WakeOnLan request after a delay in case the remote is waking up otherwise it won't be sent
-            asyncio.create_task(self._deferred_wakeonlan(ERROR_OS_WAIT))
+            self._track_task(asyncio.create_task(self._deferred_wakeonlan(ERROR_OS_WAIT)))
             self._retry_wakeonlan = True
             # This method power_on seems to no longer be supported
-            # self._buffered_callbacks[time.time()] = {"object": self._tv, "function": WebOsClient.power_on}
-            self.event_loop.create_task(self.check_connect())
+            self._track_task(asyncio.create_task(self.check_connect()))
             return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("[%s] LG TV error power_on %s", self._device_config.address, ex)
@@ -1056,9 +1110,8 @@ class LGDevice:
 
     async def power_off_deferred(self):
         """Power off deferred."""
-        # Sleep time : sometimes the connection variable is not defined although the lib reports the TV as connected
-        if self._tv.connection is None:
-            await asyncio.sleep(2)
+        if not await self._wait_until_connected(timeout=5):
+            raise asyncio.TimeoutError("TV not connected in time for deferred power off")
         await self._tv.command("request", ep.POWER_OFF)
         self._attr_state = States.OFF
 
@@ -1074,11 +1127,11 @@ class LGDevice:
             self._attr_state = States.OFF
         else:
             _LOG.debug(
-                "[%s] Power off command : TV seems to be off, adding power_off call to buffered commands if "
+                "[%s] Power off command : TV seems to be off, adding power_off call to deferred commands if "
                 "connection is reestablished",
                 self._device_config.address,
             )
-            self._buffered_callbacks[time.time()] = {"object": self, "function": LGDevice.power_off_deferred}
+            await self.defer_command(LGDevice.power_off_deferred, self)
         return ucapi.StatusCodes.OK
 
     @retry()
@@ -1184,7 +1237,7 @@ class LGDevice:
                 current_source = sources[0]["id"]
         return await self.select_source(current_source)
 
-    @retry(bufferize=True)
+    @retry(bufferize=True, power_on=True)
     async def select_source(self, source: str | None) -> ucapi.StatusCodes:
         """Send input_source command to LG TV."""
         if not source:
@@ -1519,7 +1572,7 @@ class LGDevice:
             return ucapi.StatusCodes.BAD_REQUEST
         results: dict[str, Any] | None = await self.set_system_settings("picture", {"pictureMode": mode})
         if results and results.get("returnValue", None) is True:
-            self.event_loop.create_task(self.update_picture_mode(picture_mode))
+            self._track_task(asyncio.create_task(self.update_picture_mode(picture_mode)))
             return ucapi.StatusCodes.OK
         return ucapi.StatusCodes.BAD_REQUEST
 

@@ -103,9 +103,16 @@ def get_local_ip() -> str:
     return ip
 
 
+def get_locale(data: dict[str, str], locale="en") -> str | None:
+    for language in data:
+        if language == locale or language.startswith(locale):
+            return data[language]
+    return None
+
+
 def get_entity_name(entity: dict[str, Any]) -> str:
     entity_id = entity.get("entity_id")
-    name = entity["name"].get("en", None)
+    name = get_locale(entity["name"])
     if name:
         return f"{name} {entity_id}"
     return entity_id
@@ -142,7 +149,7 @@ MAIN_WS_MAX_MSG_SIZE = 8 * 1024 * 1024  # 8Mb
 WS_TIMEOUT = 5
 BROWSING_PAGINATION = 12
 BROWSING_CELL_WIDTH = 60
-DUMP_MAX_LENGTH = 64
+DUMP_MAX_LENGTH = 100
 
 
 class RemoteWebsocket:
@@ -1067,9 +1074,9 @@ class RemoteInterface(tk.Tk):
             },
         )
         dump_msg = json.loads(json.dumps(results))
-        if media:=dump_msg.get("msg_data", {}).get("media"):
+        if media := dump_msg.get("msg_data", {}).get("media"):
             for item in media.get("items", []):
-                if (url:=item.get("thumbnail")) and len(url) > DUMP_MAX_LENGTH:
+                if (url := item.get("thumbnail")) and len(url) > DUMP_MAX_LENGTH:
                     item["thumbnail"] = url[:DUMP_MAX_LENGTH] + "..."
 
         print_json(json=json.dumps(dump_msg))
@@ -1083,7 +1090,12 @@ class RemoteInterface(tk.Tk):
             browsing_data.page = pagination.get("page", 1)
             browsing_data.limit = pagination.get("limit", BROWSING_PAGINATION)
             browsing_data.count = pagination.get("count", 0)
-            self.update_browsing_grid(browsing_data, "Media Browser")
+            if browsing_data.count is None:
+                browsing_data.count = 0
+            try:
+                self.update_browsing_grid(browsing_data, "Media Browser")
+            except Exception as e:
+                _LOG.exception("Error while updating browsing grid: %s", e)
 
     async def search_media(self, entity_id):
         results = await self._worker.search_media(
@@ -1097,9 +1109,9 @@ class RemoteInterface(tk.Tk):
             },
         )
         dump_msg = json.loads(json.dumps(results))
-        if media:=dump_msg.get("msg_data", {}).get("media"):
+        if media := dump_msg.get("msg_data", {}).get("media"):
             for item in media:
-                if (url:=item.get("thumbnail")) and len(url) > DUMP_MAX_LENGTH:
+                if (url := item.get("thumbnail")) and len(url) > DUMP_MAX_LENGTH:
                     item["thumbnail"] = url[:DUMP_MAX_LENGTH] + "..."
         print_json(json=json.dumps(dump_msg))
         if results and (msg_data := results.get("msg_data", {})):
@@ -1111,7 +1123,12 @@ class RemoteInterface(tk.Tk):
             self._media_search_data.page = pagination.get("page", 1)
             self._media_search_data.limit = pagination.get("limit", BROWSING_PAGINATION)
             self._media_search_data.count = pagination.get("count", 0)
-            self.update_browsing_grid(self._media_search_data, "Search Media")
+            if self._media_search_data.count is None:
+                self._media_search_data.count = 0
+            try:
+                self.update_browsing_grid(self._media_search_data, "Search Media")
+            except Exception as e:
+                _LOG.exception("Error while updating search media grid: %s", e)
 
     def browse(self, event: Any, item: dict[str, Any], browsing_data: BrowsingData):
         if not item.get("can_browse", False):
@@ -1135,7 +1152,7 @@ class RemoteInterface(tk.Tk):
                 )
             return
         dump_item = json.loads(json.dumps(item))
-        if dump_item and (url:=item.get("thumbnail")) and len(url) > DUMP_MAX_LENGTH:
+        if dump_item and (url := item.get("thumbnail")) and len(url) > DUMP_MAX_LENGTH:
             dump_item["thumbnail"] = url[:DUMP_MAX_LENGTH] + "..."
 
         _LOG.debug("Browse item %s", dump_item)
@@ -1189,29 +1206,30 @@ class RemoteInterface(tk.Tk):
         column += 1
         if browsing_data.page == 1:
             button.configure(state="disabled")
-        page = ttk.Combobox(
-            browsing_data.window,
-            state="readonly",
-            justify="right",
-            values=[str(x) for x in range(1, math.ceil(browsing_data.count / BROWSING_PAGINATION) + 1)],
-        )
-        page.set(str(browsing_data.page))
-        page.bind("<<ComboboxSelected>>", lambda event, data=browsing_data: self.change_page(event, data))
-        page.grid(row=row, column=column, sticky="e")
-        column += 1
-        label = ttk.Label(
-            browsing_data.window,
-            text=f" / {math.ceil(browsing_data.count / BROWSING_PAGINATION)} ({browsing_data.count})",
-        )
-        label.grid(row=row, column=column, sticky="w")
-        column += 1
+        if browsing_data.count > 0:
+            page = ttk.Combobox(
+                browsing_data.window,
+                state="readonly",
+                justify="right",
+                values=[str(x) for x in range(1, math.ceil(browsing_data.count / BROWSING_PAGINATION) + 1)],
+            )
+            page.set(str(browsing_data.page))
+            page.bind("<<ComboboxSelected>>", lambda event, data=browsing_data: self.change_page(event, data))
+            page.grid(row=row, column=column, sticky="e")
+            column += 1
+            label = ttk.Label(
+                browsing_data.window,
+                text=f" / {math.ceil(browsing_data.count / BROWSING_PAGINATION)} ({browsing_data.count})",
+            )
+            label.grid(row=row, column=column, sticky="w")
+            column += 1
         button = ttk.Button(
             browsing_data.window,
             text=">>",
             command=lambda data=browsing_data: self.paging(data, browsing_data.page + 1),
         )
         button.grid(row=row, column=column)
-        if browsing_data.count == 0 or browsing_data.count <= BROWSING_PAGINATION:
+        if browsing_data.count != 0 and (browsing_data.count == 0 or browsing_data.count <= BROWSING_PAGINATION):
             button.configure(state="disabled")
         column += 1
         row += 1
@@ -1342,7 +1360,7 @@ class RemoteInterface(tk.Tk):
                 selected_entry = [
                     x
                     for x in entry.get("field", {}).get("dropdown", {}).get("items", [])
-                    if x.get("label", {}).get("en", "") == widget.get()
+                    if get_locale(x.get("label", {})) == widget.get()
                 ]
                 if len(selected_entry) == 0:
                     _LOG.error("No matching entries found in dropdown %s for selected value %s", entry, widget.get())
@@ -1380,11 +1398,11 @@ class RemoteInterface(tk.Tk):
             column = 0
             input_data = data.get("require_user_action", {}).get("input")
             if input_data is None and (confirmation := data.get("require_user_action", {}).get("confirmation")):
-                if title := confirmation.get("title", {}).get("en", None):
+                if title := get_locale(confirmation.get("title", {})):
                     label = tk.Label(self._setup_data.window, text=title, wraplength=300)
                     label.grid(row=row, column=column, columnspan=4, sticky="we")
                     row += 1
-                if message1 := confirmation.get("message1", {}).get("en", None):
+                if message1 := get_locale(confirmation.get("message1", {})):
                     label = tk.Label(self._setup_data.window, text=message1, wraplength=300)
                     label.grid(row=row, column=column, columnspan=4, sticky="we")
                     row += 1
@@ -1412,7 +1430,7 @@ class RemoteInterface(tk.Tk):
                 return
 
             if input_field := input_data.get("title"):
-                label = tk.Label(self._setup_data.window, text=input_field.get("en", ""), wraplength=300)
+                label = tk.Label(self._setup_data.window, text=get_locale(input_field), wraplength=300)
                 label.grid(row=row, column=column, columnspan=4, sticky="we")
                 row += 1
             if settings := input_data.get("settings"):
@@ -1421,19 +1439,19 @@ class RemoteInterface(tk.Tk):
                     column = 0
                     field_id = setting.get("id", "")
                     if field := setting.get("label"):
-                        label = tk.Label(self._setup_data.window, text=field.get("en", ""), wraplength=300)
+                        label = tk.Label(self._setup_data.window, text=get_locale(field), wraplength=300)
                         label.grid(row=row, column=column, columnspan=2, sticky="w")
                         column += 2
                     if field := setting.get("field"):
                         if dropdown := field.get("dropdown"):
                             combo = ttk.Combobox(self._setup_data.window, state="readonly", justify="left")
                             combo.grid(row=row, column=column, columnspan=2, sticky="we")
-                            combo["values"] = [x.get("label", {}).get("en", "") for x in dropdown.get("items", [])]
+                            combo["values"] = [get_locale(x.get("label", {})) for x in dropdown.get("items", [])]
                             current_value = [
                                 x for x in dropdown.get("items", []) if x.get("id") == dropdown.get("value", "")
                             ]
                             if len(current_value) > 0:
-                                combo.set(current_value[0].get("label", {}).get("en", ""))
+                                combo.set(get_locale(current_value[0].get("label", {})))
                             else:
                                 _LOG.warning(
                                     "No default entry found in dropdown %s for selected value %s",
@@ -1481,7 +1499,7 @@ class RemoteInterface(tk.Tk):
                             self._setup_data.mapping_type[field_id] = "checkbox"
                         elif label := field.get("label"):
                             label_field = ttk.Label(
-                                self._setup_data.window, text=label.get("value", {}).get("en", ""), wraplength=300
+                                self._setup_data.window, text=get_locale(label.get("value", {})), wraplength=300
                             )
                             label_field.grid(row=row, column=column, columnspan=4 - column, sticky="we")
                         elif text := field.get("number"):
@@ -1689,7 +1707,11 @@ class WorkerThread(threading.Thread):
 
     async def entity_changed(self, msg: dict[str, Any]) -> None:
         dump_msg = json.loads(json.dumps(msg))
-        if (attributes := dump_msg.get("msg_data", {}).get("attributes", {})) and (url:=attributes.get("media_image_url")) and len(url) > DUMP_MAX_LENGTH:
+        if (
+            (attributes := dump_msg.get("msg_data", {}).get("attributes", {}))
+            and (url := attributes.get("media_image_url"))
+            and len(url) > DUMP_MAX_LENGTH
+        ):
             attributes["media_image_url"] = url[:DUMP_MAX_LENGTH]
         _LOG.debug("Entity changed : %s", dump_msg)
         updated_data: dict[str, Any] | None = msg.get("msg_data", None)
@@ -1754,10 +1776,15 @@ class WorkerThread(threading.Thread):
                 if entity.get("entity_type", "") == "media_player":
                     media_players.append(get_entity_name(entity))
                 if entity.get("entity_type", "") == "sensor":
-                    self._sensors[entity_id] = {"name": entity["name"].get("en", entity_id), "state": ""}
+                    self._sensors[entity_id] = {
+                        "name": get_locale(entity["name"]) if get_locale(entity["name"]) else entity_id,
+                        "state": "",
+                    }
                 if entity.get("entity_type", "") == "select":
                     self._selectors[entity_id] = Selector(
-                        name=entity["name"].get("en", entity_id), current_option="", options=[]
+                        name=get_locale(entity["name"]) if get_locale(entity["name"]) else entity_id,
+                        current_option="",
+                        options=[],
                     )
 
             data = await self._ws.subscribe_entities(self._entity_ids)

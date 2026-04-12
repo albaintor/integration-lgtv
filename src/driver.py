@@ -503,6 +503,7 @@ async def main():
     logging.getLogger("sensor").setLevel(level)
     logging.getLogger("config").setLevel(level)
     logging.getLogger("setup_flow").setLevel(level)
+    logging.getLogger("aiowebostv").setLevel(level)
 
     config.devices = config.Devices(api.config_dir_path, on_device_added, on_device_removed, on_device_updated)
     update_global_settings()
