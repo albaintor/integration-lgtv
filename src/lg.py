@@ -133,7 +133,9 @@ async def retry_call_command(
     await asyncio.sleep(0)
     # If the command should be bufferized (and retried later) add it to the list and returns OK
     if bufferize:
-        _LOG.debug("[%s] Bufferize command %s %s", obj._device_config.address, func, args)
+        _LOG.debug(
+            "[%s] Bufferize command %s %s", obj._device_config.address, func, args
+        )
         await obj.defer_command(func, obj, *args, **kwargs)
         return ucapi.StatusCodes.OK
     try:
@@ -147,13 +149,23 @@ async def retry_call_command(
         else:
             log_function = _LOG.error
         # Try to send the command anyway if connection timed out
-        log_function("[%s] Timeout for reconnect, command will probably fail", obj._device_config.address)
-    _LOG.debug("[%s] Executing command %s on [%s]", obj._device_config.address, func.__name__, obj._name)
+        log_function(
+            "[%s] Timeout for reconnect, command will probably fail",
+            obj._device_config.address,
+        )
+    _LOG.debug(
+        "[%s] Executing command %s on [%s]",
+        obj._device_config.address,
+        func.__name__,
+        obj._name,
+    )
     await func(obj, *args, **kwargs)
     return ucapi.StatusCodes.OK
 
 
-def retry(*, timeout: float = 5, bufferize=False, no_error=False, power_on=False) -> Callable[
+def retry(
+    *, timeout: float = 5, bufferize=False, no_error=False, power_on=False
+) -> Callable[
     [Callable[Concatenate[_LGDeviceT, _P], Awaitable[_R]]],
     Callable[Concatenate[_LGDeviceT, _P], Awaitable[_R]],
 ]:
@@ -171,11 +183,14 @@ def retry(*, timeout: float = 5, bufferize=False, no_error=False, power_on=False
                     await func(obj, *args, **kwargs)
                     return ucapi.StatusCodes.OK
                 _LOG.debug(
-                    "[%s] Device is unavailable, connecting before executing command...", obj._device_config.address
+                    "[%s] Device is unavailable, connecting before executing command...",
+                    obj._device_config.address,
                 )
                 if power_on:
                     await obj.power_on()
-                return await retry_call_command(timeout, bufferize, func, obj, *args, **kwargs)
+                return await retry_call_command(
+                    timeout, bufferize, func, obj, *args, **kwargs
+                )
             # New bug "Received message 8:1008 is not WSMsgType.TEXT" for some commands (power_off at least)
             # pylint: disable = W0718
             except Exception as ex:
@@ -193,7 +208,9 @@ def retry(*, timeout: float = 5, bufferize=False, no_error=False, power_on=False
                 try:
                     if power_on:
                         await obj.power_on()
-                    return await retry_call_command(timeout, bufferize, func, obj, *args, **kwargs)
+                    return await retry_call_command(
+                        timeout, bufferize, func, obj, *args, **kwargs
+                    )
                 except Exception as wex:
                     log_function(
                         "[%s] Error calling %s on [%s]: %r",
@@ -242,7 +259,11 @@ async def patched_create_main_ws(self):
         return await self._ws_connect(uri, MAIN_WS_MAX_MSG_SIZE)
     # ClientConnectionError is raised when firmware reject WS_PORT
     # WSServerHandshakeError is raised when firmware enforce using ssl
-    except (aiohttp.ClientConnectionError, aiohttp.WSServerHandshakeError, TimeoutError):
+    except (
+        aiohttp.ClientConnectionError,
+        aiohttp.WSServerHandshakeError,
+        TimeoutError,
+    ):
         uri = f"wss://{self.host}:{WSS_PORT}"
         # _LOG.debug("Connecting to %s", uri)
         return await self._ws_connect(uri, MAIN_WS_MAX_MSG_SIZE)
@@ -269,7 +290,9 @@ class LGDevice:
         self._serial_number = ""
         self.event_loop = loop or asyncio.get_running_loop()
         self.events = AsyncIOEventEmitter(self.event_loop)
-        self._tv: WebOsClient = WebOsClient(host=device_config.address, client_key=device_config.key)
+        self._tv: WebOsClient = WebOsClient(
+            host=device_config.address, client_key=device_config.key
+        )
         self._available: bool = True
         self._volume = 0
         self._attr_is_volume_muted = False
@@ -310,7 +333,9 @@ class LGDevice:
     def _ensure_connect_task(self) -> Task[None]:
         """Return the current connect task, creating it when needed."""
         if self._connect_task is None or self._connect_task.done():
-            self._connect_task = self._track_task(asyncio.create_task(self._connect_loop()))
+            self._connect_task = self._track_task(
+                asyncio.create_task(self._connect_loop())
+            )
         return self._connect_task
 
     async def defer_command(
@@ -322,10 +347,14 @@ class LGDevice:
     ) -> Future[Any]:
         """Schedule a command to run later and expose its completion through a Future."""
         if self._deferred_commands.qsize() >= MAX_DEFERRED_COMMANDS:
-            raise RuntimeError(f"Deferred command queue is full ({MAX_DEFERRED_COMMANDS})")
+            raise RuntimeError(
+                f"Deferred command queue is full ({MAX_DEFERRED_COMMANDS})"
+            )
         future: Future[Any] = self.event_loop.create_future()
         await self._deferred_commands.put(
-            DeferredCommand(callback=callback, args=args, kwargs=kwargs, ttl=ttl, future=future)
+            DeferredCommand(
+                callback=callback, args=args, kwargs=kwargs, ttl=ttl, future=future
+            )
         )
         return future
 
@@ -334,28 +363,42 @@ class LGDevice:
         if self._deferred_commands.empty():
             return
 
-        _LOG.debug("[%s] Connected, executing deferred commands", self._device_config.address)
+        _LOG.debug(
+            "[%s] Connected, executing deferred commands", self._device_config.address
+        )
         while not self._deferred_commands.empty():
             cmd = await self._deferred_commands.get()
             try:
                 if cmd.future and cmd.future.cancelled():
                     continue
                 if cmd.expired():
-                    _LOG.debug("[%s] Deferred command expired: %s", self._device_config.address, cmd.callback)
+                    _LOG.debug(
+                        "[%s] Deferred command expired: %s",
+                        self._device_config.address,
+                        cmd.callback,
+                    )
                     if cmd.future and not cmd.future.done():
-                        cmd.future.set_exception(asyncio.TimeoutError("Deferred command expired"))
+                        cmd.future.set_exception(
+                            asyncio.TimeoutError("Deferred command expired")
+                        )
                     continue
 
                 result = await cmd.callback(*cmd.args, **cmd.kwargs)
                 if cmd.future and not cmd.future.done():
                     cmd.future.set_result(result)
             except CancelledError:
-                _LOG.warning("[%s] Cancelled deferred command", self._device_config.address)
+                _LOG.warning(
+                    "[%s] Cancelled deferred command", self._device_config.address
+                )
                 if cmd.future and not cmd.future.done():
                     cmd.future.cancel()
                 raise
             except Exception as ex:  # pylint: disable=W0718
-                _LOG.warning("[%s] Error while calling deferred command %s", self._device_config.address, ex)
+                _LOG.warning(
+                    "[%s] Error while calling deferred command %s",
+                    self._device_config.address,
+                    ex,
+                )
                 if cmd.future and not cmd.future.done():
                     cmd.future.set_exception(ex)
             finally:
@@ -364,7 +407,9 @@ class LGDevice:
     async def _cancel_background_tasks(self) -> None:
         """Cancel all tracked background tasks except the current one."""
         current_task = asyncio.current_task()
-        tasks = [task for task in list(self._background_tasks) if task is not current_task]
+        tasks = [
+            task for task in list(self._background_tasks) if task is not current_task
+        ]
         for task in tasks:
             task.cancel()
         if tasks:
@@ -391,7 +436,9 @@ class LGDevice:
             if state.media_state:
                 self._media_state = state.media_state
                 if self.media_state:
-                    self._paused = self.media_state.get(LG_PLAYSTATE, "playing") == "paused"
+                    self._paused = (
+                        self.media_state.get(LG_PLAYSTATE, "playing") == "paused"
+                    )
             await self._update_states(self._tv)
             if not state.power_state:
                 self._attr_state = States.OFF
@@ -420,7 +467,9 @@ class LGDevice:
                         self.id,
                         {
                             MediaAttr.SOUND_MODE: self.sound_output,
-                            LGSelects.SELECT_SOUND_OUTPUT: {SelectAttributes.CURRENT_OPTION: self.sound_output},
+                            LGSelects.SELECT_SOUND_OUTPUT: {
+                                SelectAttributes.CURRENT_OPTION: self.sound_output
+                            },
                         },
                     )
 
@@ -465,14 +514,24 @@ class LGDevice:
         if self._sources:
             new_source_list = self.source_list
             # Compare with previous source list (convert dict keys to sorted list for comparison)
-            old_source_list = sorted(current_source_list.keys()) if current_source_list else []
+            old_source_list = (
+                sorted(current_source_list.keys()) if current_source_list else []
+            )
             if len(new_source_list) != len(old_source_list):
-                _LOG.debug("[%s] Source list updated: %s", self._device_config.address, new_source_list)
+                _LOG.debug(
+                    "[%s] Source list updated: %s",
+                    self._device_config.address,
+                    new_source_list,
+                )
                 updated_data[MediaAttr.SOURCE_LIST] = new_source_list
-                updated_data[LGSelects.SELECT_INPUT_SOURCE] = {SelectAttributes.OPTIONS: new_source_list}
+                updated_data[LGSelects.SELECT_INPUT_SOURCE] = {
+                    SelectAttributes.OPTIONS: new_source_list
+                }
 
         if active_source != self._active_source:
-            _LOG.debug("[%s] Active source %s", self._device_config.address, active_source)
+            _LOG.debug(
+                "[%s] Active source %s", self._device_config.address, active_source
+            )
             self._active_source = active_source
             updated_data[MediaAttr.SOURCE] = self._active_source
             updated_data[LGSensors.SENSOR_INPUT_SOURCE] = self._active_source
@@ -488,11 +547,17 @@ class LGDevice:
         if not self._sources:
             try:
                 sources = await self._tv.get_inputs()
-                _LOG.info("[%s] Empty sources, retrieve them %s", self._device_config.address, sources)
+                _LOG.info(
+                    "[%s] Empty sources, retrieve them %s",
+                    self._device_config.address,
+                    sources,
+                )
                 await self._tv.set_inputs_state(list(sources.values()))
                 await self._tv.set_apps_state(await self._tv.get_apps())
                 # pylint: disable = E1101
-                await self._tv.set_current_app_state(str(await self._tv.get_current_app()))
+                await self._tv.set_current_app_state(
+                    str(await self._tv.get_current_app())
+                )
             # pylint: disable = W0718
             except Exception:
                 pass
@@ -500,10 +565,14 @@ class LGDevice:
         if not self._picture_mode and self._picture_mode_retries > 0:
             try:
                 picture_mode = await self.get_picture_mode()
-                picture_mode_name = re.sub(r"([A-Z])", r" \1", picture_mode).strip().title()
+                picture_mode_name = (
+                    re.sub(r"([A-Z])", r" \1", picture_mode).strip().title()
+                )
                 if picture_mode_name != self.picture_mode:
                     self._picture_mode = picture_mode_name
-                    updated_data[LGSelects.SELECT_PICTURE_MODE] = {SelectAttributes.CURRENT_OPTION: picture_mode_name}
+                    updated_data[LGSelects.SELECT_PICTURE_MODE] = {
+                        SelectAttributes.CURRENT_OPTION: picture_mode_name
+                    }
                     if picture_mode not in self._picture_modes.values():
                         _LOG.debug(
                             "[%s] Adding missing picture mode in the list : %s",
@@ -511,7 +580,9 @@ class LGDevice:
                             picture_mode,
                         )
                         self._picture_modes[picture_mode_name] = picture_mode
-                        updated_data[LGSelects.SELECT_PICTURE_MODE][SelectAttributes.OPTIONS] = self.picture_modes
+                        updated_data[LGSelects.SELECT_PICTURE_MODE][
+                            SelectAttributes.OPTIONS
+                        ] = self.picture_modes
             except WEBOSTV_EXCEPTIONS as ex:
                 _LOG.debug(
                     "[%s] Failed to extract current picture mode (unsupported?), will retry %s times : %s",
@@ -537,20 +608,34 @@ class LGDevice:
             if self._sound_output != data.tv_state.sound_output:
                 self._sound_output = data.tv_state.sound_output
                 updated_data[MediaAttr.SOUND_MODE] = self.sound_output
-                updated_data[LGSelects.SELECT_SOUND_OUTPUT] = {SelectAttributes.CURRENT_OPTION: self.sound_output}
+                updated_data[LGSelects.SELECT_SOUND_OUTPUT] = {
+                    SelectAttributes.CURRENT_OPTION: self.sound_output
+                }
         elif self._sound_output is None:
             try:
                 self._sound_output = await self._tv.get_sound_output()
                 if self._sound_output:
                     updated_data[MediaAttr.SOUND_MODE] = self.sound_output
-                    updated_data[LGSelects.SELECT_SOUND_OUTPUT] = {SelectAttributes.CURRENT_OPTION: self.sound_output}
-                _LOG.debug("[%s] Sound output %s", self._device_config.address, self._sound_output)
+                    updated_data[LGSelects.SELECT_SOUND_OUTPUT] = {
+                        SelectAttributes.CURRENT_OPTION: self.sound_output
+                    }
+                _LOG.debug(
+                    "[%s] Sound output %s",
+                    self._device_config.address,
+                    self._sound_output,
+                )
             except Exception as ex:
-                _LOG.warning("[%s] Error extraction of sound output %s", self._device_config.address, ex)
+                _LOG.warning(
+                    "[%s] Error extraction of sound output %s",
+                    self._device_config.address,
+                    ex,
+                )
 
         state = States.ON if is_on else States.OFF
         if self.media_state:
-            state = LG_PLAYSTATES.get(self.media_state.get(LG_PLAYSTATE, "playing"), States.ON)
+            state = LG_PLAYSTATES.get(
+                self.media_state.get(LG_PLAYSTATE, "playing"), States.ON
+            )
         if state != self.state:
             self._attr_state = state
             updated_data[MediaAttr.STATE] = self.state
@@ -559,7 +644,9 @@ class LGDevice:
         if muted != self._attr_is_volume_muted:
             self._attr_is_volume_muted = muted
             updated_data[MediaAttr.MUTED] = self._attr_is_volume_muted
-            updated_data[LGSensors.SENSOR_MUTED] = "on" if self._attr_is_volume_muted else "off"
+            updated_data[LGSensors.SENSOR_MUTED] = (
+                "on" if self._attr_is_volume_muted else "off"
+            )
 
         volume = data.tv_state.volume if data and data.tv_state else None
         if volume is None:
@@ -569,7 +656,9 @@ class LGDevice:
             if volume != self._volume:
                 self._volume = volume
                 updated_data[MediaAttr.VOLUME] = self._volume
-                updated_data[LGSensors.SENSOR_VOLUME] = self._volume if self._volume else 0
+                updated_data[LGSensors.SENSOR_VOLUME] = (
+                    self._volume if self._volume else 0
+                )
 
         media_type = MediaType.VIDEO
         if self._tv.tv_state.current_app_id == LIVE_TV_APP_ID:
@@ -580,8 +669,13 @@ class LGDevice:
             updated_data[MediaAttr.MEDIA_TYPE] = self._media_type
 
         media_title = ""
-        if self._tv.tv_state.current_app_id == LIVE_TV_APP_ID and self._tv.tv_state.current_channel is not None:
-            media_title = cast(str, self._tv.tv_state.current_channel.get("channelName"))
+        if (
+            self._tv.tv_state.current_app_id == LIVE_TV_APP_ID
+            and self._tv.tv_state.current_channel is not None
+        ):
+            media_title = cast(
+                str, self._tv.tv_state.current_channel.get("channelName")
+            )
 
         if media_title != self._media_title:
             self._media_title = media_title
@@ -590,7 +684,9 @@ class LGDevice:
         # TODO playing / paused state to update
         media_image_url = ""
         if self._tv.tv_state.current_app_id in self._tv.tv_state.apps:
-            icon: str = self._tv.tv_state.apps[self._tv.tv_state.current_app_id]["largeIcon"]
+            icon: str = self._tv.tv_state.apps[self._tv.tv_state.current_app_id][
+                "largeIcon"
+            ]
             if not icon.startswith("http"):
                 icon = self._tv.tv_state.apps[self._tv.tv_state.current_app_id]["icon"]
             media_image_url = icon
@@ -602,7 +698,9 @@ class LGDevice:
         self._sound_output = self._tv.tv_state.sound_output
         if _sound_output != self._sound_output:
             updated_data[MediaAttr.SOUND_MODE] = self.sound_output
-            updated_data[LGSelects.SELECT_SOUND_OUTPUT] = {SelectAttributes.CURRENT_OPTION: self.sound_output}
+            updated_data[LGSelects.SELECT_SOUND_OUTPUT] = {
+                SelectAttributes.CURRENT_OPTION: self.sound_output
+            }
 
         if updated_data:
             _LOG.debug("Updated data %s", updated_data)
@@ -617,17 +715,25 @@ class LGDevice:
 
     def _update_picture_modes(self) -> None:
         if not self._picture_modes and (generation := self.model_version):
-            _LOG.debug("[%s] LG model found : %s", self._device_config.address, generation)
+            _LOG.debug(
+                "[%s] LG model found : %s", self._device_config.address, generation
+            )
             modes = LG_PICTURE_MODES_GENERATION.get(generation, None)
             if modes is None:
                 modes = LG_PICTURE_MODES_GENERATION[DEFAULT_PICTURE_MODE]
             self._picture_modes = {}
             for mode in modes:
-                self._picture_modes[re.sub(r"([A-Z])", r" \1", mode).strip().title()] = mode
+                self._picture_modes[
+                    re.sub(r"([A-Z])", r" \1", mode).strip().title()
+                ] = mode
             self.events.emit(
                 Events.UPDATE,
                 self.id,
-                {LGSelects.SELECT_PICTURE_MODE: {SelectAttributes.OPTIONS: self.picture_modes}},
+                {
+                    LGSelects.SELECT_PICTURE_MODE: {
+                        SelectAttributes.OPTIONS: self.picture_modes
+                    }
+                },
             )
 
     async def _connect_loop(self) -> None:
@@ -641,19 +747,31 @@ class LGDevice:
                 try:
                     await self.connect()
                     if self._tv.tv_state.is_on:
-                        _LOG.debug("[%s] LG TV connection succeeded", self._device_config.address)
+                        _LOG.debug(
+                            "[%s] LG TV connection succeeded",
+                            self._device_config.address,
+                        )
                         self._update_picture_modes()
                         break
                 except CancelledError:
-                    _LOG.debug("[%s] LG TV connect task cancelled", self._device_config.address)
+                    _LOG.debug(
+                        "[%s] LG TV connect task cancelled", self._device_config.address
+                    )
                     break
                 # pylint: disable=W0718
                 except Exception as ex:
-                    _LOG.warning("[%s] LG TV connection failed %s", self._device_config.address, ex)
+                    _LOG.warning(
+                        "[%s] LG TV connection failed %s",
+                        self._device_config.address,
+                        ex,
+                    )
                 self._reconnect_retry += 1
                 self._attr_state = States.OFF
                 if self._reconnect_retry > CONNECTION_RETRIES:
-                    _LOG.debug("[%s] LG not connected abort retries", self._device_config.address)
+                    _LOG.debug(
+                        "[%s] LG not connected abort retries",
+                        self._device_config.address,
+                    )
                     break
                 if self._retry_wakeonlan:
                     self.wakeonlan()
@@ -677,7 +795,8 @@ class LGDevice:
             _LOG.debug("[%s] Connect already in progress", self._device_config.address)
             if time.monotonic() - self._connect_lock_time > CONNECT_LOCK_TIMEOUT:
                 _LOG.warning(
-                    "[%s] Connect lock timeout reached, skipping duplicate connect", self._device_config.address
+                    "[%s] Connect lock timeout reached, skipping duplicate connect",
+                    self._device_config.address,
                 )
                 try:
                     self._connect_lock.release()
@@ -690,7 +809,9 @@ class LGDevice:
                 self._connect_lock_time = time.monotonic()
                 _LOG.debug("[%s] Connect", self._device_config.address)
                 self._connecting = True
-                tv = WebOsClient(host=self._device_config.address, client_key=self._device_config.key)
+                tv = WebOsClient(
+                    host=self._device_config.address, client_key=self._device_config.key
+                )
                 try:
                     result = await tv.connect()
                 except WEBOSTV_EXCEPTIONS as ex:
@@ -707,9 +828,12 @@ class LGDevice:
 
                 if not result or tv.connection is None:
                     _LOG.error(
-                        "[%s] Connection process done but the connection is not available", self._device_config.address
+                        "[%s] Connection process done but the connection is not available",
+                        self._device_config.address,
                     )
-                    raise WebOsTvCommandError("Connection process done but the connection is not available")
+                    raise WebOsTvCommandError(
+                        "Connection process done but the connection is not available"
+                    )
 
                 _LOG.debug("[%s] Connection succeeded", self._device_config.address)
                 self._tv = tv
@@ -721,12 +845,21 @@ class LGDevice:
                 await self._run_buffered_commands()
         except WEBOSTV_EXCEPTIONS as ex:
             self._available = False
-            _LOG.error("[%s] Unable to connect : %s (%s)", self._device_config.address, ex, repr(ex))
+            _LOG.error(
+                "[%s] Unable to connect : %s (%s)",
+                self._device_config.address,
+                ex,
+                repr(ex),
+            )
             self._ensure_connect_task()
         # pylint: disable=W0718
         except Exception as ex:
             self._available = False
-            _LOG.error("[%s] Unknown error, unable to connect : %s", self._device_config.address, ex)
+            _LOG.error(
+                "[%s] Unknown error, unable to connect : %s",
+                self._device_config.address,
+                ex,
+            )
             self._ensure_connect_task()
         finally:
             # Always emit connected event even if the device is unreachable (off)
@@ -853,10 +986,20 @@ class LGDevice:
     def source_list(self) -> list[str]:
         """Return a list of available input sources."""
         sources_list = sorted(
-            [source_name for (source_name, source) in self._sources.items() if source[SOURCE_IS_APP] is False]
+            [
+                source_name
+                for (source_name, source) in self._sources.items()
+                if source[SOURCE_IS_APP] is False
+            ]
         )
         sources_list.extend(
-            sorted([source_name for (source_name, source) in self._sources.items() if source[SOURCE_IS_APP] is True])
+            sorted(
+                [
+                    source_name
+                    for (source_name, source) in self._sources.items()
+                    if source[SOURCE_IS_APP] is True
+                ]
+            )
         )
         return sources_list
 
@@ -869,8 +1012,12 @@ class LGDevice:
     def _sanitize_app_name_for_command(app_name: str) -> str:
         """Convert app name to command format (e.g., 'YouTube' -> 'YOUTUBE', 'Disney+' -> 'DISNEY_PLUS')."""
         # Remove special characters and replace spaces/dashes with underscores
-        sanitized = re.sub(r"[^\w\s-]", "", app_name)  # Remove special chars except spaces and dashes
-        sanitized = re.sub(r"[\s-]+", "_", sanitized)  # Replace spaces and dashes with underscore
+        sanitized = re.sub(
+            r"[^\w\s-]", "", app_name
+        )  # Remove special chars except spaces and dashes
+        sanitized = re.sub(
+            r"[\s-]+", "_", sanitized
+        )  # Replace spaces and dashes with underscore
         return sanitized.upper()
 
     @property
@@ -879,7 +1026,9 @@ class LGDevice:
         commands = []
         for source_name, source in self._sources.items():
             if source.get(SOURCE_IS_APP, False):
-                command_name = f"LAUNCH_{self._sanitize_app_name_for_command(source_name)}"
+                command_name = (
+                    f"LAUNCH_{self._sanitize_app_name_for_command(source_name)}"
+                )
                 commands.append(command_name)
         return sorted(commands)
 
@@ -889,7 +1038,9 @@ class LGDevice:
         mapping = {}
         for source_name, source in self._sources.items():
             if source.get(SOURCE_IS_APP, False):
-                command_name = f"LAUNCH_{self._sanitize_app_name_for_command(source_name)}"
+                command_name = (
+                    f"LAUNCH_{self._sanitize_app_name_for_command(source_name)}"
+                )
                 mapping[command_name] = source_name
         return mapping
 
@@ -900,7 +1051,11 @@ class LGDevice:
         Creates a 4-column grid with up to 24 apps (6 rows).
         Returns None if no apps are available.
         """
-        apps = [(name, source) for name, source in self._sources.items() if source.get(SOURCE_IS_APP, False)]
+        apps = [
+            (name, source)
+            for name, source in self._sources.items()
+            if source.get(SOURCE_IS_APP, False)
+        ]
 
         if not apps:
             return None
@@ -926,7 +1081,14 @@ class LGDevice:
                 }
             )
 
-        return UiPage(**{"page_id": "LG_apps", "name": "Apps", "grid": {"width": 4, "height": 6}, "items": items})
+        return UiPage(
+            **{
+                "page_id": "LG_apps",
+                "name": "Apps",
+                "grid": {"width": 4, "height": 6},
+                "items": items,
+            }
+        )
 
     @property
     def sound_output(self) -> str | None:
@@ -936,7 +1098,9 @@ class LGDevice:
         _sound_output = LG_SOUND_OUTPUTS.get(self._sound_output, None)
         if _sound_output is None:
             _LOG.error(
-                "[%s] Unknown sound output %s, report to developer", self._device_config.address, self._sound_output
+                "[%s] Unknown sound output %s, report to developer",
+                self._device_config.address,
+                self._sound_output,
             )
         return _sound_output
 
@@ -990,7 +1154,11 @@ class LGDevice:
     @property
     def model_version(self) -> str | None:
         """Current model version."""
-        if self._tv is None or self._tv.tv_info is None or self._tv.tv_info.system is None:
+        if (
+            self._tv is None
+            or self._tv.tv_info is None
+            or self._tv.tv_info.system is None
+        ):
             return None
         model = self._tv.tv_info.system.get("modelName", None)
         if model is None:
@@ -1003,7 +1171,9 @@ class LGDevice:
     async def power_toggle(self) -> ucapi.StatusCodes:
         """Toggle power."""
         lg_state = await self.check_connect()
-        _LOG.debug("[%s] Power toggle power state : %s", self._device_config.address, lg_state)
+        _LOG.debug(
+            "[%s] Power toggle power state : %s", self._device_config.address, lg_state
+        )
         if lg_state == LGState.ON:
             await self.power_off()
         else:
@@ -1034,7 +1204,10 @@ class LGDevice:
 
         if len(messages) > 0:
             broadcast = "<broadcast>"
-            if self._device_config.broadcast is not None and self._device_config.broadcast != "255.255.255.255":
+            if (
+                self._device_config.broadcast is not None
+                and self._device_config.broadcast != "255.255.255.255"
+            ):
                 broadcast = self._device_config.broadcast
             socket_instance = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             socket_instance.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -1059,19 +1232,32 @@ class LGDevice:
                 state_value = state.get("state", None)
                 if state_value is None or state_value == "Unknown":
                     if self._tv.tv_state.current_app_id in [None, ""]:
-                        _LOG.debug("[%s] TV is already off [%s]", self._device_config.address, state)
+                        _LOG.debug(
+                            "[%s] TV is already off [%s]",
+                            self._device_config.address,
+                            state,
+                        )
                         lg_state = LGState.OFF
                 elif state_value in ["Power Off", "Suspend", "Active Standby"]:
-                    _LOG.debug("[%s] TV is in standby [%s]", self._device_config.address, state)
+                    _LOG.debug(
+                        "[%s] TV is in standby [%s]", self._device_config.address, state
+                    )
                     lg_state = LGState.STANDBY
         except Exception as ex:
-            _LOG.debug("[%s] Could not get TV state, assuming off %s", self._device_config.address, ex)
+            _LOG.debug(
+                "[%s] Could not get TV state, assuming off %s",
+                self._device_config.address,
+                ex,
+            )
             lg_state = LGState.OFF
         if lg_state == LGState.OFF:
-            _LOG.debug("[%s] TV is not connected, calling connect", self._device_config.address)
+            _LOG.debug(
+                "[%s] TV is not connected, calling connect", self._device_config.address
+            )
             if not self._connect_task:
                 _LOG.warning(
-                    "[%s] Unable to update, LG TV probably off, running connect task", self._device_config.address
+                    "[%s] Unable to update, LG TV probably off, running connect task",
+                    self._device_config.address,
                 )
                 self._ensure_connect_task()
         else:
@@ -1096,7 +1282,9 @@ class LGDevice:
             )
             self.wakeonlan()
             # Send another WakeOnLan request after a delay in case the remote is waking up otherwise it won't be sent
-            self._track_task(asyncio.create_task(self._deferred_wakeonlan(ERROR_OS_WAIT)))
+            self._track_task(
+                asyncio.create_task(self._deferred_wakeonlan(ERROR_OS_WAIT))
+            )
             self._retry_wakeonlan = True
             # This method power_on seems to no longer be supported
             self._track_task(asyncio.create_task(self.check_connect()))
@@ -1111,7 +1299,9 @@ class LGDevice:
     async def power_off_deferred(self):
         """Power off deferred."""
         if not await self._wait_until_connected(timeout=5):
-            raise asyncio.TimeoutError("TV not connected in time for deferred power off")
+            raise asyncio.TimeoutError(
+                "TV not connected in time for deferred power off"
+            )
         await self._tv.command("request", ep.POWER_OFF)
         self._attr_state = States.OFF
 
@@ -1122,7 +1312,11 @@ class LGDevice:
         self._retry_wakeonlan = False
         lg_state = await self.check_connect()
         if lg_state == LGState.ON:
-            _LOG.debug("[%s] TV is ON, powering off [%s]", self._device_config.address, lg_state)
+            _LOG.debug(
+                "[%s] TV is ON, powering off [%s]",
+                self._device_config.address,
+                lg_state,
+            )
             await self._tv.command("request", ep.POWER_OFF)
             self._attr_state = States.OFF
         else:
@@ -1139,7 +1333,9 @@ class LGDevice:
         """Set volume level, range 0..100."""
         if volume is None:
             return ucapi.StatusCodes.BAD_REQUEST
-        _LOG.debug("[%s] LG TV setting volume to %s", self._device_config.address, volume)
+        _LOG.debug(
+            "[%s] LG TV setting volume to %s", self._device_config.address, volume
+        )
         await self._tv.set_volume(int(round(volume)))
         self.events.emit(Events.UPDATE, self.id, {MediaAttr.VOLUME: volume})
         return ucapi.StatusCodes.OK
@@ -1180,7 +1376,10 @@ class LGDevice:
     @retry()
     async def play_pause(self) -> ucapi.StatusCodes:
         """Send toggle-play-pause command to LG TV."""
-        if self._paused or (self.media_state and self.media_state.get(LG_PLAYSTATE, "playing") == "paused"):
+        if self._paused or (
+            self.media_state
+            and self.media_state.get(LG_PLAYSTATE, "playing") == "paused"
+        ):
             await self.media_play()
         else:
             await self.media_pause()
@@ -1217,13 +1416,18 @@ class LGDevice:
         sources: list[dict] = list(self._tv.tv_state.inputs.values())
         current_source = self.source
         if not sources or len(sources) == 0:
-            _LOG.error("[%s] LG TV next input command : sources list is not feed yet", self._device_config.address)
+            _LOG.error(
+                "[%s] LG TV next input command : sources list is not feed yet",
+                self._device_config.address,
+            )
             return ucapi.StatusCodes.SERVICE_UNAVAILABLE
         if not current_source:
             current_source = sources[0]["id"]
         else:
             try:
-                source = [source for source in sources if source["id"] == current_source]
+                source = [
+                    source for source in sources if source["id"] == current_source
+                ]
                 if len(source) > 0:
                     source = source[0]
                 else:
@@ -1250,19 +1454,37 @@ class LGDevice:
             if not self._sources:
                 raise WebOsTvCommandError
             if (source_dict := self._sources.get(source)) is None:
-                _LOG.warning("[%s] Source %s not found for %s", self._device_config.address, source, self._sources)
+                _LOG.warning(
+                    "[%s] Source %s not found for %s",
+                    self._device_config.address,
+                    source,
+                    self._sources,
+                )
                 return ucapi.StatusCodes.BAD_REQUEST
             if source_dict.get("title"):
                 await self._tv.launch_app(source_dict["id"])
             elif source_dict.get("label"):
                 await self._tv.set_input(source_dict["id"])
-            _LOG.debug("[%s] LG TV set input: %s succeeded", self._device_config.address, source)
+            _LOG.debug(
+                "[%s] LG TV set input: %s succeeded",
+                self._device_config.address,
+                source,
+            )
             return ucapi.StatusCodes.OK
         except WEBOSTV_EXCEPTIONS as ex:
-            _LOG.error("[%s] LG TV error select_source %s", self._device_config.address, ex)
+            _LOG.error(
+                "[%s] LG TV error select_source %s", self._device_config.address, ex
+            )
+            raise ex
         # pylint: disable = W0718
         except Exception as ex:
-            _LOG.error("[%s] LG TV unknown error select_source %s", self._device_config.address, ex)
+            if isinstance(ex, WEBOSTV_EXCEPTIONS):
+                raise ex
+            _LOG.error(
+                "[%s] LG TV unknown error select_source %s",
+                self._device_config.address,
+                ex,
+            )
         return ucapi.StatusCodes.BAD_REQUEST
 
     async def launch_app_by_name(self, app_name: str) -> ucapi.StatusCodes:
@@ -1275,13 +1497,19 @@ class LGDevice:
         if not app_name:
             return ucapi.StatusCodes.BAD_REQUEST
 
-        _LOG.debug("[%s] Launching app by name: %s", self._device_config.address, app_name)
+        _LOG.debug(
+            "[%s] Launching app by name: %s", self._device_config.address, app_name
+        )
 
         # Try exact match first (case-insensitive)
         for source_name, source in self._sources.items():
             if source.get(SOURCE_IS_APP, False):
                 if source_name.lower() == app_name.lower():
-                    _LOG.debug("[%s] Found exact app match: %s", self._device_config.address, source_name)
+                    _LOG.debug(
+                        "[%s] Found exact app match: %s",
+                        self._device_config.address,
+                        source_name,
+                    )
                     return await self.select_source(source_name)
 
         # Try sanitized match (convert command format back to potential app name)
@@ -1291,14 +1519,22 @@ class LGDevice:
             if source.get(SOURCE_IS_APP, False):
                 sanitized_source = self._sanitize_app_name_for_command(source_name)
                 if sanitized_source == sanitized_search.upper():
-                    _LOG.debug("[%s] Found sanitized app match: %s", self._device_config.address, source_name)
+                    _LOG.debug(
+                        "[%s] Found sanitized app match: %s",
+                        self._device_config.address,
+                        source_name,
+                    )
                     return await self.select_source(source_name)
 
         # Try partial match as fallback
         for source_name, source in self._sources.items():
             if source.get(SOURCE_IS_APP, False):
                 if app_name.lower() in source_name.lower():
-                    _LOG.debug("[%s] Found partial app match: %s", self._device_config.address, source_name)
+                    _LOG.debug(
+                        "[%s] Found partial app match: %s",
+                        self._device_config.address,
+                        source_name,
+                    )
                     return await self.select_source(source_name)
 
         _LOG.warning("[%s] App not found: %s", self._device_config.address, app_name)
@@ -1309,11 +1545,18 @@ class LGDevice:
         """Set sound output."""
         if mode is None:
             return ucapi.StatusCodes.BAD_REQUEST
-        _LOG.debug("[%s] LG TV setting sound output to %s", self._device_config.address, mode)
+        _LOG.debug(
+            "[%s] LG TV setting sound output to %s", self._device_config.address, mode
+        )
         inv_map = {v: k for k, v in LG_SOUND_OUTPUTS.items()}
         sound_output = inv_map.get(mode)
         if sound_output is None:
-            _LOG.debug("[%s] LG TV invalid sound output %s from list (%s)", self._device_config.address, mode, inv_map)
+            _LOG.debug(
+                "[%s] LG TV invalid sound output %s from list (%s)",
+                self._device_config.address,
+                mode,
+                inv_map,
+            )
             return ucapi.StatusCodes.BAD_REQUEST
         await self._tv.change_sound_output(sound_output)
         return ucapi.StatusCodes.OK
@@ -1370,7 +1613,12 @@ class LGDevice:
             if len(arguments) == 2:
                 params["settings"] = ast.literal_eval(arguments[1])
             endpoint = LUNA_SYSTEM_ENDPOINT
-            _LOG.debug("[%s] LG TV luna command %s %s", self._device_config.address, endpoint, params)
+            _LOG.debug(
+                "[%s] LG TV luna command %s %s",
+                self._device_config.address,
+                endpoint,
+                params,
+            )
             await self.call_luna_command(endpoint, params)
         elif arguments[0] == PICTURE_COMMAND and len(arguments) == 2:
             # picture backlight +10
@@ -1388,7 +1636,13 @@ class LGDevice:
             except ValueError as ex:
                 _LOG.error("[%s] Wrong picture setting value %s", ex, value)
                 return ucapi.StatusCodes.BAD_REQUEST
-            _LOG.debug("[%s] LG TV set picture setting %s %s %s", self._device_config.address, option, value, relative)
+            _LOG.debug(
+                "[%s] LG TV set picture setting %s %s %s",
+                self._device_config.address,
+                option,
+                value,
+                relative,
+            )
             await self.set_picture_setting(option, value, relative)
         elif arguments[0] == CHANNEL_COMMAND and len(arguments) == 2:
             # channel '123'
@@ -1400,7 +1654,12 @@ class LGDevice:
             params = {}
             if len(arguments) == 2:
                 params = ast.literal_eval(arguments[1])
-            _LOG.debug("[%s] LG TV custom command %s %s", self._device_config.address, endpoint, params)
+            _LOG.debug(
+                "[%s] LG TV custom command %s %s",
+                self._device_config.address,
+                endpoint,
+                params,
+            )
             await self._tv.request(endpoint, params)
         return ucapi.StatusCodes.OK
 
@@ -1423,7 +1682,12 @@ class LGDevice:
         :param params : Dictionnary of optional parameters
         :returns: Results dictionary
         """
-        _LOG.debug("[%s] LG TV custom command with alerts %s %s", self._device_config.address, endpoint, params)
+        _LOG.debug(
+            "[%s] LG TV custom command with alerts %s %s",
+            self._device_config.address,
+            endpoint,
+            params,
+        )
         if not endpoint.startswith("luna://"):
             endpoint = f"luna://{endpoint}"
 
@@ -1467,7 +1731,9 @@ class LGDevice:
         params = {"category": category, "settings": settings}
         if current_app is not None:
             params["current_app"] = current_app
-        return await self._tv.request(LG_ADDITIONAL_ENDPOINTS.get("SET_SYSTEM_SETTINGS"), params)
+        return await self._tv.request(
+            LG_ADDITIONAL_ENDPOINTS.get("SET_SYSTEM_SETTINGS"), params
+        )
 
     @retry()
     async def set_picture_setting(self, option: str, value: int, relative=False):
@@ -1484,7 +1750,8 @@ class LGDevice:
             current_value: int = int(result["settings"][option])
             value = min(max(current_value + value, 0), 100)
         return await self.call_luna_command(
-            ep.LUNA_SET_SYSTEM_SETTINGS, {"category": "picture", "settings": {option: value}}
+            ep.LUNA_SET_SYSTEM_SETTINGS,
+            {"category": "picture", "settings": {option: value}},
         )
 
     @retry()
@@ -1505,7 +1772,8 @@ class LGDevice:
 
         for channel_entry in self._tv.tv_state.channels:
             if channel == channel_entry["channelNumber"] or (
-                channel_number != -1 and channel_number == channel_entry["channelNumber"]
+                channel_number != -1
+                and channel_number == channel_entry["channelNumber"]
             ):
                 perfect_match_channel_id = channel_entry["channelId"]
                 break
@@ -1519,12 +1787,16 @@ class LGDevice:
 
         if perfect_match_channel_id is not None:
             _LOG.debug(
-                "[%s] Switching to channel %s with perfect match", self._device_config.address, perfect_match_channel_id
+                "[%s] Switching to channel %s with perfect match",
+                self._device_config.address,
+                perfect_match_channel_id,
             )
             await self._tv.set_channel(perfect_match_channel_id)
         elif partial_match_channel_id is not None:
             _LOG.debug(
-                "[%s] Switching to channel %s with partial match", self._device_config.address, partial_match_channel_id
+                "[%s] Switching to channel %s with partial match",
+                self._device_config.address,
+                partial_match_channel_id,
             )
             await self._tv.set_channel(partial_match_channel_id)
         else:
@@ -1543,20 +1815,40 @@ class LGDevice:
             picture_mode = await self.get_picture_mode()
             if picture_mode != self.picture_mode:
                 self._picture_mode = picture_mode
-                update = {LGSelects.SELECT_PICTURE_MODE: {SelectAttributes.CURRENT_OPTION: picture_mode}}
+                update = {
+                    LGSelects.SELECT_PICTURE_MODE: {
+                        SelectAttributes.CURRENT_OPTION: picture_mode
+                    }
+                }
                 if picture_mode not in self._picture_modes.values():
                     _LOG.debug(
-                        "[%s] Adding missing picture mode in the list : %s", self._device_config.address, picture_mode
+                        "[%s] Adding missing picture mode in the list : %s",
+                        self._device_config.address,
+                        picture_mode,
                     )
-                    self._picture_modes[re.sub(r"([A-Z])", r" \1", picture_mode).strip().title()] = picture_mode
-                    update[LGSelects.SELECT_PICTURE_MODE][SelectAttributes.OPTIONS] = self.picture_modes
+                    self._picture_modes[
+                        re.sub(r"([A-Z])", r" \1", picture_mode).strip().title()
+                    ] = picture_mode
+                    update[LGSelects.SELECT_PICTURE_MODE][
+                        SelectAttributes.OPTIONS
+                    ] = self.picture_modes
                 self.events.emit(Events.UPDATE, self.id, update)
         # pylint: disable = W0718
         except Exception as ex:
-            _LOG.exception("[%s] Failed to retrieve picture mode %s", self._device_config.address, ex)
+            _LOG.exception(
+                "[%s] Failed to retrieve picture mode %s",
+                self._device_config.address,
+                ex,
+            )
             if new_mode:
                 self.events.emit(
-                    Events.UPDATE, self.id, {LGSelects.SELECT_PICTURE_MODE: {SelectAttributes.CURRENT_OPTION: new_mode}}
+                    Events.UPDATE,
+                    self.id,
+                    {
+                        LGSelects.SELECT_PICTURE_MODE: {
+                            SelectAttributes.CURRENT_OPTION: new_mode
+                        }
+                    },
                 )
 
     async def get_picture_mode(self) -> str:
@@ -1570,12 +1862,18 @@ class LGDevice:
         mode = self._picture_modes.get(picture_mode, None)
         if mode is None:
             return ucapi.StatusCodes.BAD_REQUEST
-        results: dict[str, Any] | None = await self.set_system_settings("picture", {"pictureMode": mode})
+        results: dict[str, Any] | None = await self.set_system_settings(
+            "picture", {"pictureMode": mode}
+        )
         if results and results.get("returnValue", None) is True:
-            self._track_task(asyncio.create_task(self.update_picture_mode(picture_mode)))
+            self._track_task(
+                asyncio.create_task(self.update_picture_mode(picture_mode))
+            )
             return ucapi.StatusCodes.OK
         return ucapi.StatusCodes.BAD_REQUEST
 
     async def get_configs(self) -> dict[str, Any] | None:
         """Extract device configuration."""
-        return await self._tv.request(ep.GET_CONFIGS, payload={"configNames": ["tv.model.*"]})
+        return await self._tv.request(
+            ep.GET_CONFIGS, payload={"configNames": ["tv.model.*"]}
+        )
