@@ -690,10 +690,15 @@ class RemoteInterface(tk.Tk):
         command.grid(row=self._row, column=0)
         self._command_on = ttk.Button(self._left_frame, text="On", command=lambda: self.media_player_command("on"))
         self._command_on.grid(row=self._row, column=1)
-        self._input_source = ttk.Combobox(self._left_frame, state="readonly", justify="left")
+        self._input_source = ttk.Combobox(
+            self._left_frame, state="readonly", justify="left"
+        )
         self._input_source.bind(
             "<<ComboboxSelected>>",
             lambda event: self.select_input_source(event),
+        )
+        self._input_source.bind(
+            "<Return>", lambda event, source=self._input_source: self.select_input_source_manual(source)
         )
         self._input_source.grid(row=self._row, column=2)
         self._row += 1
@@ -768,6 +773,9 @@ class RemoteInterface(tk.Tk):
 
     def select_input_source(self, event: tk.Event):
         self.media_player_command("select_source", {"source": event.widget.get()})
+
+    def select_input_source_manual(self, widget: tk.Widget):
+        self.media_player_command("select_source", {"source": widget.get()})
 
     def select_sound_mode(self, event: tk.Event):
         self.media_player_command("select_sound_mode", {"mode": event.widget.get()})
