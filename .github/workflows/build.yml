@@ -15,12 +15,11 @@ env:
   INTG_NAME: lgtv
   HASH_FILENAME: uc-intg-lgtv.hash
   # Python version to use in the builder image. See https://hub.docker.com/r/unfoldedcircle/r2-pyinstaller for possible versions.
-  PYTHON_VER: 3.11.13-0.4.0
+  PYTHON_VER: 3.11.13-0.5.0
 
 jobs:
   build:
-    # using ubuntu-24.04: Package 'qemu' has no installation candidate
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -71,7 +70,7 @@ jobs:
         run: |
           cp -r dist/driver/* artifacts/bin
           cp driver.json artifacts/
-          cp lg.png artifacts/
+          cp webOS.png artifacts/
           echo "ARTIFACT_NAME=uc-intg-${{ env.INTG_NAME }}-${{ env.VERSION }}-aarch64" >> $GITHUB_ENV
           
       - name: Create upload artifact

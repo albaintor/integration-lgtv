@@ -1,11 +1,11 @@
 {
   "driver_id": "lgwebos_driver",
-  "version": "1.14.8",
+  "version": "1.14.9",
   "min_core_api": "0.20.0",
   "name": {
     "en": "LG WebOS"
   },
-  "icon":"custom:lg.png",
+  "icon":"custom:webOS.png",
   "description": {
     "en": "Control your LG TVs with Remote Two/3.",
     "de": "Steuere LG TVs mit Remote Two/3.",
@@ -43,5 +43,5 @@
       }
     ]
   },
-  "release_date": "2026-04-10"
+  "release_date": "2026-04-23"
 }
