@@ -33,7 +33,7 @@ from typing import (
 import aiohttp
 import aiowebostv.endpoints as ep
 import ucapi
-from aiohttp import ClientOSError
+from aiohttp import ClientConnectionResetError, ClientOSError
 from aiowebostv import WebOsClient, WebOsTvCommandError, WebOsTvState
 from aiowebostv.webos_client import MAIN_WS_MAX_MSG_SIZE, WS_PORT, WSS_PORT
 from pyee.asyncio import AsyncIOEventEmitter
@@ -317,7 +317,22 @@ class LGDevice:
     def _track_task(self, task: Task[Any]) -> Task[Any]:
         """Track background tasks to prevent lost exceptions and allow cancellation."""
         self._background_tasks.add(task)
-        task.add_done_callback(self._background_tasks.discard)
+
+        def _finalize_task(done_task: Task[Any]) -> None:
+            self._background_tasks.discard(done_task)
+            if done_task.cancelled():
+                return
+            try:
+                if exception := done_task.exception():
+                    _LOG.error(
+                        "[%s] Background task failed: %s",
+                        self._device_config.address,
+                        exception,
+                    )
+            except CancelledError:
+                return
+
+        task.add_done_callback(_finalize_task)
         return task
 
     def _ensure_connect_task(self) -> Task[None]:
@@ -742,13 +757,20 @@ class LGDevice:
                 try:
                     result = await tv.connect()
                 except WEBOSTV_EXCEPTIONS as ex:
-                    if isinstance(ex, ClientOSError):
+                    if isinstance(ex, (ClientConnectionResetError, ClientOSError)):
                         _LOG.warning(
-                            "[%s] OS error, waiting %ss and retry connection",
+                            "[%s] Connection error, waiting %ss and retry connection",
                             self._device_config.address,
                             ERROR_OS_WAIT,
                         )
+                        try:
+                            await tv.disconnect()
+                        except CancelledError:
+                            raise
+                        except Exception:  # pylint: disable=W0718
+                            pass
                         await asyncio.sleep(ERROR_OS_WAIT)
+                        tv = WebOsClient(host=self._device_config.address, client_key=self._device_config.key)
                         result = await tv.connect()
                     else:
                         raise

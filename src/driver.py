@@ -37,6 +37,23 @@ api = ucapi.IntegrationAPI(_LOOP)
 _configured_devices: dict[str, lg.LGDevice] = {}
 
 
+def _create_task(awaitable: Any, description: str) -> asyncio.Task[Any]:
+    """Create a background task and retrieve/log its exception on completion."""
+    task = _LOOP.create_task(awaitable)
+
+    def _finalize_task(done_task: asyncio.Task[Any]) -> None:
+        if done_task.cancelled():
+            return
+        try:
+            if exception := done_task.exception():
+                _LOG.error("%s failed: %s", description, exception)
+        except asyncio.CancelledError:
+            return
+
+    task.add_done_callback(_finalize_task)
+    return task
+
+
 @api.listens_to(ucapi.Events.CONNECT)
 async def on_connect_cmd() -> None:
     """Connect all configured TVs when the Remote Two sends the connect command."""
@@ -47,7 +64,7 @@ async def on_connect_cmd() -> None:
         # TODO ? what is the connect event for (against exit from standby)
         # await _LOOP.create_task(device.power_on())
         try:
-            _LOOP.create_task(device.connect())
+            _create_task(device.connect(), f"Connect task for {device.id}")
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.debug(
                 "Could not connect to device, probably because it is starting with magic packet %s",
@@ -86,6 +103,8 @@ async def connect_device(device: lg.LGDevice):
         for entity_entry in api.configured_entities.get_all():
             entity_id = entity_entry.get("entity_id", "")
             entity: LGEntity | None = api.configured_entities.get(entity_id)
+            if entity is None:
+                continue
             device_id = entity.deviceid
             if device_id != device.id:
                 continue
@@ -135,6 +154,9 @@ async def on_subscribe_entities(entity_ids: list[str]) -> None:
     _LOG.debug("Subscribe entities event: %s", entity_ids)
     for entity_id in entity_ids:
         entity: LGEntity | None = api.configured_entities.get(entity_id)
+        if entity is None:
+            _LOG.warning("Subscribed entity %s is not configured", entity_id)
+            continue
         device_id = entity.deviceid
         if device_id in _configured_devices:
             device = _configured_devices[device_id]
@@ -172,6 +194,8 @@ async def on_unsubscribe_entities(entity_ids: list[str]) -> None:
     devices_to_remove = set()
     for entity_id in entity_ids:
         entity: LGEntity | None = api.configured_entities.get(entity_id)
+        if entity is None:
+            continue
         device_id = entity.deviceid
         if device_id is None:
             continue
@@ -183,6 +207,8 @@ async def on_unsubscribe_entities(entity_ids: list[str]) -> None:
         if entity_id in entity_ids:
             continue
         entity: LGEntity | None = api.configured_entities.get(entity_id)
+        if entity is None:
+            continue
         device_id = entity.deviceid
         if device_id is None:
             continue
@@ -307,6 +333,9 @@ async def on_device_update(device_id: str, update: dict[str, Any] | None) -> Non
         if device_id in _configured_devices:
             device = _configured_devices[device_id]
             device_config = config.devices.get(device_id)
+            if device_config is None:
+                _LOG.warning("LG TV %s has no persisted device configuration", device_id)
+                return
 
             # Re-register and maintain applist if wanted by user configuration
             if device_config.update_apps_list:
@@ -390,12 +419,12 @@ def _configure_new_device(device_config: config.LGConfigDevice, connect: bool = 
     if device_config.id in _configured_devices:
         _LOG.debug("Existing config device updated, update the running device %s", device_config)
         device = _configured_devices[device_config.id]
-        asyncio.create_task(device.disconnect())
+        _create_task(device.disconnect(), f"Disconnect task for {device.id}")
         device.update_config(device_config)
     else:
         device = lg.LGDevice(device_config, loop=_LOOP)
 
-        _LOOP.create_task(on_device_connected(device.id))
+        _create_task(on_device_connected(device.id), f"Initial device connected task for {device.id}")
         # device.events.on(lg.Events.CONNECTED, on_device_connected)
         # device.events.on(lg.Events.DISCONNECTED, on_device_disconnected)
         device.events.on(lg.Events.ERROR, on_device_connection_error)
@@ -408,7 +437,7 @@ def _configure_new_device(device_config: config.LGConfigDevice, connect: bool = 
     if connect:
         # start background connection task
         try:
-            _LOOP.create_task(device.connect())
+            _create_task(device.connect(), f"Connect task for {device.id}")
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.debug(
                 "Could not connect to device, probably because it is starting with magic packet %s",
@@ -469,7 +498,7 @@ def on_device_removed(device: config.LGConfigDevice | None) -> None:
     if device is None:
         _LOG.debug("Configuration cleared, disconnecting & removing all configured LG TV instances")
         for configured in _configured_devices.values():
-            _LOOP.create_task(_async_remove(configured))
+            _create_task(_async_remove(configured), f"Remove task for {configured.id}")
         _configured_devices.clear()
         api.configured_entities.clear()
         api.available_entities.clear()
@@ -477,7 +506,7 @@ def on_device_removed(device: config.LGConfigDevice | None) -> None:
         if device.id in _configured_devices:
             _LOG.debug("Disconnecting from removed LG TV %s", device.id)
             configured = _configured_devices.pop(device.id)
-            _LOOP.create_task(_async_remove(configured))
+            _create_task(_async_remove(configured), f"Remove task for {configured.id}")
             for entity in _get_entities(configured.id):
                 api.configured_entities.remove(entity.id)
                 api.available_entities.remove(entity.id)
@@ -510,7 +539,7 @@ async def main():
     for device_config in config.devices.all():
         _configure_new_device(device_config, connect=False)
 
-    _LOOP.create_task(config.devices.handle_address_change())
+    _create_task(config.devices.handle_address_change(), "Address change handler task")
 
     await api.init("driver.json", setup_flow.SetupFlow(api).driver_setup_handler)
 

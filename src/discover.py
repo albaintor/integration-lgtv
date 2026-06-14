@@ -202,7 +202,7 @@ def evaluate_scpd_xml(url: str, response: Response) -> Optional[Dict]:
 
         _LOGGER.debug("Device %s has manufacturer %s", url, device["manufacturer"])
 
-        if not device["manufacturer"] in SUPPORTED_MANUFACTURERS:
+        if device["manufacturer"] not in SUPPORTED_MANUFACTURERS:
             return None
 
         if root.find(SCPD_DEVICE).find(SCPD_DEVICETYPE).text in SUPPORTED_DEVICETYPES:
