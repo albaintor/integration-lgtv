@@ -245,8 +245,8 @@ async def patched_create_main_ws(self):
     Try using ws:// and fallback to wss:// if the TV rejects the connection.
     """
     # pylint: disable=W0212
+    uri = f"ws://{self.host}:{WS_PORT}"
     try:
-        uri = f"ws://{self.host}:{WS_PORT}"
         # _LOG.debug("Connecting to %s", uri)
         return await self._ws_connect(uri, MAIN_WS_MAX_MSG_SIZE)
     # ClientConnectionError is raised when firmware reject WS_PORT
@@ -255,7 +255,8 @@ async def patched_create_main_ws(self):
         aiohttp.ClientConnectionError,
         aiohttp.WSServerHandshakeError,
         TimeoutError,
-    ):
+    ) as ex:
+        _LOG.debug("Failed connection to %s, switching to wss %s", uri, ex)
         uri = f"wss://{self.host}:{WSS_PORT}"
         # _LOG.debug("Connecting to %s", uri)
         return await self._ws_connect(uri, MAIN_WS_MAX_MSG_SIZE)
@@ -408,6 +409,24 @@ class LGDevice:
         self._background_tasks.clear()
         if current_task is not None:
             self._background_tasks.add(current_task)
+
+    async def _cleanup_tv_client(self, tv: WebOsClient | None, reason: str) -> None:
+        """Best-effort cleanup for a webOS client instance."""
+        if tv is None:
+            return
+        try:
+            _LOG.debug("[%s] Cleanup TV connection after %s", self._device_config.address, reason)
+            tv.clear_state_update_callbacks()
+            await tv.disconnect()
+        except CancelledError:
+            raise
+        except Exception as ex:  # pylint: disable=W0718
+            _LOG.debug(
+                "[%s] Ignoring error while cleaning TV connection after %s: %s",
+                self._device_config.address,
+                reason,
+                ex,
+            )
 
     async def _wait_until_connected(self, timeout: float = 5.0) -> bool:
         """Wait until the TV websocket is ready."""
@@ -753,9 +772,13 @@ class LGDevice:
                 self._connect_lock_time = time.monotonic()
                 _LOG.debug("[%s] Connect", self._device_config.address)
                 self._connecting = True
+                old_tv = self._tv
                 tv = WebOsClient(host=self._device_config.address, client_key=self._device_config.key)
                 try:
                     result = await tv.connect()
+                except CancelledError:
+                    await self._cleanup_tv_client(tv, "cancelled connection")
+                    raise
                 except WEBOSTV_EXCEPTIONS as ex:
                     if isinstance(ex, (ClientConnectionResetError, ClientOSError)):
                         _LOG.warning(
@@ -763,16 +786,19 @@ class LGDevice:
                             self._device_config.address,
                             ERROR_OS_WAIT,
                         )
-                        try:
-                            await tv.disconnect()
-                        except CancelledError:
-                            raise
-                        except Exception:  # pylint: disable=W0718
-                            pass
+                        await self._cleanup_tv_client(tv, "connection retry")
                         await asyncio.sleep(ERROR_OS_WAIT)
                         tv = WebOsClient(host=self._device_config.address, client_key=self._device_config.key)
-                        result = await tv.connect()
+                        try:
+                            result = await tv.connect()
+                        except CancelledError:
+                            await self._cleanup_tv_client(tv, "cancelled retry connection")
+                            raise
+                        except WEBOSTV_EXCEPTIONS:
+                            await self._cleanup_tv_client(tv, "failed retry connection")
+                            raise
                     else:
+                        await self._cleanup_tv_client(tv, "failed connection")
                         raise
 
                 if not result or tv.connection is None:
@@ -780,16 +806,31 @@ class LGDevice:
                         "[%s] Connection process done but the connection is not available",
                         self._device_config.address,
                     )
+                    await self._cleanup_tv_client(tv, "unavailable connection")
                     raise WebOsTvCommandError("Connection process done but the connection is not available")
 
                 _LOG.debug("[%s] Connection succeeded", self._device_config.address)
                 self._tv = tv
-                await self._update_states(None)
-                if not self._device_config.mac_address:
-                    await self._update_system()
-                await self.register_websocket_events()
-                self._available = True
-                await self._run_buffered_commands()
+                try:
+                    await self._update_states(None)
+                    if not self._device_config.mac_address:
+                        await self._update_system()
+                    await self.register_websocket_events()
+                    self._available = True
+                    await self._run_buffered_commands()
+                except CancelledError:
+                    self._tv = old_tv
+                    await self._cleanup_tv_client(tv, "cancelled connection setup")
+                    raise
+                except Exception:
+                    self._tv = old_tv
+                    await self._cleanup_tv_client(tv, "failed connection setup")
+                    raise
+                if old_tv is not tv:
+                    await self._cleanup_tv_client(old_tv, "connection replacement")
+        except CancelledError:
+            self._available = False
+            raise
         except WEBOSTV_EXCEPTIONS as ex:
             self._available = False
             _LOG.error(
@@ -840,13 +881,16 @@ class LGDevice:
                 self._connect_task.cancel()
                 await asyncio.gather(self._connect_task, return_exceptions=True)
             await self._cancel_background_tasks()
-            self._tv.clear_state_update_callbacks()
-            await self._tv.disconnect()
+            await self._cleanup_tv_client(self._tv, "disconnect")
+        except CancelledError:
+            self._available = False
+            raise
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("[%s] Unable to update: %s", self._device_config.address, ex)
             self._available = False
         finally:
             self._connect_task = None
+            self._available = False
             self.reset()
 
     @property
