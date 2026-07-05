@@ -24,6 +24,7 @@ import sensor
 import setup_flow
 from config import LGEntity
 from const import WEBOSTV_EXCEPTIONS, filter_attributes
+from LGWebOS_patch import apply_patch
 
 _LOG = logging.getLogger("driver")  # avoid having __main__ in log messages
 if sys.platform == "win32":
@@ -533,6 +534,7 @@ async def main():
     logging.getLogger("config").setLevel(level)
     logging.getLogger("setup_flow").setLevel(level)
     logging.getLogger("aiowebostv").setLevel(level)
+    apply_patch()
 
     config.devices = config.Devices(api.config_dir_path, on_device_added, on_device_removed, on_device_updated)
     update_global_settings()
