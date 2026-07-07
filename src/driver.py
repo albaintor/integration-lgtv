@@ -67,7 +67,8 @@ async def on_connect_cmd() -> None:
             _create_task(device.connect(), f"Connect task for {device.id}")
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.debug(
-                "Could not connect to device, probably because it is starting with magic packet %s",
+                "[%s] Could not connect to device, probably because it is starting with magic packet %s",
+                device.host,
                 ex,
             )
     await api.set_device_state(ucapi.DeviceStates.CONNECTED)
@@ -96,9 +97,9 @@ async def on_enter_standby() -> None:
 async def connect_device(device: lg.LGDevice):
     """Connect device and send state."""
     try:
-        _LOG.debug("Connecting device %s...", device.id)
+        _LOG.debug("[%s] Connecting device %s...", device.host, device.id)
         await device.connect()
-        _LOG.debug("Device %s connected, sending attributes for subscribed entities", device.id)
+        _LOG.debug("[%s] Device %s connected, sending attributes for subscribed entities", device.host, device.id)
         state = device.state
         for entity_entry in api.configured_entities.get_all():
             entity_id = entity_entry.get("entity_id", "")
@@ -109,7 +110,7 @@ async def connect_device(device: lg.LGDevice):
             if device_id != device.id:
                 continue
             if isinstance(entity, media_player.LGTVMediaPlayer):
-                _LOG.debug("Sending attributes %s : %s", entity_id, device.attributes)
+                _LOG.debug("[%s] Sending attributes %s : %s", device.host, entity_id, device.attributes)
                 api.configured_entities.update_attributes(
                     entity_id, filter_attributes(device.attributes, ucapi.media_player.Attributes)
                 )
@@ -123,7 +124,7 @@ async def connect_device(device: lg.LGDevice):
                 api.configured_entities.update_attributes(entity_id, entity.update_attributes())
 
     except RuntimeError as ex:
-        _LOG.error("Error while reconnecting to Kodi %s", ex)
+        _LOG.error("[%s] Error while reconnecting to LG device %s", device.host, ex)
 
 
 @api.listens_to(ucapi.Events.EXIT_STANDBY)
@@ -140,7 +141,7 @@ async def on_exit_standby() -> None:
             # await _LOOP.create_task(configured.connect())
             await _LOOP.create_task(connect_device(configured))
         except WEBOSTV_EXCEPTIONS as ex:
-            _LOG.error("Error while reconnecting to the LG TV %s", ex)
+            _LOG.error("[%s] Error while reconnecting to the LG TV %s", configured.host, ex)
         # _LOOP.create_task(configured.connect())
 
 
@@ -177,14 +178,14 @@ async def on_subscribe_entities(entity_ids: list[str]) -> None:
                 if not device.available:
                     await _LOOP.create_task(device.connect())
             except WEBOSTV_EXCEPTIONS as ex:
-                _LOG.error("Error while reconnecting to the LG TV %s", ex)
+                _LOG.error("[%s] Error while reconnecting to the LG TV %s", device.host, ex)
             continue
 
         device = config.devices.get(device_id)
         if device:
             _configure_new_device(device, connect=True)
         else:
-            _LOG.error("Failed to subscribe entity %s: no LG TV configuration found", entity_id)
+            _LOG.error("[%s] Failed to subscribe entity %s: no LG TV configuration found", device_id, entity_id)
 
 
 @api.listens_to(ucapi.Events.UNSUBSCRIBE_ENTITIES)
@@ -300,7 +301,8 @@ async def handle_device_address_change(device_id: str, address: str) -> None:
     device = config.devices.get(device_id)
     if device and device.address != address:
         _LOG.info(
-            "Updating IP address of configured LG TV %s: %s -> %s",
+            "[%s] Updating IP address of configured LG TV %s: %s -> %s",
+            address,
             device_id,
             device.address,
             address,
@@ -316,13 +318,13 @@ async def on_device_update(device_id: str, update: dict[str, Any] | None) -> Non
     :param device_id: device identifier
     :param update: dictionary containing the updated properties or None if
     """
+    device = _configured_devices.get(device_id, None)
     if update is None:
-        if device_id not in _configured_devices:
+        if device is None:
             return
-        device = _configured_devices[device_id]
         update = device.attributes
     else:
-        _LOG.info("[%s] LG TV update: %s", device_id, update)
+        _LOG.info("[%s] LG TV update: %s", device.host if device else device_id, update)
 
     attributes = None
 
@@ -330,11 +332,10 @@ async def on_device_update(device_id: str, update: dict[str, Any] | None) -> Non
     # This updates simple_commands and UI pages with new app launch commands
     # Only re-register if at least one entity is already configured by the Remote
     if MediaAttr.SOURCE_LIST in update:
-        if device_id in _configured_devices:
-            device = _configured_devices[device_id]
+        if device:
             device_config = config.devices.get(device_id)
             if device_config is None:
-                _LOG.warning("LG TV %s has no persisted device configuration", device_id)
+                _LOG.warning("[%s] LG TV %s has no persisted device configuration", device.host, device_id)
                 return
 
             # Re-register and maintain applist if wanted by user configuration
@@ -346,7 +347,7 @@ async def on_device_update(device_id: str, update: dict[str, Any] | None) -> Non
                     app_commands = device.app_buttons
                     _LOG.info(
                         "[%s] Apps discovered (%d apps), updating available entities with dynamic commands: %s",
-                        device_id,
+                        device.host,
                         len(app_commands),
                         app_commands[:5] if len(app_commands) > 5 else app_commands,  # Show first 5
                     )
@@ -358,7 +359,7 @@ async def on_device_update(device_id: str, update: dict[str, Any] | None) -> Non
                     app_commands = device.app_buttons
                     _LOG.info(
                         "[%s] Apps discovered (%d apps), updating available entities with dynamic commands: %s",
-                        device_id,
+                        device.host,
                         len(app_commands),
                         app_commands[:5] if len(app_commands) > 5 else app_commands,  # Show first 5
                     )
@@ -366,7 +367,12 @@ async def on_device_update(device_id: str, update: dict[str, Any] | None) -> Non
                     _register_available_entities(device_config, device)
 
     # TODO awkward logic: this needs better support from the integration library
-    _LOG.info("Update device %s for configured devices %s", device_id, api.configured_entities)
+    _LOG.info(
+        "[%s] Update device %s for configured devices %s",
+        device.host if device else device_id,
+        device_id,
+        api.configured_entities,
+    )
     for configured_entity in _get_entities(device_id):
         if isinstance(configured_entity, media_player.LGTVMediaPlayer):
             attributes = filter_attributes(update, ucapi.media_player.Attributes)
@@ -417,7 +423,9 @@ def _configure_new_device(device_config: config.LGConfigDevice, connect: bool = 
     update_global_settings()
     # the device may be already configured if the user changed settings of existing device
     if device_config.id in _configured_devices:
-        _LOG.debug("Existing config device updated, update the running device %s", device_config)
+        _LOG.debug(
+            "[%s] Existing config device updated, update the running device %s", device_config.address, device_config
+        )
         device = _configured_devices[device_config.id]
         _create_task(device.disconnect(), f"Disconnect task for {device.id}")
         device.update_config(device_config)
@@ -440,7 +448,8 @@ def _configure_new_device(device_config: config.LGConfigDevice, connect: bool = 
             _create_task(device.connect(), f"Connect task for {device.id}")
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.debug(
-                "Could not connect to device, probably because it is starting with magic packet %s",
+                "[%s] Could not connect to device, probably because it is starting with magic packet %s",
+                device.host,
                 ex,
             )
     _register_available_entities(device_config, device)
@@ -483,13 +492,13 @@ def update_global_settings():
 
 def on_device_added(device: config.LGConfigDevice) -> None:
     """Handle a newly added device in the configuration."""
-    _LOG.debug("New device added: %s", device)
+    _LOG.debug("[%s] New device added: %s", device.address, device)
     _configure_new_device(device, connect=False)
 
 
 def on_device_updated(device: config.LGConfigDevice) -> None:
     """Handle an updated device in the configuration."""
-    _LOG.debug("Device config updated: %s, reconnect with new configuration", device)
+    _LOG.debug("[%s] Device config updated: %s, reconnect with new configuration", device.address, device)
     _configure_new_device(device, connect=True)
 
 
@@ -504,7 +513,7 @@ def on_device_removed(device: config.LGConfigDevice | None) -> None:
         api.available_entities.clear()
     else:
         if device.id in _configured_devices:
-            _LOG.debug("Disconnecting from removed LG TV %s", device.id)
+            _LOG.debug("[%s] Disconnecting from removed LG TV %s", device.address, device.id)
             configured = _configured_devices.pop(device.id)
             _create_task(_async_remove(configured), f"Remove task for {configured.id}")
             for entity in _get_entities(configured.id):

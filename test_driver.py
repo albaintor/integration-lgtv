@@ -277,10 +277,18 @@ class RemoteWebsocket:
         media_id: str | None = None,
         media_type: str | None = None,
         paging: dict[str, Any] | None = None,
+        search_media_classes: list[str] | None = None,
     ) -> dict[str, Any] | None:
-        return await self.search_media(
-            {"entity_id": entity_id, "query": query, "media_id": media_id, "media_type": media_type, "paging": paging}
-        )
+        payload = {
+            "entity_id": entity_id,
+            "query": query,
+            "media_id": media_id,
+            "media_type": media_type,
+            "paging": paging,
+        }
+        if search_media_classes:
+            payload["filter"] = {"media_classes": search_media_classes}
+        return await self.search_media(payload)
 
     async def browse_media(self, msg_data: dict[str, Any]) -> dict[str, Any] | None:
         try:
@@ -573,6 +581,9 @@ class BrowsingData:
     items: list[dict[str, Any]] | None = None
     main: dict[str, Any] | None = None
     search_mode = False
+    media_classes_listbox: tk.Listbox | None = None
+    selected_media_classes: list[str] | None = None
+    entity_id: str | None = None
 
 
 class SetupData:
@@ -690,15 +701,10 @@ class RemoteInterface(tk.Tk):
         command.grid(row=self._row, column=0)
         self._command_on = ttk.Button(self._left_frame, text="On", command=lambda: self.media_player_command("on"))
         self._command_on.grid(row=self._row, column=1)
-        self._input_source = ttk.Combobox(
-            self._left_frame, state="readonly", justify="left"
-        )
+        self._input_source = ttk.Combobox(self._left_frame, state="readonly", justify="left")
         self._input_source.bind(
             "<<ComboboxSelected>>",
             lambda event: self.select_input_source(event),
-        )
-        self._input_source.bind(
-            "<Return>", lambda event, source=self._input_source: self.select_input_source_manual(source)
         )
         self._input_source.grid(row=self._row, column=2)
         self._row += 1
@@ -773,9 +779,6 @@ class RemoteInterface(tk.Tk):
 
     def select_input_source(self, event: tk.Event):
         self.media_player_command("select_source", {"source": event.widget.get()})
-
-    def select_input_source_manual(self, widget: tk.Widget):
-        self.media_player_command("select_source", {"source": widget.get()})
 
     def select_sound_mode(self, event: tk.Event):
         self.media_player_command("select_sound_mode", {"mode": event.widget.get()})
@@ -1072,6 +1075,7 @@ class RemoteInterface(tk.Tk):
         self.update_sound_mode()
 
     async def browse_media(self, browsing_data: BrowsingData, entity_id):
+        browsing_data.entity_id = entity_id
         results = await self._worker.browse_media(
             entity_id,
             browsing_data.media_id,
@@ -1105,7 +1109,8 @@ class RemoteInterface(tk.Tk):
             except Exception as e:
                 _LOG.exception("Error while updating browsing grid: %s", e)
 
-    async def search_media(self, entity_id):
+    async def search_media(self, entity_id, selected_media_classes: list[str] | None):
+        self._media_search_data.entity_id = entity_id
         results = await self._worker.search_media(
             entity_id,
             self._media_search_text.get(),
@@ -1115,6 +1120,7 @@ class RemoteInterface(tk.Tk):
                 "page": self._media_search_data.page,
                 "limit": self._media_search_data.limit,
             },
+            selected_media_classes,
         )
         dump_msg = json.loads(json.dumps(results))
         if media := dump_msg.get("msg_data", {}).get("media"):
@@ -1176,12 +1182,21 @@ class RemoteInterface(tk.Tk):
             self._worker._loop,
         )
 
+    def select_media_class(self, browsing_data: BrowsingData, page: int):
+        if browsing_data.media_classes_listbox:
+            indices = browsing_data.media_classes_listbox.curselection()
+            browsing_data.selected_media_classes = [browsing_data.media_classes_listbox.get(x) for x in indices]
+            asyncio.run_coroutine_threadsafe(
+                self.search_media(browsing_data.entity_id, browsing_data.selected_media_classes),
+                self._worker._loop,
+            )
+
     def paging(self, browsing_data: BrowsingData, page: int):
         browsing_data.page = page
         entity_id = self._worker.get_media_player_entity_id()
         if browsing_data.search_mode:
             asyncio.run_coroutine_threadsafe(
-                self.search_media(entity_id),
+                self.search_media(entity_id, browsing_data.selected_media_classes),
                 self._worker._loop,
             )
         else:
@@ -1204,6 +1219,36 @@ class RemoteInterface(tk.Tk):
         )
         label.grid(row=row, column=column, columnspan=4)
         row += 1
+        if self._worker.has_feature(browsing_data.entity_id, "search_media_classes") and (
+            attributes := self._worker.get_attributes(browsing_data.entity_id)
+        ):
+            search_media_classes: list[str] = attributes.get("search_media_classes", [])
+            if search_media_classes:
+                label = ttk.Label(
+                    browsing_data.window,
+                    text="Media classes",
+                )
+                label.grid(row=row, column=column)
+                column += 1
+                browsing_data.media_classes_listbox = tk.Listbox(browsing_data.window, selectmode=tk.MULTIPLE, height=6)
+                for item in search_media_classes:
+                    browsing_data.media_classes_listbox.insert(tk.END, item)
+                if browsing_data.selected_media_classes:
+                    for item in browsing_data.selected_media_classes:
+                        try:
+                            index = search_media_classes.index(item)
+                            browsing_data.media_classes_listbox.selection_set(index)
+                        except ValueError:
+                            pass
+                browsing_data.media_classes_listbox.grid(row=row, column=column)
+                browsing_data.media_classes_listbox.bind(
+                    "<<ListboxSelect>>",
+                    lambda event, data=browsing_data: self.select_media_class(data, browsing_data.page),
+                )
+                row += 1
+                column = 0
+            else:
+                browsing_data.media_classes_listbox = None
 
         button = ttk.Button(
             browsing_data.window,
@@ -1291,9 +1336,10 @@ class RemoteInterface(tk.Tk):
             self._media_search_data.count = 0
             self._media_search_data.items = None
             self._media_search_data.main = None
+            self._media_browse_data.media_classes_listbox = []
 
         asyncio.run_coroutine_threadsafe(
-            self.search_media(entity_id),
+            self.search_media(entity_id, None),
             self._worker._loop,
         )
 
@@ -1314,6 +1360,7 @@ class RemoteInterface(tk.Tk):
             self._media_browse_data.count = 0
             self._media_browse_data.items = None
             self._media_browse_data.main = None
+            self._media_browse_data.media_classes_listbox = []
 
         asyncio.run_coroutine_threadsafe(
             self.browse_media(self._media_browse_data, entity_id),
@@ -1498,7 +1545,7 @@ class RemoteInterface(tk.Tk):
                             self._setup_data.mapping[field_id] = text_area
                             self._setup_data.mapping_type[field_id] = "textarea"
                         elif checkbox := field.get("checkbox"):
-                            var = tk.IntVar(value=1 if checkbox.get("value", "false") == "true" else 0)
+                            var = tk.IntVar(value=1 if checkbox.get("value", False) else 0)
                             checkbox_button = tk.Checkbutton(
                                 self._setup_data.window, variable=var, onvalue=1, offvalue=0
                             )
@@ -1618,11 +1665,12 @@ class WorkerThread(threading.Thread):
         media_id: str | None = None,
         media_type: str | None = None,
         paging: dict[str, Any] | None = None,
+        search_media_classes: list[str] | None = None,
     ):
         if self._ws is None:
             _LOG.error("Search media %s error : no websocket connected", media_id)
             return None
-        return await self._ws.search_media_entity(entity_id, query, media_id, media_type, paging)
+        return await self._ws.search_media_entity(entity_id, query, media_id, media_type, paging, search_media_classes)
 
     def get_media_player_entity(self) -> dict[str, Any] | None:
         media_entity = self._interface.get_media_player()

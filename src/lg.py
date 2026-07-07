@@ -256,7 +256,7 @@ async def patched_create_main_ws(self):
         aiohttp.WSServerHandshakeError,
         TimeoutError,
     ) as ex:
-        _LOG.debug("Failed connection to %s, switching to wss %s", uri, ex)
+        _LOG.debug("[%s] Failed connection to %s, switching to wss %s", self.host, uri, ex)
         uri = f"wss://{self.host}:{WSS_PORT}"
         # _LOG.debug("Connecting to %s", uri)
         return await self._ws_connect(uri, MAIN_WS_MAX_MSG_SIZE)
@@ -676,7 +676,7 @@ class LGDevice:
             updated_data[LGSelects.SELECT_SOUND_OUTPUT] = {SelectAttributes.CURRENT_OPTION: self.sound_output}
 
         if updated_data:
-            _LOG.debug("Updated data %s", updated_data)
+            _LOG.debug("[%s] Updated data %s", self._device_config.address, updated_data)
             self.events.emit(Events.UPDATE, self.id, updated_data)
 
     async def _run_buffered_commands(self):
