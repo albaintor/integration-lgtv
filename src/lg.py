@@ -23,9 +23,6 @@ from typing import (
     Any,
     Awaitable,
     Callable,
-    Concatenate,
-    Coroutine,
-    ParamSpec,
     TypeVar,
     cast,
 )
@@ -68,6 +65,9 @@ CONNECT_LOCK_TIMEOUT = 20
 # INIT_APPS_LAUNCH_DELAY = 10
 ERROR_OS_WAIT = 0.5
 MAX_DEFERRED_COMMANDS = 100
+VOLUME_SET_DEBOUNCE = 0.3
+VOLUME_TARGET_CONFIRM_TIMEOUT = 2.0
+VOLUME_STALE_UPDATE_GRACE = 0.5
 
 SOURCE_IS_APP = "isApp"
 
@@ -96,9 +96,10 @@ class Events(StrEnum):
     # IP_ADDRESS_CHANGED = 6
 
 
-_LGDeviceT = TypeVar("_LGDeviceT", bound="LGDevice")
-_P = ParamSpec("_P")
-_R = TypeVar("_R", bound=ucapi.StatusCodes)
+_RetryCallable = TypeVar(
+    "_RetryCallable",
+    bound=Callable[..., Awaitable[ucapi.StatusCodes]],
+)
 
 
 @dataclass(slots=True)
@@ -120,10 +121,10 @@ class DeferredCommand:
 async def retry_call_command(
     timeout: float,
     bufferize: bool,
-    func: Callable[Concatenate[_LGDeviceT, _P], Awaitable[ucapi.StatusCodes | None]],
-    obj: _LGDeviceT,
-    *args: _P.args,
-    **kwargs: _P.kwargs,
+    func: Callable[..., Awaitable[ucapi.StatusCodes]],
+    obj: "LGDevice",
+    *args: Any,
+    **kwargs: Any,
 ) -> ucapi.StatusCodes:
     """Retry call command when failed."""
     # Launch reconnection task if not active
@@ -161,17 +162,14 @@ async def retry_call_command(
     return ucapi.StatusCodes.OK
 
 
-def retry(*, timeout: float = 5, bufferize=False, no_error=False, power_on=False) -> Callable[
-    [Callable[Concatenate[_LGDeviceT, _P], Awaitable[_R]]],
-    Callable[Concatenate[_LGDeviceT, _P], Awaitable[_R]],
-]:
+def retry(
+    *, timeout: float = 5, bufferize=False, no_error=False, power_on=False
+) -> Callable[[_RetryCallable], _RetryCallable]:
     """Retry command."""
 
-    def decorator(
-        func: Callable[Concatenate[_LGDeviceT, _P], Awaitable[_R | None]],
-    ) -> Callable[Concatenate[_LGDeviceT, _P], Coroutine[Any, Any, _R | None]]:
+    def decorator(func: _RetryCallable) -> _RetryCallable:
         @wraps(func)
-        async def wrapper(obj: _LGDeviceT, *args: _P.args, **kwargs: _P.kwargs) -> _R:
+        async def wrapper(obj: "LGDevice", *args: Any, **kwargs: Any) -> ucapi.StatusCodes:
             """Wrap all command methods."""
             # pylint: disable = W0212
             try:
@@ -219,7 +217,7 @@ def retry(*, timeout: float = 5, bufferize=False, no_error=False, power_on=False
             #     _LOG.error("[%s] Unknown error %s %s", obj._device_config.address, func.__name__, ex)
             #     return ucapi.StatusCodes.BAD_REQUEST
 
-        return wrapper
+        return cast(_RetryCallable, wrapper)
 
     return decorator
 
@@ -286,6 +284,14 @@ class LGDevice:
         self._tv: WebOsClient = WebOsClient(host=device_config.address, client_key=device_config.key)
         self._available: bool = True
         self._volume = 0
+        self._volume_command_lock = Lock()
+        self._pending_volume_level: int | None = None
+        self._volume_set_task: Task[None] | None = None
+        self._volume_set_task_generation: int | None = None
+        self._volume_set_generation = 0
+        self._volume_target: int | None = None
+        self._volume_target_deadline = 0.0
+        self._volume_target_confirmed = False
         self._attr_is_volume_muted = False
         self._active_source = None
         self._sources = {}
@@ -341,6 +347,79 @@ class LGDevice:
         if self._connect_task is None or self._connect_task.done():
             self._connect_task = self._track_task(asyncio.create_task(self._connect_loop()))
         return self._connect_task
+
+    @staticmethod
+    def _normalize_volume_level(volume: float) -> int:
+        """Normalize volume to the range accepted by LG webOS."""
+        return max(0, min(100, int(round(float(volume)))))
+
+    def _arm_volume_target(self, volume: int) -> None:
+        """Record the optimistic volume target while webOS catches up."""
+        self._volume_target = volume
+        self._volume_target_deadline = time.monotonic() + VOLUME_TARGET_CONFIRM_TIMEOUT
+        self._volume_target_confirmed = False
+
+    def _clear_volume_target(self) -> None:
+        """Clear optimistic volume state."""
+        self._volume_target = None
+        self._volume_target_deadline = 0.0
+        self._volume_target_confirmed = False
+
+    def _cancel_pending_volume_level(self) -> None:
+        """Cancel a queued absolute volume command."""
+        self._volume_set_generation += 1
+        self._pending_volume_level = None
+        self._clear_volume_target()
+
+    def _should_ignore_volume_update(self, volume: float) -> bool:
+        """Return True for stale TV volume updates while an absolute target is pending."""
+        if self._volume_target is None:
+            return False
+
+        now = time.monotonic()
+        if now >= self._volume_target_deadline:
+            self._clear_volume_target()
+            return False
+
+        if int(round(volume)) == self._volume_target:
+            if not self._volume_target_confirmed:
+                self._volume_target_confirmed = True
+                self._volume_target_deadline = now + VOLUME_STALE_UPDATE_GRACE
+            return False
+
+        _LOG.debug(
+            "[%s] Ignoring stale volume update %s while target volume is %s",
+            self._device_config.address,
+            volume,
+            self._volume_target,
+        )
+        return True
+
+    async def _debounced_set_volume_level(self, generation: int) -> None:
+        """Send only the latest absolute volume after slider movement settles."""
+        while generation == self._volume_set_generation:
+            target = self._pending_volume_level
+            if target is None:
+                return
+
+            await asyncio.sleep(VOLUME_SET_DEBOUNCE)
+            if generation != self._volume_set_generation:
+                return
+            if target != self._pending_volume_level:
+                continue
+
+            async with self._volume_command_lock:
+                if generation != self._volume_set_generation:
+                    return
+                target = self._pending_volume_level
+                if target is None:
+                    return
+
+                _LOG.debug("[%s] LG TV setting debounced volume to %s", self._device_config.address, target)
+                await self._tv.set_volume(target)
+                if self._pending_volume_level == target:
+                    self._pending_volume_level = None
+                    return
 
     async def defer_command(
         self,
@@ -637,7 +716,9 @@ class LGDevice:
             volume = self._tv.tv_state.volume
         if volume is not None:
             volume = float(volume)
-            if volume != self._volume:
+            if self._should_ignore_volume_update(volume):
+                volume = None
+            elif volume != self._volume:
                 self._volume = volume
                 updated_data[MediaAttr.VOLUME] = self._volume
                 updated_data[LGSensors.SENSOR_VOLUME] = self._volume if self._volume else 0
@@ -1285,21 +1366,48 @@ class LGDevice:
         """Set volume level, range 0..100."""
         if volume is None:
             return ucapi.StatusCodes.BAD_REQUEST
-        _LOG.debug("[%s] LG TV setting volume to %s", self._device_config.address, volume)
-        await self._tv.set_volume(int(round(volume)))
-        self.events.emit(Events.UPDATE, self.id, {MediaAttr.VOLUME: volume})
+        try:
+            target = self._normalize_volume_level(volume)
+        except (TypeError, ValueError):
+            return ucapi.StatusCodes.BAD_REQUEST
+
+        _LOG.debug("[%s] LG TV queue volume target %s", self._device_config.address, target)
+        self._pending_volume_level = target
+        self._volume = float(target)
+        self._arm_volume_target(target)
+        self.events.emit(
+            Events.UPDATE,
+            self.id,
+            {
+                MediaAttr.VOLUME: self._volume,
+                LGSensors.SENSOR_VOLUME: self._volume if self._volume else 0,
+            },
+        )
+        if (
+            self._volume_set_task is None
+            or self._volume_set_task.done()
+            or self._volume_set_task_generation != self._volume_set_generation
+        ):
+            self._volume_set_task_generation = self._volume_set_generation
+            self._volume_set_task = self._track_task(
+                asyncio.create_task(self._debounced_set_volume_level(self._volume_set_generation))
+            )
         return ucapi.StatusCodes.OK
 
     @retry()
     async def volume_up(self) -> ucapi.StatusCodes:
         """Send volume-up command to LG TV."""
-        await self._tv.volume_up()
+        self._cancel_pending_volume_level()
+        async with self._volume_command_lock:
+            await self._tv.volume_up()
         return ucapi.StatusCodes.OK
 
     @retry()
     async def volume_down(self) -> ucapi.StatusCodes:
         """Send volume-down command to LG TV."""
-        await self._tv.volume_down()
+        self._cancel_pending_volume_level()
+        async with self._volume_command_lock:
+            await self._tv.volume_down()
         return ucapi.StatusCodes.OK
 
     @retry()

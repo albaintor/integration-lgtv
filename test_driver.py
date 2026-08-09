@@ -104,6 +104,8 @@ def get_local_ip() -> str:
 
 
 def get_locale(data: dict[str, str], locale="en") -> str | None:
+    if data is None:
+        return None
     for language in data:
         if language == locale or language.startswith(locale):
             return data[language]
