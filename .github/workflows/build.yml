@@ -15,11 +15,11 @@ env:
   INTG_NAME: lgtv
   HASH_FILENAME: uc-intg-lgtv.hash
   # Python version to use in the builder image. See https://hub.docker.com/r/unfoldedcircle/r2-pyinstaller for possible versions.
-  PYTHON_VER: 3.11.13-0.5.0
+  PYTHON_VER: 3.11.13-0.7.0
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,13 +42,11 @@ jobs:
             exit 1
           fi
 
-      - name: Prepare
+      - name: Pyinstaller
         run: |
-          sudo apt-get install -y qemu-system-arm binfmt-support qemu-user-static
-          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
           echo "Starting pyinstaller build"
           docker run --rm --name builder \
-            --platform=aarch64 \
+            --platform=linux/arm64/v8 \
             --user=$(id -u):$(id -g) \
             -v ${GITHUB_WORKSPACE}:/workspace \
             docker.io/unfoldedcircle/r2-pyinstaller:${PYTHON_VER} \
@@ -90,8 +88,7 @@ jobs:
   release:
     name: Create Release
     if: github.ref == 'refs/heads/main' || contains(github.ref, 'tags/v')
-    # using ubuntu-24.04: Package 'qemu' has no installation candidate
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: [build]
 
     steps:
