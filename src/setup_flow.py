@@ -74,6 +74,7 @@ class SetupFlow:
         self._setup_step = SetupSteps.INIT
         self._cfg_add_device: bool = False
         self._discovered_devices: list[dict[str, str]] = []
+        self._configured_device_choices: dict[str, str | None] = {}
         self._pairing_lg_tv: WebOsClient | None = None
         self._reconfigured_device: LGConfigDevice | None = None
         self._user_input_discovery = RequestUserInput(
@@ -183,8 +184,12 @@ class SetupFlow:
 
             # get all configured devices for the user to choose from
             dropdown_devices = []
-            for device in config.devices.all():
-                dropdown_devices.append({"id": device.id, "label": {"en": f"{device.name} ({device.id})"}})
+            self._configured_device_choices = {}
+            for index, device in enumerate(config.devices.all()):
+                choice_id = device.id or f"legacy-device-{index}"
+                self._configured_device_choices[choice_id] = device.id
+                identifier = device.id or device.address
+                dropdown_devices.append({"id": choice_id, "label": {"en": f"{device.name} ({identifier})"}})
 
             # TODO #12 externalize language texts
             # build user actions, based on available devices
@@ -337,17 +342,19 @@ class SetupFlow:
                 self._cfg_add_device = True
             case "remove":
                 choice = msg.input_values["choice"]
-                if not config.devices.remove(choice):
+                device_id = self._configured_device_choices.get(choice, choice)
+                if not config.devices.remove(device_id):
                     _LOG.warning("Could not remove device from configuration: %s", choice)
                     return SetupError(error_type=IntegrationSetupError.OTHER)
                 config.devices.store()
                 return SetupComplete()
             case "configure":
                 choice = msg.input_values["choice"]
-                if not config.devices.contains(choice):
+                device_id = self._configured_device_choices.get(choice, choice)
+                if not config.devices.contains(device_id):
                     _LOG.warning("Could not configure existing device from configuration: %s", choice)
                     return SetupError(error_type=IntegrationSetupError.OTHER)
-                self._reconfigured_device = config.devices.get(choice)
+                self._reconfigured_device = config.devices.get(device_id)
                 return self.get_additional_settings(self._reconfigured_device)
             case "reset":
                 config.devices.clear()  # triggers device instance removal
@@ -470,6 +477,9 @@ class SetupFlow:
         host = msg.input_values["choice"]
         mac_address = None
         mac_address2 = None
+        model_name = "LG"
+        serial_number = None
+        software_device_id = None
         # pylint: disable=W0718
 
         if self._discovered_devices:
@@ -494,24 +504,34 @@ class SetupFlow:
             key = self._pairing_lg_tv.client_key
             try:
                 info = await self._pairing_lg_tv.get_system_info()
-                model_name = info.get("modelName")
-                # serial_number = info.get("serialNumber")
+                model_name = info.get("modelName") or model_name
+                serial_number = info.get("serialNumber")
                 info = await self._pairing_lg_tv.get_software_info()
-                unique_id = info.get("device_id")
+                software_device_id = info.get("device_id")
             except Exception as ex:
                 _LOG.info("Cannot get system info, trying to retrieve the model name either way %s: %s", host, ex)
                 info = self._pairing_lg_tv.tv_info
-                model_name = info.system.get("modelName", "LG")
-                unique_id = info.software.get("device_id")
+                model_name = info.system.get("modelName") or model_name
+                serial_number = info.system.get("serialNumber")
+                software_device_id = info.software.get("device_id")
 
             if discovered_device and discovered_device.get("friendlyName"):
                 model_name = discovered_device.get("friendlyName")
 
-            if mac_address is None:
-                mac_address = unique_id
+            if mac_address is None and software_device_id:
+                mac_address = software_device_id
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error("Cannot connect to %s: %s", host, ex)
             return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
+
+        unique_id = (
+            software_device_id
+            or serial_number
+            or (discovered_device or {}).get("serialNumber")
+            or mac_address
+            or mac_address2
+            or host
+        )
 
         self._reconfigured_device = LGConfigDevice(
             id=unique_id,
