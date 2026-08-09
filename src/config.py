@@ -132,16 +132,17 @@ class Devices:
         return False
 
     def add_or_update(self, atv: LGConfigDevice, notify_update=True) -> None:
-        """Add a new configured device."""
+        """Add or update a configured device."""
         if self.contains(atv.id):
             _LOG.debug("Existing config %s, updating it %s", atv.id, atv)
             self.update(atv)
             if self._update_handler is not None and notify_update:
                 self._update_handler(atv)
-        else:
-            _LOG.debug("Adding new config %s", atv)
-            self._config.append(atv)
-            self.store()
+            return
+
+        _LOG.debug("Adding new config %s", atv)
+        self._config.append(atv)
+        self.store()
         if self._add_handler is not None and notify_update:
             self._add_handler(atv)
 
@@ -166,6 +167,8 @@ class Devices:
                 item.interface = device.interface
                 item.wol_port = device.wol_port
                 item.log = device.log
+                item.update_apps_list = device.update_apps_list
+                item.sensor_include_device_name = device.sensor_include_device_name
                 return self.store()
         return False
 

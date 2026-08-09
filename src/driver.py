@@ -423,13 +423,16 @@ def _configure_new_device(device_config: config.LGConfigDevice, connect: bool = 
     """
     update_global_settings()
     # the device may be already configured if the user changed settings of existing device
-    if device_config.id in _configured_devices:
+    existing_device = device_config.id in _configured_devices
+    if existing_device:
         _LOG.debug(
             "[%s] Existing config device updated, update the running device %s", device_config.address, device_config
         )
         device = _configured_devices[device_config.id]
-        _create_task(device.disconnect(), f"Disconnect task for {device.id}")
-        device.update_config(device_config)
+        _create_task(
+            _reconfigure_device(device, device_config, connect),
+            f"Reconfigure task for {device.id}",
+        )
     else:
         device = lg.LGDevice(device_config, loop=_LOOP)
 
@@ -443,7 +446,7 @@ def _configure_new_device(device_config: config.LGConfigDevice, connect: bool = 
         # receiver.connect()
         _configured_devices[device.id] = device
 
-    if connect:
+    if connect and not existing_device:
         # start background connection task
         try:
             _create_task(device.connect(), f"Connect task for {device.id}")
@@ -454,6 +457,18 @@ def _configure_new_device(device_config: config.LGConfigDevice, connect: bool = 
                 ex,
             )
     _register_available_entities(device_config, device)
+
+
+async def _reconfigure_device(
+    device: lg.LGDevice,
+    device_config: config.LGConfigDevice,
+    connect: bool,
+) -> None:
+    """Apply new settings after the old client is fully disconnected."""
+    await device.disconnect()
+    device.update_config(device_config)
+    if connect:
+        await device.connect()
 
 
 def _register_available_entities(device_config: config.LGConfigDevice, device: lg.LGDevice) -> None:
