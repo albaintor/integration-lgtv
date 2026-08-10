@@ -2,31 +2,40 @@ name: Check Python code formatting
 
 on:
   push:
+    # always check code formatting in all feature branches
+    branches-ignore:
+      - l10n
     paths:
       - 'src/**'
       - 'requirements.txt'
       - 'test-requirements.txt'
-      - 'tests/**'
+      - 'test/**'
       - '.github/**/*.yml'
-      - '.pylintrc'
       - 'pyproject.toml'
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
+
+# prevent concurrent runs of this workflow for open pull requests
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   test:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     name: Check Python code formatting
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 #v7.0.0
         with:
           python-version: "3.11"
 
@@ -38,15 +47,12 @@ jobs:
         run: |
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f test-requirements.txt ]; then pip install -r test-requirements.txt; fi
-      - name: Analyzing the code with pylint
+      - name: Lint with ruff
         run: |
-          python -m pylint src
-      - name: Lint with flake8
+          python -m ruff check src
+      - name: Check code formatting with ruff
         run: |
-          python -m flake8 src --count --show-source --statistics
-      - name: Check code formatting with isort
+          python -m ruff format --check src
+      - name: Type check with pyright
         run: |
-          python -m isort src/. --check --verbose
-      - name: Check code formatting with black
-        run: |
-          python -m black src --check --diff --verbose --line-length 120
+          python -m pyright src
