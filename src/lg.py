@@ -65,7 +65,7 @@ CONNECT_LOCK_TIMEOUT = 20
 # INIT_APPS_LAUNCH_DELAY = 10
 ERROR_OS_WAIT = 0.5
 MAX_DEFERRED_COMMANDS = 100
-VOLUME_SET_DEBOUNCE = 0.3
+VOLUME_SET_INTERVAL = 0.2
 VOLUME_TARGET_CONFIRM_TIMEOUT = 2.0
 VOLUME_STALE_UPDATE_GRACE = 0.5
 
@@ -409,18 +409,13 @@ class LGDevice:
         )
         return True
 
-    async def _debounced_set_volume_level(self, generation: int) -> None:
-        """Send only the latest absolute volume after slider movement settles."""
+    async def _coalesced_set_volume_level(self, generation: int) -> None:
+        """Send the latest absolute volume at a controlled rate."""
+        next_send_at = time.monotonic() + VOLUME_SET_INTERVAL
         while generation == self._volume_set_generation:
-            target = self._pending_volume_level
-            if target is None:
-                return
-
-            await asyncio.sleep(VOLUME_SET_DEBOUNCE)
+            await asyncio.sleep(max(0.0, next_send_at - time.monotonic()))
             if generation != self._volume_set_generation:
                 return
-            if target != self._pending_volume_level:
-                continue
 
             async with self._volume_command_lock:
                 if generation != self._volume_set_generation:
@@ -429,15 +424,17 @@ class LGDevice:
                 if target is None:
                     return
 
+                self._pending_volume_level = None
                 _LOG.debug(
-                    "[%s] LG TV setting debounced volume to %s",
+                    "[%s] LG TV setting coalesced volume to %s",
                     self._device_config.address,
                     target,
                 )
+                next_send_at = time.monotonic() + VOLUME_SET_INTERVAL
                 await self._tv.set_volume(target)
-                if self._pending_volume_level == target:
-                    self._pending_volume_level = None
-                    return
+
+            if self._pending_volume_level is None:
+                return
 
     async def defer_command(
         self,
@@ -1532,7 +1529,7 @@ class LGDevice:
             self._volume_set_task_generation = self._volume_set_generation
             self._volume_set_task = self._track_task(
                 asyncio.create_task(
-                    self._debounced_set_volume_level(self._volume_set_generation)
+                    self._coalesced_set_volume_level(self._volume_set_generation)
                 )
             )
         return ucapi.StatusCodes.OK
