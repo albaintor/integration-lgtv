@@ -11,7 +11,7 @@ import logging
 import os
 from asyncio import Lock
 from dataclasses import dataclass, field, fields
-from typing import Callable, Iterator
+from typing import Any, Callable, Iterator
 
 from ucapi import Entity, EntityTypes
 
@@ -85,8 +85,8 @@ class LGConfigDevice:
 class _EnhancedJSONEncoder(json.JSONEncoder):
     """Python dataclass json encoder."""
 
-    def default(self, o):
-        if dataclasses.is_dataclass(o):
+    def default(self, o: object) -> Any:
+        if dataclasses.is_dataclass(o) and not isinstance(o, type):
             return dataclasses.asdict(o)
         return super().default(o)
 
@@ -263,7 +263,9 @@ class Devices:
         # pylint: disable=W0718
         except Exception as ex:
             _LOG.error(
-                "Cannot import the updated configuration %s, keeping existing configuration : %s", updated_config, ex
+                "Cannot import the updated configuration %s, keeping existing configuration : %s",
+                updated_config,
+                ex,
             )
             try:
                 # Restore current configuration
@@ -302,7 +304,7 @@ class Devices:
 
     async def handle_address_change(self):
         """Check for address change and update configuration."""
-        if devices.empty():
+        if self.empty():
             return
         if self._config_lock.locked():
             _LOG.debug("Check device change already in progress")
@@ -313,7 +315,7 @@ class Devices:
         _discovered_devices = await discover.async_identify_lg_devices()
         _devices_changed: list[LGConfigDevice] = []
 
-        for device_config in devices.all():
+        for device_config in self.all():
             found = False
             for device in _discovered_devices:
                 wired_mac = device.get("wiredMac", None)
@@ -321,21 +323,36 @@ class Devices:
                 host = device.get("host", None)
                 name = device.get("friendlyName", host)
 
-                if device_config.mac_address and (device_config.mac_address in [wired_mac, wifi_mac]):
+                if device_config.mac_address and (
+                    device_config.mac_address in [wired_mac, wifi_mac]
+                ):
                     found = True
-                elif device_config.mac_address2 and (device_config.mac_address2 in [wired_mac, wifi_mac]):
+                elif device_config.mac_address2 and (
+                    device_config.mac_address2 in [wired_mac, wifi_mac]
+                ):
                     found = True
 
                 if found:
                     if device_config.address == host:
-                        _LOG.debug("Found device %s with unchanged address %s", name, host)
+                        _LOG.debug(
+                            "Found device %s with unchanged address %s", name, host
+                        )
                     elif host:
-                        _LOG.debug("Found device %s with new address %s -> %s", name, device_config.address, host)
+                        _LOG.debug(
+                            "Found device %s with new address %s -> %s",
+                            name,
+                            device_config.address,
+                            host,
+                        )
                         device_config.address = host
                         _devices_changed.append(device_config)
                     break
             if not found:
-                _LOG.debug("Device %s (%s) not found, probably off", device_config.name, device_config.address)
+                _LOG.debug(
+                    "Device %s (%s) not found, probably off",
+                    device_config.name,
+                    device_config.address,
+                )
 
         if len(_devices_changed) > 0:
             self.store()

@@ -6,10 +6,10 @@ Select entity functions.
 """
 
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from ucapi import EntityTypes, Select, StatusCodes
-from ucapi.api_definitions import CommandHandler
 from ucapi.select import Attributes, Commands, States
 
 import lg
@@ -33,14 +33,14 @@ class LGSelect(LGEntity, Select):
         name: str | dict[str, str],
         config_device: LGConfigDevice,
         device: lg.LGDevice,
-        select_handler: CommandHandler,
+        select_handler: Callable[[str], Awaitable[StatusCodes]],
     ):
         """Initialize the class."""
         # pylint: disable = R0801
         self._config_device = config_device
         self._device: lg.LGDevice = device
         self._state: States = States.ON
-        self._select_handler: CommandHandler = select_handler
+        self._select_handler = select_handler
         super().__init__(
             identifier=entity_id,
             name=name,
@@ -71,19 +71,23 @@ class LGSelect(LGEntity, Select):
             Attributes.STATE: States.ON,
         }
 
-    def update_attributes(self, update: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    def update_attributes(self, update: dict[str, Any] | None = None) -> dict[str, Any]:
         """Return updated selector value from full update if provided or sensor value if no udpate is provided."""
         if update:
             if self.SELECT_NAME in update:
                 return update[self.SELECT_NAME]
-            return None
+            return {}
         return self.attributes
 
-    async def command(self, cmd_id: str, params: dict[str, Any] | None = None, *, websocket: Any) -> StatusCodes:
+    async def command(
+        self, cmd_id: str, params: dict[str, Any] | None = None, *, websocket: Any
+    ) -> StatusCodes:
         """Process selector command."""
         # pylint: disable=R0911
         if cmd_id == Commands.SELECT_OPTION and params:
-            option = params.get("option", None)
+            option = params.get("option")
+            if not isinstance(option, str):
+                return StatusCodes.BAD_REQUEST
             return await self._select_handler(option)
         options = self.select_options
         if cmd_id == Commands.SELECT_FIRST and len(options) > 0:
@@ -91,7 +95,7 @@ class LGSelect(LGEntity, Select):
         if cmd_id == Commands.SELECT_LAST and len(options) > 0:
             return await self._select_handler(options[len(options) - 1])
         if cmd_id == Commands.SELECT_NEXT and len(options) > 0:
-            cycle = params.get("cycle", False)
+            cycle = (params or {}).get("cycle", False)
             try:
                 index = options.index(self.current_option) + 1
                 if not cycle and index >= len(options):
@@ -109,7 +113,7 @@ class LGSelect(LGEntity, Select):
                 )
                 return StatusCodes.BAD_REQUEST
         if cmd_id == Commands.SELECT_PREVIOUS and len(options) > 0:
-            cycle = params.get("cycle", False)
+            cycle = (params or {}).get("cycle", False)
             try:
                 index = options.index(self.current_option) - 1
                 if not cycle and index < 0:
@@ -190,7 +194,7 @@ class LGPictureModeSelect(LGSelect):
     @property
     def select_options(self) -> list[str]:
         """Return selection list."""
-        return self._device.picture_modes
+        return self._device.picture_modes or []
 
 
 class LGSoundOutputSelect(LGSelect):

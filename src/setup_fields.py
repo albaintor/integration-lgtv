@@ -46,7 +46,9 @@ SETUP_FIELDS = [
             "en": "Wake on lan port",
             "fr": "Numéro de port pour wake on lan",
         },
-        "field": {"number": {"value": 9, "min": 1, "max": 65535, "steps": 1, "decimals": 0}},
+        "field": {
+            "number": {"value": 9, "min": 1, "max": 65535, "steps": 1, "decimals": 0}
+        },
     },
     {
         "id": "test_wakeonlan",

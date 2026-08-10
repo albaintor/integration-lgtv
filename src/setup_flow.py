@@ -73,8 +73,8 @@ class SetupFlow:
         self._api = api
         self._setup_step = SetupSteps.INIT
         self._cfg_add_device: bool = False
-        self._discovered_devices: list[dict[str, str]] = []
-        self._configured_device_choices: dict[str, str | None] = {}
+        self._discovered_devices: list[dict[str, Any]] = []
+        self._configured_device_choices: dict[str, str] = {}
         self._pairing_lg_tv: WebOsClient | None = None
         self._reconfigured_device: LGConfigDevice | None = None
         self._user_input_discovery = RequestUserInput(
@@ -100,10 +100,33 @@ class SetupFlow:
                 {
                     "field": {"text": {"value": ""}},
                     "id": "address",
-                    "label": {"en": "IP address", "de": "IP-Adresse", "fr": "Adresse IP"},
+                    "label": {
+                        "en": "IP address",
+                        "de": "IP-Adresse",
+                        "fr": "Adresse IP",
+                    },
                 },
             ],
         )
+
+    @staticmethod
+    def _config_store() -> config.Devices:
+        """Return the initialized configuration store."""
+        if config.devices is None:
+            raise RuntimeError("Device configuration is not initialized")
+        return config.devices
+
+    def _current_device(self) -> LGConfigDevice:
+        """Return the device selected by the active setup flow."""
+        if self._reconfigured_device is None:
+            raise RuntimeError("No device is selected for configuration")
+        return self._reconfigured_device
+
+    @staticmethod
+    def _string_input(msg: UserDataResponse, key: str, default: str = "") -> str:
+        """Read a string setup value, rejecting values of another type."""
+        value = msg.input_values.get(key, default)
+        return value if isinstance(value, str) else default
 
     # pylint: disable=R0911
     async def driver_setup_handler(self, msg: SetupDriver) -> SetupAction:
@@ -120,7 +143,9 @@ class SetupFlow:
             self._cfg_add_device = False
             return await self.handle_driver_setup(msg)
         if isinstance(msg, UserDataResponse):
-            _LOG.debug("Setup handler message : step %s, message : %s", self._setup_step, msg)
+            _LOG.debug(
+                "Setup handler message : step %s, message : %s", self._setup_step, msg
+            )
             if self._setup_step == SetupSteps.WORKFLOW_MODE:
                 if msg.input_values.get("configuration_mode", "") == "normal":
                     self._setup_step = SetupSteps.DEVICE_CONFIGURATION_MODE
@@ -136,13 +161,25 @@ class SetupFlow:
                 return await self._handle_discovery(msg)
             # if self._setup_step == SetupSteps.DEVICE_CONFIGURATION_MODE and "action" in msg.input_values:
             #     return await handle_configuration_mode(msg)
-            if self._setup_step == SetupSteps.DISCOVER and "address" in msg.input_values:
+            if (
+                self._setup_step == SetupSteps.DISCOVER
+                and "address" in msg.input_values
+            ):
                 return await self._handle_discovery(msg)
-            if self._setup_step == SetupSteps.DEVICE_CHOICE and "choice" in msg.input_values:
+            if (
+                self._setup_step == SetupSteps.DEVICE_CHOICE
+                and "choice" in msg.input_values
+            ):
                 return await self.handle_device_choice(msg)
-            if self._setup_step == SetupSteps.ADDITIONAL_SETTINGS and "mac_address" in msg.input_values:
+            if (
+                self._setup_step == SetupSteps.ADDITIONAL_SETTINGS
+                and "mac_address" in msg.input_values
+            ):
                 return await self.handle_additional_settings(msg)
-            if self._setup_step == SetupSteps.TEST_WAKEONLAN and "mac_address" in msg.input_values:
+            if (
+                self._setup_step == SetupSteps.TEST_WAKEONLAN
+                and "mac_address" in msg.input_values
+            ):
                 return await self.handle_wake_on_lan(msg)
             if self._setup_step == SetupSteps.BACKUP_RESTORE:
                 return await self._handle_backup_restore(msg)
@@ -151,7 +188,8 @@ class SetupFlow:
             if self._setup_step == SetupSteps.TEST_WAKEONLAN:
                 if msg.confirm:
                     return self.get_wakeonlan_settings()
-                return self.get_additional_settings(self._reconfigured_device)
+                if self._reconfigured_device is not None:
+                    return self.get_additional_settings(self._reconfigured_device)
         elif isinstance(msg, AbortDriverSetup):
             _LOG.info("Setup was aborted with code: %s", msg.error)
             if self._pairing_lg_tv is not None:
@@ -164,7 +202,9 @@ class SetupFlow:
 
         return SetupError()
 
-    async def handle_driver_setup(self, msg: DriverSetupRequest) -> RequestUserInput | SetupError:
+    async def handle_driver_setup(
+        self, msg: DriverSetupRequest
+    ) -> RequestUserInput | SetupError:
         """
         Start driver setup.
 
@@ -185,11 +225,13 @@ class SetupFlow:
             # get all configured devices for the user to choose from
             dropdown_devices = []
             self._configured_device_choices = {}
-            for index, device in enumerate(config.devices.all()):
+            for index, device in enumerate(self._config_store().all()):
                 choice_id = device.id or f"legacy-device-{index}"
                 self._configured_device_choices[choice_id] = device.id
                 identifier = device.id or device.address
-                dropdown_devices.append({"id": choice_id, "label": {"en": f"{device.name} ({identifier})"}})
+                dropdown_devices.append(
+                    {"id": choice_id, "label": {"en": f"{device.name} ({identifier})"}}
+                )
 
             # TODO #12 externalize language texts
             # build user actions, based on available devices
@@ -284,7 +326,7 @@ class SetupFlow:
             )
 
         # Initial setup, make sure we have a clean configuration
-        config.devices.clear()  # triggers device instance removal
+        self._config_store().clear()  # triggers device instance removal
         self._setup_step = SetupSteps.WORKFLOW_MODE
         return RequestUserInput(
             {"en": "Configuration mode", "de": "Konfigurations-Modus"},
@@ -320,7 +362,9 @@ class SetupFlow:
             ],
         )
 
-    async def handle_configuration_mode(self, msg: UserDataResponse) -> RequestUserInput | SetupComplete | SetupError:
+    async def handle_configuration_mode(
+        self, msg: UserDataResponse
+    ) -> RequestUserInput | SetupComplete | SetupError:
         """
         Process user data response in a setup process.
 
@@ -330,7 +374,7 @@ class SetupFlow:
         :param msg: response data from the requested user data
         :return: the setup action on how to continue
         """
-        action = msg.input_values["action"]
+        action = self._string_input(msg, "action")
 
         _LOG.debug("Handle configuration mode")
 
@@ -341,23 +385,32 @@ class SetupFlow:
             case "add":
                 self._cfg_add_device = True
             case "remove":
-                choice = msg.input_values["choice"]
+                choice = self._string_input(msg, "choice")
                 device_id = self._configured_device_choices.get(choice, choice)
-                if not config.devices.remove(device_id):
-                    _LOG.warning("Could not remove device from configuration: %s", choice)
+                devices = self._config_store()
+                if not devices.remove(device_id):
+                    _LOG.warning(
+                        "Could not remove device from configuration: %s", choice
+                    )
                     return SetupError(error_type=IntegrationSetupError.OTHER)
-                config.devices.store()
+                devices.store()
                 return SetupComplete()
             case "configure":
-                choice = msg.input_values["choice"]
+                choice = self._string_input(msg, "choice")
                 device_id = self._configured_device_choices.get(choice, choice)
-                if not config.devices.contains(device_id):
-                    _LOG.warning("Could not configure existing device from configuration: %s", choice)
+                devices = self._config_store()
+                if not devices.contains(device_id):
+                    _LOG.warning(
+                        "Could not configure existing device from configuration: %s",
+                        choice,
+                    )
                     return SetupError(error_type=IntegrationSetupError.OTHER)
-                self._reconfigured_device = config.devices.get(device_id)
+                self._reconfigured_device = devices.get(device_id)
+                if self._reconfigured_device is None:
+                    return SetupError(error_type=IntegrationSetupError.OTHER)
                 return self.get_additional_settings(self._reconfigured_device)
             case "reset":
-                config.devices.clear()  # triggers device instance removal
+                self._config_store().clear()  # triggers device instance removal
             case "backup_restore":
                 return await self._handle_backup_restore_step()
             case _:
@@ -367,7 +420,9 @@ class SetupFlow:
         self._setup_step = SetupSteps.DISCOVER
         return self._user_input_discovery
 
-    async def _handle_discovery(self, msg: UserDataResponse) -> RequestUserInput | SetupError:
+    async def _handle_discovery(
+        self, msg: UserDataResponse
+    ) -> RequestUserInput | SetupError:
         """
         Process user data response in a setup process.
 
@@ -386,7 +441,7 @@ class SetupFlow:
         dropdown_items = []
         _LOG.debug("Handle driver setup with discovery")
 
-        address = msg.input_values["address"]
+        address = self._string_input(msg, "address")
         if address:
             _LOG.debug("Starting manual driver setup for %s", address)
             try:
@@ -398,16 +453,22 @@ class SetupFlow:
                     model_name = info.get("modelName")
                 except Exception as exc:
                     _LOG.info(
-                        "Cannot get system info, trying to retrieve the model name either way %s: %s", address, exc
+                        "Cannot get system info, trying to retrieve the model name either way %s: %s",
+                        address,
+                        exc,
                     )
                     info = self._pairing_lg_tv.tv_info
                     model_name = info.system.get("modelName", "LG")
                     # unique_id = info.software.get("device_id")
 
-                dropdown_items.append({"id": address, "label": {"en": f"{model_name} [{address}]"}})
+                dropdown_items.append(
+                    {"id": address, "label": {"en": f"{model_name} [{address}]"}}
+                )
                 await self._pairing_lg_tv.disconnect()
             except WEBOSTV_EXCEPTIONS as ex:
-                _LOG.error("Cannot connect to manually entered address %s: %s", address, ex)
+                _LOG.error(
+                    "Cannot connect to manually entered address %s: %s", address, ex
+                )
                 return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
         else:
             _LOG.debug("Starting auto-discovery driver setup")
@@ -415,7 +476,9 @@ class SetupFlow:
             for device in self._discovered_devices:
                 device_data = {
                     "id": device.get("host"),
-                    "label": {"en": f"{device.get('friendlyName')} [{device.get('host')}]"},
+                    "label": {
+                        "en": f"{device.get('friendlyName')} [{device.get('host')}]"
+                    },
                 }
                 dropdown_items.append(device_data)
 
@@ -464,7 +527,9 @@ class SetupFlow:
             ],
         )
 
-    async def handle_device_choice(self, msg: UserDataResponse) -> RequestUserInput | SetupError:
+    async def handle_device_choice(
+        self, msg: UserDataResponse
+    ) -> RequestUserInput | SetupError:
         """
         Process user data response in a setup process.
 
@@ -474,22 +539,24 @@ class SetupFlow:
         :return: the setup action on how to continue: SetupComplete if a valid LG TV device was chosen.
         """
         discovered_device = None
-        host = msg.input_values["choice"]
-        mac_address = None
-        mac_address2 = None
+        host = self._string_input(msg, "choice")
+        if not host:
+            return SetupError(error_type=IntegrationSetupError.NOT_FOUND)
+        mac_address: str | None = None
+        mac_address2: str | None = None
         model_name = "LG"
-        serial_number = None
-        software_device_id = None
+        serial_number: str | None = None
+        software_device_id: str | None = None
         # pylint: disable=W0718
 
         if self._discovered_devices:
             for device in self._discovered_devices:
                 if device.get("host", None) == host:
                     discovered_device = device
-                    if device.get("wiredMac"):
-                        mac_address = device.get("wiredMac")
-                    if device.get("wifiMac"):
-                        mac_address2 = device.get("wifiMac")
+                    if isinstance(device.get("wiredMac"), str):
+                        mac_address = device["wiredMac"]
+                    if isinstance(device.get("wifiMac"), str):
+                        mac_address2 = device["wifiMac"]
 
         _LOG.debug(
             "Chosen LG TV: %s (wired mac %s, wifi mac %s). Trying to connect and retrieve device information...",
@@ -501,22 +568,34 @@ class SetupFlow:
             # simple connection check
             self._pairing_lg_tv = WebOsClient(host)
             await self._pairing_lg_tv.connect()
-            key = self._pairing_lg_tv.client_key
+            key = self._pairing_lg_tv.client_key or ""
             try:
                 info = await self._pairing_lg_tv.get_system_info()
-                model_name = info.get("modelName") or model_name
-                serial_number = info.get("serialNumber")
+                if isinstance(info.get("modelName"), str):
+                    model_name = info["modelName"]
+                if isinstance(info.get("serialNumber"), str):
+                    serial_number = info["serialNumber"]
                 info = await self._pairing_lg_tv.get_software_info()
-                software_device_id = info.get("device_id")
+                if isinstance(info.get("device_id"), str):
+                    software_device_id = info["device_id"]
             except Exception as ex:
-                _LOG.info("Cannot get system info, trying to retrieve the model name either way %s: %s", host, ex)
+                _LOG.info(
+                    "Cannot get system info, trying to retrieve the model name either way %s: %s",
+                    host,
+                    ex,
+                )
                 info = self._pairing_lg_tv.tv_info
-                model_name = info.system.get("modelName") or model_name
-                serial_number = info.system.get("serialNumber")
-                software_device_id = info.software.get("device_id")
+                if isinstance(info.system.get("modelName"), str):
+                    model_name = info.system["modelName"]
+                if isinstance(info.system.get("serialNumber"), str):
+                    serial_number = info.system["serialNumber"]
+                if isinstance(info.software.get("device_id"), str):
+                    software_device_id = info.software["device_id"]
 
-            if discovered_device and discovered_device.get("friendlyName"):
-                model_name = discovered_device.get("friendlyName")
+            if discovered_device and isinstance(
+                discovered_device.get("friendlyName"), str
+            ):
+                model_name = discovered_device["friendlyName"]
 
             if mac_address is None and software_device_id:
                 mac_address = software_device_id
@@ -549,7 +628,9 @@ class SetupFlow:
 
         return self.get_additional_settings(self._reconfigured_device)
 
-    def get_additional_settings(self, config_device: LGConfigDevice) -> RequestUserInput:
+    def get_additional_settings(
+        self, config_device: LGConfigDevice
+    ) -> RequestUserInput:
         """Extract additional settings for device registration."""
         self._setup_step = SetupSteps.ADDITIONAL_SETTINGS
         if config_device.mac_address2 is None:
@@ -592,7 +673,7 @@ class SetupFlow:
 
     async def _handle_backup_restore_step(self) -> RequestUserInput:
         self._setup_step = SetupSteps.BACKUP_RESTORE
-        current_config = config.devices.export()
+        current_config = self._config_store().export()
 
         _LOG.debug("Handle backup/restore step")
 
@@ -629,14 +710,22 @@ class SetupFlow:
         """Set settings for wake on lan."""
         # pylint: disable = W0718
         broadcast = ""
-        interface = ""
+        interface: str | None = ""
         try:
             interface = os.getenv("UC_INTEGRATION_INTERFACE")
             if interface is None or interface == "127.0.0.1":
                 interface = None
-                ips = [i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None)]
+                ips = [
+                    address
+                    for info in socket.getaddrinfo(socket.gethostname(), None)
+                    if isinstance(address := info[4][0], str)
+                ]
                 for ip_addr in ips:
-                    if ip_addr is None or ip_addr == "127.0.0.1" or self._is_ipv6_address(ip_addr):
+                    if (
+                        ip_addr is None
+                        or ip_addr == "127.0.0.1"
+                        or self._is_ipv6_address(ip_addr)
+                    ):
                         continue
                     interface = ip_addr
                     break
@@ -670,14 +759,19 @@ class SetupFlow:
                 *copy.deepcopy(TEST_SETUP_FIELDS),
             ],
         )
-        set_setup_field(user_input.settings, "address", self._reconfigured_device.address)
-        set_setup_field(user_input.settings, "mac_address", self._reconfigured_device.mac_address)
-        set_setup_field(user_input.settings, "mac_address2", self._reconfigured_device.mac_address2)
-        set_setup_field(user_input.settings, "interface", self._reconfigured_device.interface)
-        set_setup_field(user_input.settings, "broadcast", self._reconfigured_device.broadcast)
-        set_setup_field(user_input.settings, "wol_port", self._reconfigured_device.wol_port)
-        set_setup_field(user_input.settings, "update_apps_list", self._reconfigured_device.update_apps_list)
-        set_setup_field(user_input.settings, "log", self._reconfigured_device.log)
+        device = self._current_device()
+        set_setup_field(user_input.settings, "address", device.address)
+        set_setup_field(user_input.settings, "mac_address", device.mac_address)
+        set_setup_field(user_input.settings, "mac_address2", device.mac_address2)
+        set_setup_field(user_input.settings, "interface", device.interface)
+        set_setup_field(user_input.settings, "broadcast", device.broadcast)
+        set_setup_field(user_input.settings, "wol_port", device.wol_port)
+        set_setup_field(
+            user_input.settings,
+            "update_apps_list",
+            device.update_apps_list,
+        )
+        set_setup_field(user_input.settings, "log", device.log)
 
         return user_input
 
@@ -685,11 +779,12 @@ class SetupFlow:
         self, msg: UserDataResponse
     ) -> RequestUserConfirmation | SetupComplete | SetupError:
         """Handle setup flow for additional settings."""
-        address = msg.input_values.get("address", "")
-        mac_address = msg.input_values.get("mac_address", "")
-        mac_address2 = msg.input_values.get("mac_address2", "")
-        interface = msg.input_values.get("interface", "")
-        broadcast = msg.input_values.get("broadcast", "")
+        device = self._current_device()
+        address = self._string_input(msg, "address")
+        mac_address: str | None = self._string_input(msg, "mac_address")
+        mac_address2: str | None = self._string_input(msg, "mac_address2")
+        interface: str | None = self._string_input(msg, "interface")
+        broadcast: str | None = self._string_input(msg, "broadcast")
         test_wakeonlan = msg.input_values.get("test_wakeonlan", "false") == "true"
         pairing = msg.input_values.get("pairing", "false") == "true"
         update_apps_list = msg.input_values.get("update_apps_list", "false") == "true"
@@ -698,11 +793,11 @@ class SetupFlow:
 
         try:
             wolport = int(msg.input_values.get("wolport", 9))
-        except ValueError:
+        except (TypeError, ValueError):
             return SetupError(error_type=IntegrationSetupError.OTHER)
 
         if address != "":
-            self._reconfigured_device.address = address
+            device.address = address
         if mac_address == "":
             mac_address = None
         if mac_address2 == "":
@@ -712,22 +807,23 @@ class SetupFlow:
         if interface == "":
             interface = None
 
-        self._reconfigured_device.mac_address = mac_address
-        self._reconfigured_device.mac_address2 = mac_address2
-        self._reconfigured_device.interface = interface
-        self._reconfigured_device.broadcast = broadcast
-        self._reconfigured_device.wol_port = wolport
-        self._reconfigured_device.log = log
-        self._reconfigured_device.update_apps_list = update_apps_list
+        device.mac_address = mac_address
+        device.mac_address2 = mac_address2
+        device.interface = interface
+        device.broadcast = broadcast
+        device.wol_port = wolport
+        device.log = log
+        device.update_apps_list = update_apps_list
 
         if pairing:
-            client = WebOsClient(self._reconfigured_device.address)
+            client = WebOsClient(device.address)
             await client.connect()
-            self._reconfigured_device.key = client.client_key
+            if client.client_key is not None:
+                device.key = client.client_key
             await client.disconnect()
 
-        _LOG.info("[Additional settings] Setup updated settings %s", self._reconfigured_device)
-        config.devices.add_or_update(self._reconfigured_device, test_wakeonlan is False)
+        _LOG.info("[Additional settings] Setup updated settings %s", device)
+        self._config_store().add_or_update(device, test_wakeonlan is False)
 
         if self._pairing_lg_tv:
             await self._pairing_lg_tv.disconnect()
@@ -741,22 +837,27 @@ class SetupFlow:
         # LG TV device connection will be triggered with subscribe_entities request
         await asyncio.sleep(1)
         _LOG.info(
-            "Setup successfully completed for %s (%s)", self._reconfigured_device.name, self._reconfigured_device.id
+            "Setup successfully completed for %s (%s)",
+            device.name,
+            device.id,
         )
         return SetupComplete()
 
-    async def handle_wake_on_lan(self, msg: UserDataResponse) -> RequestUserConfirmation | SetupError:
+    async def handle_wake_on_lan(
+        self, msg: UserDataResponse
+    ) -> RequestUserConfirmation | SetupError:
         """Handle wake on lan test."""
-        mac_address = msg.input_values.get("mac_address", "")
-        mac_address2 = msg.input_values.get("mac_address2", "")
-        interface = msg.input_values.get("interface", "")
-        broadcast = msg.input_values.get("broadcast", "")
+        configured_device = self._current_device()
+        mac_address: str | None = self._string_input(msg, "mac_address")
+        mac_address2: str | None = self._string_input(msg, "mac_address2")
+        interface: str | None = self._string_input(msg, "interface")
+        broadcast: str | None = self._string_input(msg, "broadcast")
         # test_wakeonlan = msg.input_values.get("test_wakeonlan", False)
         _LOG.debug("Handle wake on lan")
         wolport = 9
         try:
             wolport = int(msg.input_values.get("wolport", wolport))
-        except ValueError:
+        except (TypeError, ValueError):
             return SetupError(error_type=IntegrationSetupError.OTHER)
 
         if mac_address == "":
@@ -768,24 +869,25 @@ class SetupFlow:
         if interface == "":
             interface = None
 
-        self._reconfigured_device.mac_address = mac_address
-        self._reconfigured_device.mac_address2 = mac_address2
-        self._reconfigured_device.interface = interface
-        self._reconfigured_device.broadcast = broadcast
-        self._reconfigured_device.wol_port = wolport
+        configured_device.mac_address = mac_address
+        configured_device.mac_address2 = mac_address2
+        configured_device.interface = interface
+        configured_device.broadcast = broadcast
+        configured_device.wol_port = wolport
 
-        _LOG.info("[Wake on lan] Setup updated settings %s", self._reconfigured_device)
-        config.devices.add_or_update(self._reconfigured_device, False)
+        _LOG.info("[Wake on lan] Setup updated settings %s", configured_device)
+        devices = self._config_store()
+        devices.add_or_update(configured_device, False)
         # triggers LG TV instance creation
-        config.devices.store()
+        devices.store()
 
         requests = 0
-        if self._reconfigured_device.mac_address:
+        if configured_device.mac_address:
             requests += 1
-        if self._reconfigured_device.mac_address2:
+        if configured_device.mac_address2:
             requests += 1
 
-        device = LGDevice(device_config=self._reconfigured_device)
+        device = LGDevice(device_config=configured_device)
         try:
             device.wakeonlan()
         except Exception as ex:
@@ -803,7 +905,9 @@ class SetupFlow:
             },
         )
 
-    async def _handle_backup_restore(self, msg: UserDataResponse) -> SetupComplete | SetupError:
+    async def _handle_backup_restore(
+        self, msg: UserDataResponse
+    ) -> SetupComplete | SetupError:
         """
         Process import of configuration
 
@@ -813,10 +917,13 @@ class SetupFlow:
         # flake8: noqa:F824
         # pylint: disable=W0602
         _LOG.debug("Handle backup/restore")
-        updated_config = msg.input_values["config"]
+        updated_config = self._string_input(msg, "config")
         _LOG.info("Replacing configuration with : %s", updated_config)
-        if not config.devices.import_config(updated_config):
-            _LOG.error("Setup error : unable to import updated configuration %s", updated_config)
+        if not self._config_store().import_config(updated_config):
+            _LOG.error(
+                "Setup error : unable to import updated configuration %s",
+                updated_config,
+            )
             return SetupError(error_type=IntegrationSetupError.OTHER)
         _LOG.debug("Configuration imported successfully")
 

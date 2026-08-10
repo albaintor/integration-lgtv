@@ -45,7 +45,7 @@ class LGTVMediaPlayer(MediaPlayer, LGEntity):
                 len(app_commands),
                 app_commands[:5] if len(app_commands) > 5 else app_commands,
             )
-        options = {Options.SIMPLE_COMMANDS: simple_commands}
+        options: dict[str, Any] = {Options.SIMPLE_COMMANDS: simple_commands}
         super().__init__(
             entity_id,
             config_device.name,
@@ -60,7 +60,9 @@ class LGTVMediaPlayer(MediaPlayer, LGEntity):
         """Return the device identifier."""
         return self._config_device.id
 
-    async def command(self, cmd_id: str, params: dict[str, Any] | None = None, *, websocket: Any) -> StatusCodes:
+    async def command(
+        self, cmd_id: str, params: dict[str, Any] | None = None, *, websocket: Any
+    ) -> StatusCodes:
         """
         Media-player entity command handler.
 
@@ -74,7 +76,8 @@ class LGTVMediaPlayer(MediaPlayer, LGEntity):
         """
         # pylint: disable = R0915
         _LOG.info("Got %s command request: %s %s", self.id, cmd_id, params)
-        res = None
+        params = params or {}
+        res = StatusCodes.NOT_IMPLEMENTED
 
         if self._device is None:
             _LOG.warning("No LG TV instance for entity: %s", self.id)
@@ -178,7 +181,7 @@ class LGTVMediaPlayer(MediaPlayer, LGEntity):
             res = await self._device.button("REWIND")
         elif cmd_id == Commands.SELECT_SOUND_MODE:
             res = await self._device.select_sound_output(params.get("mode"))
-        elif cmd_id in self.options[Options.SIMPLE_COMMANDS]:
+        elif cmd_id in (self.options or {}).get(Options.SIMPLE_COMMANDS, []):
             if cmd_id.startswith("LAUNCH_"):
                 # Handle dynamic app launch commands
                 app_name = cmd_id[7:]  # Remove "LAUNCH_" prefix
@@ -228,7 +231,10 @@ class LGTVMediaPlayer(MediaPlayer, LGEntity):
 
         if Attributes.SOURCE_LIST in update:
             if Attributes.SOURCE_LIST in self.attributes:
-                if update[Attributes.SOURCE_LIST] != self.attributes[Attributes.SOURCE_LIST]:
+                if (
+                    update[Attributes.SOURCE_LIST]
+                    != self.attributes[Attributes.SOURCE_LIST]
+                ):
                     attributes[Attributes.SOURCE_LIST] = update[Attributes.SOURCE_LIST]
 
         if Attributes.STATE in attributes:
@@ -240,7 +246,9 @@ class LGTVMediaPlayer(MediaPlayer, LGEntity):
         _LOG.debug("LGTVMediaPlayer update attributes %s -> %s", update, attributes)
         return attributes
 
-    def _key_update_helper(self, key: str, value: str | None, attributes):
+    def _key_update_helper(
+        self, key: str, value: Any, attributes: dict[str, Any]
+    ) -> dict[str, Any]:
         if value is None:
             return attributes
 

@@ -14,6 +14,7 @@ from ucapi import EntityTypes, Remote, StatusCodes
 from ucapi.media_player import States
 from ucapi.remote import Attributes, Commands, Features, Options
 from ucapi.remote import States as RemoteStates
+from ucapi.ui import DeviceButtonMapping, UiPage
 
 from buttons import BUTTONS
 from config import LGConfigDevice, LGEntity, create_entity_id
@@ -38,13 +39,14 @@ LG_REMOTE_STATE_MAPPING = {
 COMMAND_TIMEOUT = 4.5
 
 
-def get_int_param(param: str, params: dict[str, Any], default: int):
+def get_int_param(param: str, params: dict[str, Any] | None, default: int) -> int:
     """Get parameter in integer format."""
     # TODO bug to be fixed on UC Core : some params are sent as (empty) strings by remote (hold == "")
-    value = params.get(param, default)
-    if isinstance(value, str) and len(value) > 0:
+    value = (params or {}).get(param, default)
+    try:
         return int(float(value))
-    return value
+    except (TypeError, ValueError):
+        return default
 
 
 class LGRemote(Remote, LGEntity):
@@ -56,7 +58,7 @@ class LGRemote(Remote, LGEntity):
         self._config_device = config_device
         entity_id = create_entity_id(config_device.id, EntityTypes.REMOTE)
         features = [Features.SEND_CMD, Features.ON_OFF, Features.TOGGLE]
-        attributes = {
+        attributes: dict[str, Any] = {
             Attributes.STATE: LG_REMOTE_STATE_MAPPING.get(device.state),
         }
         # Merge static commands with dynamic app commands and custom commands
@@ -70,11 +72,14 @@ class LGRemote(Remote, LGEntity):
             )
 
         # Merge static UI pages with dynamic apps page
-        ui_pages = list(LG_REMOTE_UI_PAGES)
+        ui_pages: list[UiPage | dict[str, Any]] = [*LG_REMOTE_UI_PAGES]
         try:
             apps_page = device.generate_apps_ui_page()
             if apps_page:
-                _LOG.info("LGRemote: Added dynamic 'Apps' UI page with %d apps", len(apps_page.items))
+                _LOG.info(
+                    "LGRemote: Added dynamic 'Apps' UI page with %d apps",
+                    len(apps_page.items),
+                )
                 _LOG.debug(
                     "Apps page structure: page_id=%s, grid=%s, sample_items=%s",
                     apps_page.page_id,
@@ -85,13 +90,16 @@ class LGRemote(Remote, LGEntity):
         except Exception as ex:  # pylint: disable = W0718
             _LOG.error("Failed to generate apps UI page: %s", ex, exc_info=True)
 
+        button_mapping: list[DeviceButtonMapping | dict[str, Any]] = [
+            *LG_REMOTE_BUTTONS_MAPPING
+        ]
         super().__init__(
             entity_id,
             config_device.name,
             features,
             attributes,
             simple_commands=simple_commands,
-            button_mapping=LG_REMOTE_BUTTONS_MAPPING,
+            button_mapping=button_mapping,
             ui_pages=ui_pages,
         )
 
@@ -100,7 +108,9 @@ class LGRemote(Remote, LGEntity):
         """Return the device identifier."""
         return self._config_device.id
 
-    async def command(self, cmd_id: str, params: dict[str, Any] | None = None, *, websocket: Any) -> StatusCodes:
+    async def command(
+        self, cmd_id: str, params: dict[str, Any] | None = None, *, websocket: Any
+    ) -> StatusCodes:
         """
         Media-player entity command handler.
 
@@ -130,17 +140,27 @@ class LGRemote(Remote, LGEntity):
                 async with asyncio.timeout(COMMAND_TIMEOUT):
                     res = await shield(self.send_commands(cmd_id, params))
             except asyncio.TimeoutError:
-                _LOG.info("[%s] Command request timeout, keep running: %s %s", self.id, cmd_id, params)
+                _LOG.info(
+                    "[%s] Command request timeout, keep running: %s %s",
+                    self.id,
+                    cmd_id,
+                    params,
+                )
         else:
             return StatusCodes.NOT_IMPLEMENTED
         return res
 
-    async def send_commands(self, cmd_id: str, params: dict[str, Any] | None = None) -> StatusCodes:
+    async def send_commands(
+        self, cmd_id: str, params: dict[str, Any] | None = None
+    ) -> StatusCodes:
         """Handle custom command or commands sequence."""
         # hold = self.get_int_param("hold", params, 0)
         delay = get_int_param("delay", params, 0)
         repeat = get_int_param("repeat", params, 1)
-        command = params.get("command", "")
+        payload = params or {}
+        command = payload.get("command", "")
+        if not isinstance(command, str):
+            return StatusCodes.BAD_REQUEST
         res = StatusCodes.OK
 
         for _i in range(0, repeat):
@@ -151,8 +171,12 @@ class LGRemote(Remote, LGEntity):
                 if delay > 0:
                     await asyncio.sleep(delay / 1000)
             else:
-                commands = params.get("sequence", [])
+                commands = payload.get("sequence", [])
+                if not isinstance(commands, list):
+                    return StatusCodes.BAD_REQUEST
                 for command in commands:
+                    if not isinstance(command, str):
+                        return StatusCodes.BAD_REQUEST
                     result = await self.call_command(command)
                     if result != StatusCodes.OK:
                         res = result
@@ -183,11 +207,13 @@ class LGRemote(Remote, LGEntity):
             # Handle dynamic app launch commands
             app_name = command[7:]  # Remove "LAUNCH_" prefix
             return await self._device.launch_app_by_name(app_name)
-        if command in self.options[Options.SIMPLE_COMMANDS]:
+        if command in (self.options or {}).get(Options.SIMPLE_COMMANDS, []):
             return await self._device.button(command)
         return await self._device.custom_command(command)
 
-    def _key_update_helper(self, key: str, value: str | None, attributes):
+    def _key_update_helper(
+        self, key: str, value: Any, attributes: dict[str, Any]
+    ) -> dict[str, Any]:
         if value is None:
             return attributes
         if key in self.attributes:

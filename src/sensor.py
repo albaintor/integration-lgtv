@@ -43,7 +43,7 @@ class LGSensor(LGEntity, Sensor):
         name: str | dict[str, str],
         config_device: LGConfigDevice,
         device: lg.LGDevice,
-        options: dict[Options, Any] | None = None,
+        options: dict[str, Any] | None = None,
         device_class: DeviceClasses = DeviceClasses.CUSTOM,
     ) -> None:
         """Initialize the class."""
@@ -53,7 +53,14 @@ class LGSensor(LGEntity, Sensor):
         self._config_device = config_device
         self._device: lg.LGDevice = device
         self._state: States = States.UNAVAILABLE
-        super().__init__(entity_id, name, features, self.all_attributes, device_class=device_class, options=options)
+        super().__init__(
+            entity_id,
+            name,
+            features,
+            self.all_attributes,
+            device_class=device_class,
+            options=options,
+        )
 
     @property
     def deviceid(self) -> str:
@@ -63,7 +70,7 @@ class LGSensor(LGEntity, Sensor):
     @property
     def state(self) -> States:
         """Return sensor state."""
-        raise self._state
+        return self._state
 
     @property
     def sensor_value(self) -> str | float:
@@ -78,12 +85,14 @@ class LGSensor(LGEntity, Sensor):
             Attributes.STATE: SENSOR_STATE_MAPPING.get(self._device.state),
         }
 
-    def update_attributes(self, update: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    def update_attributes(self, update: dict[str, Any] | None = None) -> dict[str, Any]:
         """Return updated sensor value from full update if provided or sensor value if no udpate is provided."""
         attributes: dict[str, Any] = {}
         if update:
             if ucapi.media_player.Attributes.STATE in update:
-                new_state = SENSOR_STATE_MAPPING.get(update[ucapi.media_player.Attributes.STATE])
+                new_state = SENSOR_STATE_MAPPING.get(
+                    update[ucapi.media_player.Attributes.STATE], States.UNKNOWN
+                )
                 if new_state != self._state:
                     self._state = new_state
                     attributes[Attributes.STATE] = self._state
@@ -104,7 +113,12 @@ class LGSensorInputSource(LGSensor):
         entity_id = f"{create_entity_id(config_device.id, EntityTypes.SENSOR)}.{self.ENTITY_NAME}"
         self._device = device
         self._config_device = config_device
-        super().__init__(entity_id, {"en": "Input source", "fr": "Entrée source"}, config_device, device)
+        super().__init__(
+            entity_id,
+            {"en": "Input source", "fr": "Entrée source"},
+            config_device,
+            device,
+        )
 
     @property
     def sensor_value(self) -> str | float:
@@ -123,12 +137,14 @@ class LGSensorVolume(LGSensor):
         entity_id = f"{create_entity_id(config_device.id, EntityTypes.SENSOR)}.{self.ENTITY_NAME}"
         self._device = device
         self._config_device = config_device
-        options = {
+        options: dict[str, Any] = {
             Options.CUSTOM_UNIT: "%",
             Options.MIN_VALUE: 0,
             Options.MAX_VALUE: 100,
         }
-        super().__init__(entity_id, {"en": "Volume", "fr": "Volume"}, config_device, device, options)
+        super().__init__(
+            entity_id, {"en": "Volume", "fr": "Volume"}, config_device, device, options
+        )
 
     @property
     def sensor_value(self) -> str | float:
@@ -148,7 +164,12 @@ class LGSensorMuted(LGSensor):
         self._device = device
         self._config_device = config_device
         super().__init__(
-            entity_id, {"en": "Muted", "fr": "Son coupé"}, config_device, device, None, DeviceClasses.BINARY
+            entity_id,
+            {"en": "Muted", "fr": "Son coupé"},
+            config_device,
+            device,
+            None,
+            DeviceClasses.BINARY,
         )
 
     @property
@@ -168,7 +189,12 @@ class LGSensorSoundOutput(LGSensor):
         entity_id = f"{create_entity_id(config_device.id, EntityTypes.SENSOR)}.{self.ENTITY_NAME}"
         self._device = device
         self._config_device = config_device
-        super().__init__(entity_id, {"en": "Sound output", "fr": "Sortie audio"}, config_device, device)
+        super().__init__(
+            entity_id,
+            {"en": "Sound output", "fr": "Sortie audio"},
+            config_device,
+            device,
+        )
 
     @property
     def sensor_value(self) -> str | float:

@@ -7,8 +7,9 @@ import logging
 import re
 import socket
 import sys
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any
 from urllib.parse import urlparse
+from xml.etree.ElementTree import Element
 
 import httpx
 from defusedxml.ElementTree import fromstring
@@ -51,7 +52,7 @@ SUPPORTED_DEVICETYPES = [
 SUPPORTED_MANUFACTURERS = ["LG Electronics", "LG"]
 
 
-def ssdp_request(ssdp_st: str, ssdp_mx: float = SSDP_MX) -> bytes:
+def ssdp_request(ssdp_st: str, ssdp_mx: int = SSDP_MX) -> bytes:
     """Return request bytes for given st and mx."""
     return "\r\n".join(
         [
@@ -80,12 +81,16 @@ def get_best_family(*address):
     return family, sockaddr
 
 
-def get_local_ips() -> List[str]:
+def get_local_ips() -> list[str]:
     """Get IPs of local network adapters."""
-    return [i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None)]
+    return [
+        address
+        for info in socket.getaddrinfo(socket.gethostname(), None)
+        if isinstance(address := info[4][0], str)
+    ]
 
 
-async def async_identify_lg_devices() -> List[Dict]:
+async def async_identify_lg_devices() -> list[dict[str, Any]]:
     """
     Identify LG using SSDP and SCPD queries.
 
@@ -114,11 +119,14 @@ async def async_identify_lg_devices() -> List[Dict]:
             except Exception as ex:
                 _LOGGER.error("Error while discovering %s", ex)
 
-    unique_devices: dict[str, dict[str, any]] = {}
+    unique_devices: dict[str, dict[str, Any]] = {}
     for device in devices:
-        unique_device = unique_devices.get(device.get("host"), None)
+        host = device.get("host")
+        if not isinstance(host, str):
+            continue
+        unique_device = unique_devices.get(host)
         if not unique_device:
-            unique_devices[device.get("host")] = device
+            unique_devices[host] = device
             continue
         if device.get("wiredMac"):
             unique_device["wiredMac"] = device.get("wiredMac")
@@ -128,7 +136,7 @@ async def async_identify_lg_devices() -> List[Dict]:
     return list(unique_devices.values())
 
 
-async def async_send_ssdp_broadcast() -> Set[str]:
+async def async_send_ssdp_broadcast() -> set[str]:
     """
     Send SSDP broadcast messages to discover UPnP devices.
 
@@ -137,7 +145,7 @@ async def async_send_ssdp_broadcast() -> Set[str]:
     # Send up to three different broadcast messages
     ips = get_local_ips()
     # Prepare output of responding devices
-    urls = set()
+    urls: set[str] = set()
 
     tasks = []
     for ip_addr in ips:
@@ -154,7 +162,7 @@ async def async_send_ssdp_broadcast() -> Set[str]:
     return urls
 
 
-async def async_send_ssdp_broadcast_ip(ip_addr: str) -> Set[str]:
+async def async_send_ssdp_broadcast_ip(ip_addr: str) -> set[str]:
     """Send SSDP broadcast messages to a single IP."""
     try:
         # Ignore 169.254.0.0/16 addresses
@@ -175,7 +183,9 @@ async def async_send_ssdp_broadcast_ip(ip_addr: str) -> Set[str]:
         # Close the connection
         transport.close()
 
-        _LOGGER.debug("Got %s results after SSDP queries using ip %s", len(protocol.urls), ip_addr)
+        _LOGGER.debug(
+            "Got %s results after SSDP queries using ip %s", len(protocol.urls), ip_addr
+        )
 
         return protocol.urls
     # pylint: disable = W0718
@@ -183,7 +193,15 @@ async def async_send_ssdp_broadcast_ip(ip_addr: str) -> Set[str]:
         return set()
 
 
-def evaluate_scpd_xml(url: str, response: Response) -> Optional[Dict]:
+def _required_text(element: Element, path: str) -> str:
+    """Return a required XML element value."""
+    child = element.find(path)
+    if child is None or child.text is None:
+        raise ValueError(f"Missing required XML element: {path}")
+    return child.text
+
+
+def evaluate_scpd_xml(url: str, response: Response) -> dict[str, Any] | None:
     """
     Evaluate SCPD XML.
 
@@ -195,45 +213,56 @@ def evaluate_scpd_xml(url: str, response: Response) -> Optional[Dict]:
         root = fromstring(response.text)
         # Look for manufacturer "SoftAtHome" in response.
         # Using "try" in case tags are not available in XML
-        device = {}
-        device_xml = None
+        device: dict[str, Any] = {}
+        device_xml: Element | None = None
+        root_device = root.find(SCPD_DEVICE)
+        if root_device is None:
+            raise ValueError("Missing UPnP device element")
 
-        device["manufacturer"] = root.find(SCPD_DEVICE).find(SCPD_MANUFACTURER).text
+        device["manufacturer"] = _required_text(root_device, SCPD_MANUFACTURER)
 
         _LOGGER.debug("Device %s has manufacturer %s", url, device["manufacturer"])
 
         if device["manufacturer"] not in SUPPORTED_MANUFACTURERS:
             return None
 
-        if root.find(SCPD_DEVICE).find(SCPD_DEVICETYPE).text in SUPPORTED_DEVICETYPES:
-            device_xml = root.find(SCPD_DEVICE)
-        elif root.find(SCPD_DEVICE).find(SCPD_DEVICELIST) is not None:
-            for dev in root.find(SCPD_DEVICE).find(SCPD_DEVICELIST):
-                if dev.find(SCPD_DEVICETYPE).text in SUPPORTED_DEVICETYPES and dev.find(SCPD_SERIALNUMBER) is not None:
+        if _required_text(root_device, SCPD_DEVICETYPE) in SUPPORTED_DEVICETYPES:
+            device_xml = root_device
+        elif (device_list := root_device.find(SCPD_DEVICELIST)) is not None:
+            for dev in device_list:
+                if (
+                    _required_text(dev, SCPD_DEVICETYPE) in SUPPORTED_DEVICETYPES
+                    and dev.find(SCPD_SERIALNUMBER) is not None
+                ):
                     device_xml = dev
                     break
 
         if device_xml is None:
             return None
 
-        if device_xml.find(SCPD_PRESENTATIONURL) is not None:
-            device["host"] = urlparse(device_xml.find(SCPD_PRESENTATIONURL).text).hostname
-            device["presentationURL"] = device_xml.find(SCPD_PRESENTATIONURL).text
+        presentation_url = device_xml.find(SCPD_PRESENTATIONURL)
+        if presentation_url is not None and presentation_url.text is not None:
+            device["host"] = urlparse(presentation_url.text).hostname
+            device["presentationURL"] = presentation_url.text
         else:
             device["host"] = urlparse(url).hostname
 
-        device["modelName"] = device_xml.find(SCPD_MODELNAME).text
-        device["serialNumber"] = device_xml.find(SCPD_SERIALNUMBER).text
-        device["friendlyName"] = device_xml.find(SCPD_FRIENDLYNAME).text
+        device["modelName"] = _required_text(device_xml, SCPD_MODELNAME)
+        device["serialNumber"] = _required_text(device_xml, SCPD_SERIALNUMBER)
+        device["friendlyName"] = _required_text(device_xml, SCPD_FRIENDLYNAME)
 
-        if device_xml.find(SCPD_WIREDMAC) is not None:
-            device["wiredMac"] = device_xml.find(SCPD_WIREDMAC).text
-        if device_xml.find(SCPD_WIFIMAC) is not None:
-            device["wifiMac"] = device_xml.find(SCPD_WIFIMAC).text
+        if (wired_mac := device_xml.find(SCPD_WIREDMAC)) is not None:
+            device["wiredMac"] = wired_mac.text
+        if (wifi_mac := device_xml.find(SCPD_WIFIMAC)) is not None:
+            device["wifiMac"] = wifi_mac.text
 
         return device
     except Exception as err:
-        _LOGGER.warning("Error occurred during evaluation of SCPD XML from URI %s: %s, skip this device", url, err)
+        _LOGGER.warning(
+            "Error occurred during evaluation of SCPD XML from URI %s: %s, skip this device",
+            url,
+            err,
+        )
         return None
 
 
@@ -242,7 +271,7 @@ class LGTVSSDP(asyncio.DatagramProtocol):
 
     def __init__(self) -> None:
         """Create instance."""
-        self.urls = set()
+        self.urls: set[str] = set()
 
     def connection_made(self, transport: asyncio.DatagramTransport) -> None:
         """Send SSDP request when connection was made."""
@@ -252,7 +281,7 @@ class LGTVSSDP(asyncio.DatagramProtocol):
             transport.sendto(request, SSDP_TARGET)
             _LOGGER.debug("SSDP request sent %s", request)
 
-    def datagram_received(self, data: bytes, addr: Tuple[str, int]) -> None:
+    def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:
         """Receive responses to SSDP call."""
         # Some string operations to get the receivers URL
         # which could be found between LOCATION and end of line of the response

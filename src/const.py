@@ -168,18 +168,38 @@ LG_SIMPLE_COMMANDS = [
 LG_REMOTE_BUTTONS_MAPPING: list[DeviceButtonMapping] = [
     DeviceButtonMapping(**{"button": Buttons.BACK, "short_press": {"cmd_id": "BACK"}}),
     DeviceButtonMapping(**{"button": Buttons.HOME, "short_press": {"cmd_id": "HOME"}}),
-    DeviceButtonMapping(**{"button": Buttons.CHANNEL_DOWN, "short_press": {"cmd_id": "CHANNELDOWN"}}),
-    DeviceButtonMapping(**{"button": Buttons.CHANNEL_UP, "short_press": {"cmd_id": "CHANNELUP"}}),
+    DeviceButtonMapping(
+        **{"button": Buttons.CHANNEL_DOWN, "short_press": {"cmd_id": "CHANNELDOWN"}}
+    ),
+    DeviceButtonMapping(
+        **{"button": Buttons.CHANNEL_UP, "short_press": {"cmd_id": "CHANNELUP"}}
+    ),
     DeviceButtonMapping(**{"button": Buttons.DPAD_UP, "short_press": {"cmd_id": "UP"}}),
-    DeviceButtonMapping(**{"button": Buttons.DPAD_DOWN, "short_press": {"cmd_id": "DOWN"}}),
-    DeviceButtonMapping(**{"button": Buttons.DPAD_LEFT, "short_press": {"cmd_id": "LEFT"}}),
-    DeviceButtonMapping(**{"button": Buttons.DPAD_RIGHT, "short_press": {"cmd_id": "RIGHT"}}),
-    DeviceButtonMapping(**{"button": Buttons.DPAD_MIDDLE, "short_press": {"cmd_id": "ENTER"}}),
+    DeviceButtonMapping(
+        **{"button": Buttons.DPAD_DOWN, "short_press": {"cmd_id": "DOWN"}}
+    ),
+    DeviceButtonMapping(
+        **{"button": Buttons.DPAD_LEFT, "short_press": {"cmd_id": "LEFT"}}
+    ),
+    DeviceButtonMapping(
+        **{"button": Buttons.DPAD_RIGHT, "short_press": {"cmd_id": "RIGHT"}}
+    ),
+    DeviceButtonMapping(
+        **{"button": Buttons.DPAD_MIDDLE, "short_press": {"cmd_id": "ENTER"}}
+    ),
     DeviceButtonMapping(**{"button": Buttons.PLAY, "short_press": {"cmd_id": "PAUSE"}}),
-    DeviceButtonMapping(**{"button": Buttons.PREV, "short_press": {"cmd_id": "REWIND"}}),
-    DeviceButtonMapping(**{"button": Buttons.NEXT, "short_press": {"cmd_id": "FASTFORWARD"}}),
-    DeviceButtonMapping(**{"button": Buttons.VOLUME_UP, "short_press": {"cmd_id": "VOLUMEUP"}}),
-    DeviceButtonMapping(**{"button": Buttons.VOLUME_DOWN, "short_press": {"cmd_id": "VOLUMEDOWN"}}),
+    DeviceButtonMapping(
+        **{"button": Buttons.PREV, "short_press": {"cmd_id": "REWIND"}}
+    ),
+    DeviceButtonMapping(
+        **{"button": Buttons.NEXT, "short_press": {"cmd_id": "FASTFORWARD"}}
+    ),
+    DeviceButtonMapping(
+        **{"button": Buttons.VOLUME_UP, "short_press": {"cmd_id": "VOLUMEUP"}}
+    ),
+    DeviceButtonMapping(
+        **{"button": Buttons.VOLUME_DOWN, "short_press": {"cmd_id": "VOLUMEDOWN"}}
+    ),
     DeviceButtonMapping(**{"button": Buttons.MUTE, "short_press": {"cmd_id": "MUTE"}}),
 ]
 
