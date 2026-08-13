@@ -3,14 +3,18 @@
 import asyncio
 import logging
 import sys
+from types import SimpleNamespace
 from typing import Any
 
 sys.path.insert(1, "src")
 
 from aiowebostv import WebOsClient, WebOsTvState
 from rich import print_json
+from ucapi import StatusCodes
+from ucapi.select import Attributes as SelectAttributes
 
 from config import LGConfigDevice
+from const import LGSelects
 from lg import Events, LGDevice
 from aiowebostv import endpoints as ep
 
@@ -71,6 +75,57 @@ async def direct_connect():
     await asyncio.sleep(50)
 
 
+def test_picture_mode_selection_uses_display_name():
+    """Keep the selector value aligned with its human-readable options."""
+
+    class FakeTv:
+        def __init__(self):
+            self.requests = []
+
+        async def request(self, endpoint, payload=None):
+            self.requests.append((endpoint, payload))
+            if endpoint == ep.GET_SYSTEM_SETTINGS:
+                return {"returnValue": True, "settings": {"pictureMode": "hdrStandard"}}
+            return {"returnValue": True}
+
+    class FakeEvents:
+        def __init__(self):
+            self.updates = []
+
+        def emit(self, event, device_id, update):
+            self.updates.append((event, device_id, update))
+
+    async def scenario():
+        client = object.__new__(LGDevice)
+        client._device_config = SimpleNamespace(address="test-tv")
+        client._tv = FakeTv()
+        client._picture_modes = {"Hdr Standard": "hdrStandard"}
+        client._picture_mode = "Cinema"
+        client._background_tasks = set()
+        client.events = FakeEvents()
+        client.id = "test-device"
+
+        result = await LGDevice.set_picture_mode.__wrapped__(client, "Hdr Standard")
+        pending = list(client._background_tasks)
+        if pending:
+            await asyncio.gather(*pending)
+
+        assert result == StatusCodes.OK
+        assert client._tv.requests[0] == (
+            "settings/setSystemSettings",
+            {"category": "picture", "settings": {"pictureMode": "hdrStandard"}},
+        )
+        assert client.picture_mode == "Hdr Standard"
+        current_options = [
+            update[LGSelects.SELECT_PICTURE_MODE][SelectAttributes.CURRENT_OPTION]
+            for _, _, update in client.events.updates
+        ]
+        assert current_options
+        assert set(current_options) == {"Hdr Standard"}
+
+    asyncio.run(scenario())
+
+
 async def main():
     _LOG.debug("Start connection")
     # await pair()
@@ -94,7 +149,11 @@ async def main():
     await client.power_on()
     await client.connect()
 
-    print_json(data=await client._tv.request(ep.GET_CONFIGS, payload={"configNames": ["tv.model.*"]}))
+    print_json(
+        data=await client._tv.request(
+            ep.GET_CONFIGS, payload={"configNames": ["tv.model.*"]}
+        )
+    )
 
     # print_json(data=await client.get_system_settings("picture", keys=["pictureModes"]))
     # print_json(data=await client._tv.get_power_state())

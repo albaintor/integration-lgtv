@@ -367,6 +367,11 @@ class LGDevice:
         """Normalize volume to the range accepted by LG webOS."""
         return max(0, min(100, int(round(float(volume)))))
 
+    @staticmethod
+    def _picture_mode_name(picture_mode: str) -> str:
+        """Convert a webOS picture-mode identifier to its selector label."""
+        return re.sub(r"([A-Z])", r" \1", picture_mode).strip().title()
+
     def _arm_volume_target(self, volume: int) -> None:
         """Record the optimistic volume target while webOS catches up."""
         self._volume_target = volume
@@ -688,9 +693,7 @@ class LGDevice:
         if not self._picture_mode and self._picture_mode_retries > 0:
             try:
                 picture_mode = await self.get_picture_mode()
-                picture_mode_name = (
-                    re.sub(r"([A-Z])", r" \1", picture_mode).strip().title()
-                )
+                picture_mode_name = self._picture_mode_name(picture_mode)
                 if picture_mode_name != self.picture_mode:
                     self._picture_mode = picture_mode_name
                     updated_data[LGSelects.SELECT_PICTURE_MODE] = {
@@ -817,9 +820,9 @@ class LGDevice:
             self._media_image_url = media_image_url
             updated_data[MediaAttr.MEDIA_IMAGE_URL] = self._media_image_url
 
-        _sound_output = self._sound_output
-        self._sound_output = self._tv.tv_state.sound_output
-        if _sound_output != self._sound_output:
+        sound_output = self._tv.tv_state.sound_output
+        if sound_output and sound_output != self._sound_output:
+            self._sound_output = sound_output
             updated_data[MediaAttr.SOUND_MODE] = self.sound_output
             updated_data[LGSelects.SELECT_SOUND_OUTPUT] = {
                 SelectAttributes.CURRENT_OPTION: self.sound_output
@@ -848,9 +851,7 @@ class LGDevice:
                 modes = LG_PICTURE_MODES_GENERATION[DEFAULT_PICTURE_MODE]
             self._picture_modes = {}
             for mode in modes:
-                self._picture_modes[
-                    re.sub(r"([A-Z])", r" \1", mode).strip().title()
-                ] = mode
+                self._picture_modes[self._picture_mode_name(mode)] = mode
             self.events.emit(
                 Events.UPDATE,
                 self.id,
@@ -1504,7 +1505,7 @@ class LGDevice:
             return ucapi.StatusCodes.BAD_REQUEST
         try:
             target = self._normalize_volume_level(volume)
-        except (TypeError, ValueError):
+        except (OverflowError, TypeError, ValueError):
             return ucapi.StatusCodes.BAD_REQUEST
 
         _LOG.debug(
@@ -1755,7 +1756,27 @@ class LGDevice:
                 inv_map,
             )
             return ucapi.StatusCodes.BAD_REQUEST
-        await self._tv.change_sound_output(sound_output)
+        response = await self._tv.change_sound_output(sound_output)
+        _LOG.debug(
+            "[%s] LG TV sound output response %s",
+            self._device_config.address,
+            response,
+        )
+
+        # Keep the integration state coherent immediately. Some TVs do not
+        # publish a sound-output subscription update after a successful change.
+        self._sound_output = sound_output
+        self._tv.tv_state.sound_output = sound_output
+        self.events.emit(
+            Events.UPDATE,
+            self.id,
+            {
+                MediaAttr.SOUND_MODE: self.sound_output,
+                LGSelects.SELECT_SOUND_OUTPUT: {
+                    SelectAttributes.CURRENT_OPTION: self.sound_output
+                },
+            },
+        )
         return ucapi.StatusCodes.OK
 
     @retry()
@@ -2011,11 +2032,12 @@ class LGDevice:
         """Update picture mode."""
         try:
             picture_mode = await self.get_picture_mode()
-            if picture_mode != self.picture_mode:
-                self._picture_mode = picture_mode
+            picture_mode_name = self._picture_mode_name(picture_mode)
+            if picture_mode_name != self.picture_mode:
+                self._picture_mode = picture_mode_name
                 update: dict[str, Any] = {
                     LGSelects.SELECT_PICTURE_MODE: {
-                        SelectAttributes.CURRENT_OPTION: picture_mode
+                        SelectAttributes.CURRENT_OPTION: picture_mode_name
                     }
                 }
                 if picture_mode not in self._picture_modes.values():
@@ -2024,9 +2046,7 @@ class LGDevice:
                         self._device_config.address,
                         picture_mode,
                     )
-                    self._picture_modes[
-                        re.sub(r"([A-Z])", r" \1", picture_mode).strip().title()
-                    ] = picture_mode
+                    self._picture_modes[picture_mode_name] = picture_mode
                     update[LGSelects.SELECT_PICTURE_MODE][SelectAttributes.OPTIONS] = (
                         self.picture_modes
                     )
@@ -2039,6 +2059,7 @@ class LGDevice:
                 ex,
             )
             if new_mode:
+                self._picture_mode = new_mode
                 self.events.emit(
                     Events.UPDATE,
                     self.id,
@@ -2064,6 +2085,18 @@ class LGDevice:
             "picture", {"pictureMode": mode}
         )
         if results and results.get("returnValue", None) is True:
+            # Keep the selector on one of its advertised display values while
+            # webOS applies the raw picture-mode identifier.
+            self._picture_mode = picture_mode
+            self.events.emit(
+                Events.UPDATE,
+                self.id,
+                {
+                    LGSelects.SELECT_PICTURE_MODE: {
+                        SelectAttributes.CURRENT_OPTION: picture_mode
+                    }
+                },
+            )
             self._track_task(
                 asyncio.create_task(self.update_picture_mode(picture_mode))
             )
