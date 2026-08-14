@@ -128,6 +128,122 @@ def test_picture_mode_selection_uses_display_name():
     asyncio.run(scenario())
 
 
+def test_picture_mode_selection_ignores_stale_readback():
+    """Do not replace an accepted selection with the TV's previous mode."""
+
+    class FakeTv:
+        def __init__(self):
+            self.requests = []
+            self.picture_modes = iter(["expert1", "expert2"])
+
+        async def request(self, endpoint, payload=None):
+            self.requests.append((endpoint, payload))
+            if endpoint == ep.GET_SYSTEM_SETTINGS:
+                return {
+                    "returnValue": True,
+                    "settings": {"pictureMode": next(self.picture_modes)},
+                }
+            return {"returnValue": True}
+
+    class FakeEvents:
+        def __init__(self):
+            self.current_options = []
+
+        def emit(self, _event, _device_id, update):
+            if current_option := update.get(LGSelects.SELECT_PICTURE_MODE, {}).get(
+                SelectAttributes.CURRENT_OPTION
+            ):
+                self.current_options.append(current_option)
+
+    async def scenario():
+        client = object.__new__(LGDevice)
+        client._device_config = SimpleNamespace(address="test-tv")
+        client._tv = FakeTv()
+        client._picture_modes = {"Expert1": "expert1", "Expert2": "expert2"}
+        client._picture_mode = "Expert1"
+        client._picture_mode_direct_write_supported = None
+        client._picture_mode_update_task = None
+        client._background_tasks = set()
+        client.events = FakeEvents()
+        client.id = "test-device"
+
+        result = await LGDevice.set_picture_mode.__wrapped__(client, "Expert2")
+        pending = list(client._background_tasks)
+        if pending:
+            await asyncio.gather(*pending)
+
+        assert result == StatusCodes.OK
+        assert client.picture_mode == "Expert2"
+        assert client.events.current_options == ["Expert2"]
+        assert [
+            endpoint
+            for endpoint, _ in client._tv.requests
+            if endpoint == ep.GET_SYSTEM_SETTINGS
+        ] == [ep.GET_SYSTEM_SETTINGS, ep.GET_SYSTEM_SETTINGS]
+
+    asyncio.run(scenario())
+
+
+def test_picture_mode_selection_cancels_older_confirmation():
+    """Only the newest picture-mode selection may update the selector."""
+
+    class FakeTv:
+        def __init__(self):
+            self.requests = []
+            self.requested_mode = "expert1"
+
+        async def request(self, endpoint, payload=None):
+            self.requests.append((endpoint, payload))
+            if endpoint == ep.GET_SYSTEM_SETTINGS:
+                return {
+                    "returnValue": True,
+                    "settings": {"pictureMode": self.requested_mode},
+                }
+            if endpoint == "settings/setSystemSettings":
+                self.requested_mode = payload["settings"]["pictureMode"]
+            return {"returnValue": True}
+
+    class FakeEvents:
+        def __init__(self):
+            self.current_options = []
+
+        def emit(self, _event, _device_id, update):
+            if current_option := update.get(LGSelects.SELECT_PICTURE_MODE, {}).get(
+                SelectAttributes.CURRENT_OPTION
+            ):
+                self.current_options.append(current_option)
+
+    async def scenario():
+        client = object.__new__(LGDevice)
+        client._device_config = SimpleNamespace(address="test-tv")
+        client._tv = FakeTv()
+        client._picture_modes = {
+            "Expert1": "expert1",
+            "Expert2": "expert2",
+            "Film Maker": "filmMaker",
+        }
+        client._picture_mode = "Expert1"
+        client._picture_mode_direct_write_supported = None
+        client._picture_mode_update_task = None
+        client._background_tasks = set()
+        client.events = FakeEvents()
+        client.id = "test-device"
+
+        await LGDevice.set_picture_mode.__wrapped__(client, "Expert2")
+        older_confirmation = client._picture_mode_update_task
+        await LGDevice.set_picture_mode.__wrapped__(client, "Film Maker")
+        newest_confirmation = client._picture_mode_update_task
+        await asyncio.gather(
+            older_confirmation, newest_confirmation, return_exceptions=True
+        )
+
+        assert older_confirmation.cancelled()
+        assert client.picture_mode == "Film Maker"
+        assert client.events.current_options == ["Expert2", "Film Maker"]
+
+    asyncio.run(scenario())
+
+
 def test_picture_mode_selection_falls_back_when_write_settings_is_denied():
     """Use the Luna alert path when direct settings writes lack permission."""
 

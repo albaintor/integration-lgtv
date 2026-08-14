@@ -73,6 +73,8 @@ MAX_DEFERRED_COMMANDS = 100
 VOLUME_SET_INTERVAL = 0.2
 VOLUME_TARGET_CONFIRM_TIMEOUT = 2.0
 VOLUME_STALE_UPDATE_GRACE = 0.5
+PICTURE_MODE_CONFIRM_INTERVAL = 0.25
+PICTURE_MODE_CONFIRM_TIMEOUT = 2.0
 
 SOURCE_IS_APP = "isApp"
 
@@ -331,6 +333,7 @@ class LGDevice:
         self._picture_mode = ""
         self._picture_modes: dict[str, str] = {}
         self._picture_mode_direct_write_supported: bool | None = None
+        self._picture_mode_update_task: Task[None] | None = None
         self._picture_mode_retries = 3
 
         _LOG.debug("[%s] LG TV created", device_config.address)
@@ -2036,45 +2039,58 @@ class LGDevice:
 
     async def update_picture_mode(self, new_mode: str | None):
         """Update picture mode."""
-        try:
-            picture_mode = await self.get_picture_mode()
-            picture_mode_name = self._picture_mode_name(picture_mode)
-            if picture_mode_name != self.picture_mode:
-                self._picture_mode = picture_mode_name
-                update: dict[str, Any] = {
-                    LGSelects.SELECT_PICTURE_MODE: {
-                        SelectAttributes.CURRENT_OPTION: picture_mode_name
-                    }
-                }
-                if picture_mode not in self._picture_modes.values():
+        expected_mode = self._picture_modes.get(new_mode) if new_mode else None
+        deadline = time.monotonic() + PICTURE_MODE_CONFIRM_TIMEOUT
+
+        while True:
+            try:
+                picture_mode = await self.get_picture_mode()
+                if expected_mode is not None and picture_mode != expected_mode:
+                    if time.monotonic() >= deadline:
+                        _LOG.warning(
+                            "[%s] Picture mode %s was not confirmed; TV still reports %s",
+                            self._device_config.address,
+                            expected_mode,
+                            picture_mode,
+                        )
+                        return
                     _LOG.debug(
-                        "[%s] Adding missing picture mode in the list : %s",
+                        "[%s] Ignoring stale picture mode %s while waiting for %s",
                         self._device_config.address,
                         picture_mode,
+                        expected_mode,
                     )
-                    self._picture_modes[picture_mode_name] = picture_mode
-                    update[LGSelects.SELECT_PICTURE_MODE][SelectAttributes.OPTIONS] = (
-                        self.picture_modes
-                    )
-                self.events.emit(Events.UPDATE, self.id, update)
-        # pylint: disable = W0718
-        except Exception as ex:
-            _LOG.exception(
-                "[%s] Failed to retrieve picture mode %s",
-                self._device_config.address,
-                ex,
-            )
-            if new_mode:
-                self._picture_mode = new_mode
-                self.events.emit(
-                    Events.UPDATE,
-                    self.id,
-                    {
+                    await asyncio.sleep(PICTURE_MODE_CONFIRM_INTERVAL)
+                    continue
+
+                picture_mode_name = self._picture_mode_name(picture_mode)
+                if picture_mode_name != self.picture_mode:
+                    self._picture_mode = picture_mode_name
+                    update: dict[str, Any] = {
                         LGSelects.SELECT_PICTURE_MODE: {
-                            SelectAttributes.CURRENT_OPTION: new_mode
+                            SelectAttributes.CURRENT_OPTION: picture_mode_name
                         }
-                    },
+                    }
+                    if picture_mode not in self._picture_modes.values():
+                        _LOG.debug(
+                            "[%s] Adding missing picture mode in the list : %s",
+                            self._device_config.address,
+                            picture_mode,
+                        )
+                        self._picture_modes[picture_mode_name] = picture_mode
+                        update[LGSelects.SELECT_PICTURE_MODE][
+                            SelectAttributes.OPTIONS
+                        ] = self.picture_modes
+                    self.events.emit(Events.UPDATE, self.id, update)
+                return
+            # pylint: disable = W0718
+            except Exception as ex:
+                _LOG.exception(
+                    "[%s] Failed to retrieve picture mode %s",
+                    self._device_config.address,
+                    ex,
                 )
+                return
 
     async def get_picture_mode(self) -> str:
         """Retrieve current picture mode."""
@@ -2125,7 +2141,10 @@ class LGDevice:
                     }
                 },
             )
-            self._track_task(
+            previous_update = getattr(self, "_picture_mode_update_task", None)
+            if previous_update is not None and not previous_update.done():
+                previous_update.cancel()
+            self._picture_mode_update_task = self._track_task(
                 asyncio.create_task(self.update_picture_mode(picture_mode))
             )
             return ucapi.StatusCodes.OK
