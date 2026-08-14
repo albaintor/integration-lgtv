@@ -31,7 +31,12 @@ import aiohttp
 import aiowebostv.endpoints as ep
 import ucapi
 from aiohttp import ClientConnectionResetError, ClientOSError
-from aiowebostv import WebOsClient, WebOsTvCommandError, WebOsTvState
+from aiowebostv import (
+    WebOsClient,
+    WebOsTvCommandError,
+    WebOsTvState,
+)
+from aiowebostv.exceptions import WebOsTvResponseTypeError
 from aiowebostv.webos_client import MAIN_WS_MAX_MSG_SIZE, WS_PORT, WSS_PORT
 from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr
@@ -325,6 +330,7 @@ class LGDevice:
         self._media_state: list[dict[str, Any]] | None = None
         self._picture_mode = ""
         self._picture_modes: dict[str, str] = {}
+        self._picture_mode_direct_write_supported: bool | None = None
         self._picture_mode_retries = 3
 
         _LOG.debug("[%s] LG TV created", device_config.address)
@@ -2081,9 +2087,31 @@ class LGDevice:
         mode = self._picture_modes.get(picture_mode, None)
         if mode is None:
             return ucapi.StatusCodes.BAD_REQUEST
-        results: dict[str, Any] | None = await self.set_system_settings(
-            "picture", {"pictureMode": mode}
-        )
+        params = {"category": "picture", "settings": {"pictureMode": mode}}
+        results: dict[str, Any] | None
+        if self._picture_mode_direct_write_supported is False:
+            results = await self.luna_command(ep.LUNA_SET_SYSTEM_SETTINGS, params)
+        else:
+            try:
+                results = await self.set_system_settings(
+                    params["category"], params["settings"]
+                )
+                self._picture_mode_direct_write_supported = True
+            except WebOsTvResponseTypeError as ex:
+                error = str(ex).lower()
+                if "401" not in error and "insufficient permissions" not in error:
+                    raise
+                # Generic registration manifests used by newer webOS versions
+                # may not receive WRITE_SETTINGS on older TVs. The alert
+                # endpoint only needs WRITE_NOTIFICATION_TOAST and can invoke
+                # the same Luna setting command when the alert is closed.
+                _LOG.debug(
+                    "[%s] Direct picture mode selection is not permitted; "
+                    "using Luna fallback",
+                    self._device_config.address,
+                )
+                self._picture_mode_direct_write_supported = False
+                results = await self.luna_command(ep.LUNA_SET_SYSTEM_SETTINGS, params)
         if results and results.get("returnValue", None) is True:
             # Keep the selector on one of its advertised display values while
             # webOS applies the raw picture-mode identifier.

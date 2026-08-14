@@ -9,6 +9,8 @@ from typing import Any
 sys.path.insert(1, "src")
 
 from aiowebostv import WebOsClient, WebOsTvState
+from aiowebostv import endpoints as ep
+from aiowebostv.exceptions import WebOsTvResponseTypeError
 from rich import print_json
 from ucapi import StatusCodes
 from ucapi.select import Attributes as SelectAttributes
@@ -16,7 +18,6 @@ from ucapi.select import Attributes as SelectAttributes
 from config import LGConfigDevice
 from const import LGSelects
 from lg import Events, LGDevice
-from aiowebostv import endpoints as ep
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -101,6 +102,7 @@ def test_picture_mode_selection_uses_display_name():
         client._tv = FakeTv()
         client._picture_modes = {"Hdr Standard": "hdrStandard"}
         client._picture_mode = "Cinema"
+        client._picture_mode_direct_write_supported = None
         client._background_tasks = set()
         client.events = FakeEvents()
         client.id = "test-device"
@@ -122,6 +124,71 @@ def test_picture_mode_selection_uses_display_name():
         ]
         assert current_options
         assert set(current_options) == {"Hdr Standard"}
+
+    asyncio.run(scenario())
+
+
+def test_picture_mode_selection_falls_back_when_write_settings_is_denied():
+    """Use the Luna alert path when direct settings writes lack permission."""
+
+    class FakeTv:
+        def __init__(self):
+            self.requests = []
+
+        async def request(self, endpoint, payload=None):
+            self.requests.append((endpoint, payload))
+            if endpoint == "settings/setSystemSettings":
+                raise WebOsTvResponseTypeError(
+                    {
+                        "type": "error",
+                        "id": 14,
+                        "error": "401 insufficient permissions",
+                        "payload": {},
+                    }
+                )
+            if endpoint == ep.CREATE_ALERT:
+                return {"returnValue": True, "alertId": "picture-mode-alert"}
+            if endpoint == ep.GET_SYSTEM_SETTINGS:
+                return {"returnValue": True, "settings": {"pictureMode": "cinema"}}
+            return {"returnValue": True}
+
+    class FakeEvents:
+        def emit(self, _event, _device_id, _update):
+            pass
+
+    async def scenario():
+        client = object.__new__(LGDevice)
+        client._device_config = SimpleNamespace(address="test-tv")
+        client._tv = FakeTv()
+        client._picture_modes = {"Cinema": "cinema"}
+        client._picture_mode = "Vivid"
+        client._picture_mode_direct_write_supported = None
+        client._background_tasks = set()
+        client.events = FakeEvents()
+        client.id = "test-device"
+
+        result = await LGDevice.set_picture_mode.__wrapped__(client, "Cinema")
+        pending = list(client._background_tasks)
+        if pending:
+            await asyncio.gather(*pending)
+
+        assert result == StatusCodes.OK
+        assert client._picture_mode_direct_write_supported is False
+        assert [request[0] for request in client._tv.requests[:3]] == [
+            "settings/setSystemSettings",
+            ep.CREATE_ALERT,
+            ep.CLOSE_ALERT,
+        ]
+        alert_payload = client._tv.requests[1][1]
+        assert alert_payload["buttons"][0] == {
+            "label": "",
+            "onClick": "luna://com.webos.settingsservice/setSystemSettings",
+            "params": {
+                "category": "picture",
+                "settings": {"pictureMode": "cinema"},
+            },
+        }
+        assert client._tv.requests[2][1] == {"alertId": "picture-mode-alert"}
 
     asyncio.run(scenario())
 
