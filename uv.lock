@@ -144,14 +144,14 @@ wheels = [
 
 [[package]]
 name = "aiowebostv"
-version = "0.9.1"
+version = "0.9.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/74/ff/2146f9c8b959c0ee32ba414b149872e0d13ece941e2560b88a47477dba4c/aiowebostv-0.9.1.tar.gz", hash = "sha256:3968478fd56f32cea151ca2a3729b70be9269314f398a2ec00e0a09081ad8675", size = 20011, upload-time = "2026-08-06T14:37:53.833Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5d/5a/492f69258ce5e2cfc081cf9ec8c49410c12e3937c792ca439cf1e3387f50/aiowebostv-0.9.2.tar.gz", hash = "sha256:940b9544cfa47c76891324ffda67251f4945090ddfe1528c4984caf011f9c3ca" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/76/83/cb056a46536adc06e29ec9de05abc2759b3be8476ca2d878be3822b63eee/aiowebostv-0.9.1-py3-none-any.whl", hash = "sha256:ad6c179c2343ee352793dda73c3580877bcfb5b3c456415dfcec4e24afa1fefc", size = 19821, upload-time = "2026-08-06T14:37:52.738Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/07/5bc291f9960e4e2b2b3390d6dc285889185f96c305089faac975b577d335/aiowebostv-0.9.2-py3-none-any.whl", hash = "sha256:41cc6bfd662439146654ac2ef207457ffca3567a76cddf5b36e192a4c63b11b8" },
 ]
 
 [[package]]
@@ -549,7 +549,7 @@ testing = [
 requires-dist = [
     { name = "aiohttp", specifier = "~=3.14.3" },
     { name = "aiohttp", marker = "extra == 'testing'" },
-    { name = "aiowebostv", specifier = "~=0.9.1" },
+    { name = "aiowebostv", specifier = "~=0.9.2" },
     { name = "defusedxml", specifier = "~=0.7.1" },
     { name = "httpx", specifier = "~=0.28.1" },
     { name = "pillow", marker = "extra == 'testing'" },
