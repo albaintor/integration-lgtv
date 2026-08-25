@@ -41,8 +41,6 @@ from setup_fields import SETUP_DEVICE_FIELDS, SETUP_FIELDS, TEST_SETUP_FIELDS
 
 _LOG = logging.getLogger(__name__)
 
-PAIRING_CONNECT_TIMEOUT = 10
-
 
 # pylint: disable=W1405,C0103
 
@@ -829,10 +827,7 @@ class SetupFlow:
         if pairing:
             device_suspended = False
             pairing_succeeded = False
-            client = WebOsClient(
-                device.address,
-                connect_timeout=PAIRING_CONNECT_TIMEOUT,
-            )
+            client: WebOsClient | None = None
             try:
                 # The configured LGDevice may be running its reconnect loop.
                 # webOS can reject or stall a second simultaneous SSAP client,
@@ -840,6 +835,14 @@ class SetupFlow:
                 if self._suspend_device is not None:
                     await self._suspend_device(device.id)
                     device_suspended = True
+                # Construct the client only after the old connection has been
+                # fully cleaned up, matching the standalone pairing path.
+                client = WebOsClient(device.address)
+                _LOG.info(
+                    "Pairing with unmodified client %s.%s",
+                    type(client).__module__,
+                    type(client).__qualname__,
+                )
                 await client.connect()
                 if client.client_key is None:
                     _LOG.error(
@@ -861,8 +864,9 @@ class SetupFlow:
             finally:
                 # connect() can fail after partially opening a session. Cleanup
                 # must not replace the useful setup error with a generic OTHER.
-                with suppress(Exception):
-                    await client.disconnect()
+                if client is not None:
+                    with suppress(Exception):
+                        await client.disconnect()
                 if (
                     device_suspended
                     and not pairing_succeeded
