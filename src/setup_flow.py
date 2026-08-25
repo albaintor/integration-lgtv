@@ -11,6 +11,7 @@ import ipaddress
 import logging
 import os
 import socket
+from contextlib import suppress
 from enum import IntEnum
 from typing import Any
 
@@ -817,10 +818,29 @@ class SetupFlow:
 
         if pairing:
             client = WebOsClient(device.address)
-            await client.connect()
-            if client.client_key is not None:
+            try:
+                await client.connect()
+                if client.client_key is None:
+                    _LOG.error(
+                        "Pairing with %s completed without a client key",
+                        device.address,
+                    )
+                    return SetupError(
+                        error_type=IntegrationSetupError.CONNECTION_REFUSED
+                    )
                 device.key = client.client_key
-            await client.disconnect()
+            except asyncio.CancelledError:
+                raise
+            except WEBOSTV_EXCEPTIONS as ex:
+                _LOG.error("Cannot pair with %s: %s", device.address, ex)
+                return SetupError(
+                    error_type=IntegrationSetupError.CONNECTION_REFUSED
+                )
+            finally:
+                # connect() can fail after partially opening a session. Cleanup
+                # must not replace the useful setup error with a generic OTHER.
+                with suppress(Exception):
+                    await client.disconnect()
 
         _LOG.info("[Additional settings] Setup updated settings %s", device)
         self._config_store().add_or_update(device, test_wakeonlan is False)

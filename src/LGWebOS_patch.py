@@ -34,13 +34,14 @@ import asyncio
 import copy
 import logging
 from contextlib import suppress
+from importlib.metadata import PackageNotFoundError, version as package_version
 
 _LOGGER = logging.getLogger(__name__)
 
 _PATCH_FLAG = "_webos26_input_patch_applied"
 # aiowebostv releases that still send the blacklisted LG Remote App manifest.
 # On any newer (presumed-fixed) version the patch deactivates itself.
-_MAX_AFFECTED = (0, 7, 5)
+_MAX_AFFECTED = (0, 9, 1)
 # Hosts we've already logged the pointer-socket loss for (avoid repeat spam).
 _warned_hosts: set[str] = set()
 
@@ -130,6 +131,22 @@ def _version_tuple(value: str) -> tuple[int, ...]:
     return tuple(parts)
 
 
+def _installed_aiowebostv_version(module: object) -> str:
+    """Return the installed distribution version, including older releases.
+
+    aiowebostv does not currently expose ``__version__``. Reading package
+    metadata keeps the compatibility guard effective instead of treating every
+    such release as version 0.
+    """
+    module_version = getattr(module, "__version__", None)
+    if module_version:
+        return str(module_version)
+    try:
+        return package_version("aiowebostv")
+    except PackageNotFoundError:
+        return "0"
+
+
 def apply_patch() -> None:
     """Idempotently patch WebOsClient. Never raises."""
     try:
@@ -140,7 +157,7 @@ def apply_patch() -> None:
         if getattr(WebOsClient, _PATCH_FLAG, False):
             return
 
-        version = getattr(aiowebostv, "__version__", "0")
+        version = _installed_aiowebostv_version(aiowebostv)
         if _version_tuple(version) > _MAX_AFFECTED:
             _LOGGER.info(
                 "aiowebostv %s is newer than the affected versions; webOS 26 "
