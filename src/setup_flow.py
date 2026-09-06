@@ -11,6 +11,8 @@ import ipaddress
 import logging
 import os
 import socket
+from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from enum import IntEnum
 from typing import Any
 
@@ -69,8 +71,15 @@ def set_setup_field(fields: list[dict[str, Any]], field_id: str, value: Any):
 class SetupFlow:
     """Setup flow for LG TV integration."""
 
-    def __init__(self, api: IntegrationAPI):
+    def __init__(
+        self,
+        api: IntegrationAPI,
+        suspend_device: Callable[[str], Awaitable[None]] | None = None,
+        resume_device: Callable[[str], Awaitable[None]] | None = None,
+    ):
         self._api = api
+        self._suspend_device = suspend_device
+        self._resume_device = resume_device
         self._setup_step = SetupSteps.INIT
         self._cfg_add_device: bool = False
         self._discovered_devices: list[dict[str, Any]] = []
@@ -816,11 +825,55 @@ class SetupFlow:
         device.update_apps_list = update_apps_list
 
         if pairing:
-            client = WebOsClient(device.address)
-            await client.connect()
-            if client.client_key is not None:
+            device_suspended = False
+            pairing_succeeded = False
+            client: WebOsClient | None = None
+            try:
+                # The configured LGDevice may be running its reconnect loop.
+                # webOS can reject or stall a second simultaneous SSAP client,
+                # so stop the old-key connection before requesting a new key.
+                if self._suspend_device is not None:
+                    await self._suspend_device(device.id)
+                    device_suspended = True
+                # Construct the client only after the old connection has been
+                # fully cleaned up, matching the standalone pairing path.
+                client = WebOsClient(device.address)
+                _LOG.info(
+                    "Pairing with unmodified client %s.%s",
+                    type(client).__module__,
+                    type(client).__qualname__,
+                )
+                await client.connect()
+                if client.client_key is None:
+                    _LOG.error(
+                        "Pairing with %s completed without a client key",
+                        device.address,
+                    )
+                    return SetupError(
+                        error_type=IntegrationSetupError.CONNECTION_REFUSED
+                    )
                 device.key = client.client_key
-            await client.disconnect()
+                pairing_succeeded = True
+            except asyncio.CancelledError:
+                raise
+            except WEBOSTV_EXCEPTIONS as ex:
+                _LOG.error("Cannot pair with %s: %r", device.address, ex)
+                return SetupError(
+                    error_type=IntegrationSetupError.CONNECTION_REFUSED
+                )
+            finally:
+                # connect() can fail after partially opening a session. Cleanup
+                # must not replace the useful setup error with a generic OTHER.
+                if client is not None:
+                    with suppress(Exception):
+                        await client.disconnect()
+                if (
+                    device_suspended
+                    and not pairing_succeeded
+                    and self._resume_device is not None
+                ):
+                    with suppress(Exception):
+                        await self._resume_device(device.id)
 
         _LOG.info("[Additional settings] Setup updated settings %s", device)
         self._config_store().add_or_update(device, test_wakeonlan is False)

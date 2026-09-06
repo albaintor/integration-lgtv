@@ -27,12 +27,15 @@ from typing import (
     cast,
 )
 
-import aiohttp
 import aiowebostv.endpoints as ep
 import ucapi
 from aiohttp import ClientConnectionResetError, ClientOSError
-from aiowebostv import WebOsClient, WebOsTvCommandError, WebOsTvState
-from aiowebostv.webos_client import MAIN_WS_MAX_MSG_SIZE, WS_PORT, WSS_PORT
+from aiowebostv import (
+    WebOsClient,
+    WebOsTvCommandError,
+    WebOsTvState,
+)
+from aiowebostv.exceptions import WebOsTvResponseTypeError
 from pyee.asyncio import AsyncIOEventEmitter
 from ucapi.media_player import Attributes as MediaAttr
 from ucapi.media_player import Features
@@ -72,6 +75,8 @@ MAX_DEFERRED_COMMANDS = 100
 VOLUME_SET_INTERVAL = 0.2
 VOLUME_TARGET_CONFIRM_TIMEOUT = 2.0
 VOLUME_STALE_UPDATE_GRACE = 0.5
+PICTURE_MODE_CONFIRM_INTERVAL = 0.25
+PICTURE_MODE_CONFIRM_TIMEOUT = 2.0
 
 SOURCE_IS_APP = "isApp"
 
@@ -249,31 +254,6 @@ def create_magic_packet(mac_address: str) -> bytes:
     return b"\xff" * 6 + hw_addr * 16
 
 
-async def patched_create_main_ws(self):
-    """Create main websocket connection.
-
-    Try using ws:// and fallback to wss:// if the TV rejects the connection.
-    """
-    # pylint: disable=W0212
-    uri = f"ws://{self.host}:{WS_PORT}"
-    try:
-        # _LOG.debug("Connecting to %s", uri)
-        return await self._ws_connect(uri, MAIN_WS_MAX_MSG_SIZE)
-    # ClientConnectionError is raised when firmware reject WS_PORT
-    # WSServerHandshakeError is raised when firmware enforce using ssl
-    except (
-        aiohttp.ClientConnectionError,
-        aiohttp.WSServerHandshakeError,
-        TimeoutError,
-    ) as ex:
-        _LOG.debug(
-            "[%s] Failed connection to %s, switching to wss %s", self.host, uri, ex
-        )
-        uri = f"wss://{self.host}:{WSS_PORT}"
-        # _LOG.debug("Connecting to %s", uri)
-        return await self._ws_connect(uri, MAIN_WS_MAX_MSG_SIZE)
-
-
 class LGDevice:
     """Representing a LG TV Device."""
 
@@ -284,8 +264,6 @@ class LGDevice:
     ):
         """Create instance with given IP or hostname of AVR."""
         # identifier from configuration
-        # TODO patch to be removed
-        WebOsClient._create_main_ws = patched_create_main_ws
         self._connecting = False
         self._device_config = device_config  # For reconnection
         self.id: str = device_config.id
@@ -329,6 +307,8 @@ class LGDevice:
         self._media_state: list[dict[str, Any]] | None = None
         self._picture_mode = ""
         self._picture_modes: dict[str, str] = {}
+        self._picture_mode_direct_write_supported: bool | None = None
+        self._picture_mode_update_task: Task[None] | None = None
         self._picture_mode_retries = 3
         self._aspect_ratio = ""
         self._aspect_ratios: dict[str, str] = {}
@@ -374,6 +354,11 @@ class LGDevice:
     def _normalize_volume_level(volume: float) -> int:
         """Normalize volume to the range accepted by LG webOS."""
         return max(0, min(100, int(round(float(volume)))))
+
+    @staticmethod
+    def _picture_mode_name(picture_mode: str) -> str:
+        """Convert a webOS picture-mode identifier to its selector label."""
+        return re.sub(r"([A-Z])", r" \1", picture_mode).strip().title()
 
     def _arm_volume_target(self, volume: int) -> None:
         """Record the optimistic volume target while webOS catches up."""
@@ -724,9 +709,7 @@ class LGDevice:
         if not self._picture_mode and self._picture_mode_retries > 0:
             try:
                 picture_mode = await self.get_picture_mode()
-                picture_mode_name = (
-                    re.sub(r"([A-Z])", r" \1", picture_mode).strip().title()
-                )
+                picture_mode_name = self._picture_mode_name(picture_mode)
                 if picture_mode_name != self.picture_mode:
                     self._picture_mode = picture_mode_name
                     updated_data[LGSelects.SELECT_PICTURE_MODE] = {
@@ -880,9 +863,9 @@ class LGDevice:
             self._media_image_url = media_image_url
             updated_data[MediaAttr.MEDIA_IMAGE_URL] = self._media_image_url
 
-        _sound_output = self._sound_output
-        self._sound_output = self._tv.tv_state.sound_output
-        if _sound_output != self._sound_output:
+        sound_output = self._tv.tv_state.sound_output
+        if sound_output and sound_output != self._sound_output:
+            self._sound_output = sound_output
             updated_data[MediaAttr.SOUND_MODE] = self.sound_output
             updated_data[LGSelects.SELECT_SOUND_OUTPUT] = {
                 SelectAttributes.CURRENT_OPTION: self.sound_output
@@ -911,9 +894,7 @@ class LGDevice:
                 modes = LG_PICTURE_MODES_GENERATION[DEFAULT_PICTURE_MODE]
             self._picture_modes = {}
             for mode in modes:
-                self._picture_modes[
-                    re.sub(r"([A-Z])", r" \1", mode).strip().title()
-                ] = mode
+                self._picture_modes[self._picture_mode_name(mode)] = mode
             self.events.emit(
                 Events.UPDATE,
                 self.id,
@@ -1628,7 +1609,7 @@ class LGDevice:
             return ucapi.StatusCodes.BAD_REQUEST
         try:
             target = self._normalize_volume_level(volume)
-        except (TypeError, ValueError):
+        except (OverflowError, TypeError, ValueError):
             return ucapi.StatusCodes.BAD_REQUEST
 
         _LOG.debug(
@@ -1879,7 +1860,27 @@ class LGDevice:
                 inv_map,
             )
             return ucapi.StatusCodes.BAD_REQUEST
-        await self._tv.change_sound_output(sound_output)
+        response = await self._tv.change_sound_output(sound_output)
+        _LOG.debug(
+            "[%s] LG TV sound output response %s",
+            self._device_config.address,
+            response,
+        )
+
+        # Keep the integration state coherent immediately. Some TVs do not
+        # publish a sound-output subscription update after a successful change.
+        self._sound_output = sound_output
+        self._tv.tv_state.sound_output = sound_output
+        self.events.emit(
+            Events.UPDATE,
+            self.id,
+            {
+                MediaAttr.SOUND_MODE: self.sound_output,
+                LGSelects.SELECT_SOUND_OUTPUT: {
+                    SelectAttributes.CURRENT_OPTION: self.sound_output
+                },
+            },
+        )
         return ucapi.StatusCodes.OK
 
     @retry()
@@ -2156,45 +2157,58 @@ class LGDevice:
 
     async def update_picture_mode(self, new_mode: str | None):
         """Update picture mode."""
-        try:
-            picture_mode = await self.get_picture_mode()
-            if picture_mode != self.picture_mode:
-                self._picture_mode = picture_mode
-                update: dict[str, Any] = {
-                    LGSelects.SELECT_PICTURE_MODE: {
-                        SelectAttributes.CURRENT_OPTION: picture_mode
-                    }
-                }
-                if picture_mode not in self._picture_modes.values():
+        expected_mode = self._picture_modes.get(new_mode) if new_mode else None
+        deadline = time.monotonic() + PICTURE_MODE_CONFIRM_TIMEOUT
+
+        while True:
+            try:
+                picture_mode = await self.get_picture_mode()
+                if expected_mode is not None and picture_mode != expected_mode:
+                    if time.monotonic() >= deadline:
+                        _LOG.warning(
+                            "[%s] Picture mode %s was not confirmed; TV still reports %s",
+                            self._device_config.address,
+                            expected_mode,
+                            picture_mode,
+                        )
+                        return
                     _LOG.debug(
-                        "[%s] Adding missing picture mode in the list : %s",
+                        "[%s] Ignoring stale picture mode %s while waiting for %s",
                         self._device_config.address,
                         picture_mode,
+                        expected_mode,
                     )
-                    self._picture_modes[
-                        re.sub(r"([A-Z])", r" \1", picture_mode).strip().title()
-                    ] = picture_mode
-                    update[LGSelects.SELECT_PICTURE_MODE][SelectAttributes.OPTIONS] = (
-                        self.picture_modes
-                    )
-                self.events.emit(Events.UPDATE, self.id, update)
-        # pylint: disable = W0718
-        except Exception as ex:
-            _LOG.exception(
-                "[%s] Failed to retrieve picture mode %s",
-                self._device_config.address,
-                ex,
-            )
-            if new_mode:
-                self.events.emit(
-                    Events.UPDATE,
-                    self.id,
-                    {
+                    await asyncio.sleep(PICTURE_MODE_CONFIRM_INTERVAL)
+                    continue
+
+                picture_mode_name = self._picture_mode_name(picture_mode)
+                if picture_mode_name != self.picture_mode:
+                    self._picture_mode = picture_mode_name
+                    update: dict[str, Any] = {
                         LGSelects.SELECT_PICTURE_MODE: {
-                            SelectAttributes.CURRENT_OPTION: new_mode
+                            SelectAttributes.CURRENT_OPTION: picture_mode_name
                         }
-                    },
+                    }
+                    if picture_mode not in self._picture_modes.values():
+                        _LOG.debug(
+                            "[%s] Adding missing picture mode in the list : %s",
+                            self._device_config.address,
+                            picture_mode,
+                        )
+                        self._picture_modes[picture_mode_name] = picture_mode
+                        update[LGSelects.SELECT_PICTURE_MODE][
+                            SelectAttributes.OPTIONS
+                        ] = self.picture_modes
+                    self.events.emit(Events.UPDATE, self.id, update)
+                return
+            # pylint: disable = W0718
+            except Exception as ex:
+                _LOG.exception(
+                    "[%s] Failed to retrieve picture mode %s",
+                    self._device_config.address,
+                    ex,
                 )
+                return
 
     async def get_picture_mode(self) -> str:
         """Retrieve current picture mode."""
@@ -2207,11 +2221,48 @@ class LGDevice:
         mode = self._picture_modes.get(picture_mode, None)
         if mode is None:
             return ucapi.StatusCodes.BAD_REQUEST
-        results: dict[str, Any] | None = await self.set_system_settings(
-            "picture", {"pictureMode": mode}
-        )
+        params = {"category": "picture", "settings": {"pictureMode": mode}}
+        results: dict[str, Any] | None
+        if self._picture_mode_direct_write_supported is False:
+            results = await self.luna_command(ep.LUNA_SET_SYSTEM_SETTINGS, params)
+        else:
+            try:
+                results = await self.set_system_settings(
+                    params["category"], params["settings"]
+                )
+                self._picture_mode_direct_write_supported = True
+            except WebOsTvResponseTypeError as ex:
+                error = str(ex).lower()
+                if "401" not in error and "insufficient permissions" not in error:
+                    raise
+                # Generic registration manifests used by newer webOS versions
+                # may not receive WRITE_SETTINGS on older TVs. The alert
+                # endpoint only needs WRITE_NOTIFICATION_TOAST and can invoke
+                # the same Luna setting command when the alert is closed.
+                _LOG.debug(
+                    "[%s] Direct picture mode selection is not permitted; "
+                    "using Luna fallback",
+                    self._device_config.address,
+                )
+                self._picture_mode_direct_write_supported = False
+                results = await self.luna_command(ep.LUNA_SET_SYSTEM_SETTINGS, params)
         if results and results.get("returnValue", None) is True:
-            self._track_task(
+            # Keep the selector on one of its advertised display values while
+            # webOS applies the raw picture-mode identifier.
+            self._picture_mode = picture_mode
+            self.events.emit(
+                Events.UPDATE,
+                self.id,
+                {
+                    LGSelects.SELECT_PICTURE_MODE: {
+                        SelectAttributes.CURRENT_OPTION: picture_mode
+                    }
+                },
+            )
+            previous_update = getattr(self, "_picture_mode_update_task", None)
+            if previous_update is not None and not previous_update.done():
+                previous_update.cancel()
+            self._picture_mode_update_task = self._track_task(
                 asyncio.create_task(self.update_picture_mode(picture_mode))
             )
             return ucapi.StatusCodes.OK

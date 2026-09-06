@@ -24,7 +24,6 @@ import sensor
 import setup_flow
 from config import LGEntity
 from const import WEBOSTV_EXCEPTIONS, filter_attributes
-from LGWebOS_patch import apply_patch
 
 _LOG = logging.getLogger("driver")  # avoid having __main__ in log messages
 if sys.platform == "win32":
@@ -546,6 +545,22 @@ async def _reconfigure_device(
         await device.connect()
 
 
+async def _suspend_device_for_pairing(device_id: str) -> None:
+    """Stop the configured client so setup can open an exclusive pairing connection."""
+    if device := _configured_devices.get(device_id):
+        _LOG.debug("[%s] Suspend running connection for re-pairing", device.host)
+        await device.disconnect()
+
+
+async def _resume_device_after_pairing_failure(device_id: str) -> None:
+    """Restore the configured client when setup could not obtain a new key."""
+    if device := _configured_devices.get(device_id):
+        _LOG.debug("[%s] Resume connection after failed re-pairing", device.host)
+        _create_task(
+            device.connect(), f"Resume after failed re-pairing for {device.id}"
+        )
+
+
 def _register_available_entities(
     device_config: config.LGConfigDevice, device: lg.LGDevice
 ) -> None:
@@ -644,7 +659,6 @@ async def main():
     logging.getLogger("config").setLevel(level)
     logging.getLogger("setup_flow").setLevel(level)
     logging.getLogger("aiowebostv").setLevel(level)
-    apply_patch()
 
     devices = config.Devices(
         api.config_dir_path, on_device_added, on_device_removed, on_device_updated
@@ -656,7 +670,14 @@ async def main():
 
     _create_task(devices.handle_address_change(), "Address change handler task")
 
-    await api.init("driver.json", setup_flow.SetupFlow(api).driver_setup_handler)
+    await api.init(
+        "driver.json",
+        setup_flow.SetupFlow(
+            api,
+            suspend_device=_suspend_device_for_pairing,
+            resume_device=_resume_device_after_pairing_failure,
+        ).driver_setup_handler,
+    )
 
 
 if __name__ == "__main__":

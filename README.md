@@ -254,6 +254,7 @@ Examples of commands :
 | luna picture `{'backlight':0,'contrast':85}`                | Set picture settings once                                                                |                                          |
 | luna picture `{'hdrDynamicToneMapping':'on'}`               | Turn hdrDynamicToneMapping on in the current HDR10 picture preset                        |                                          |
 | luna other `{'eotf':'hlg'}`                                 | Setting EOTF in HDMI Signal Override menu, values: auto, sdrGamma, hdrGamma, st2084, hlg |                                          |
+| luna aspectRatio {'arcPerApp':'4x3'}                        | Force a specific aspect ratio. Values: `4x3`, `16x9`, `original`                         |                                          |
 
 ### Picture commands with remote entity
 
