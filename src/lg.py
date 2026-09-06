@@ -313,6 +313,7 @@ class LGDevice:
         self._aspect_ratio = ""
         self._aspect_ratios: dict[str, str] = {}
         self._aspect_ratio_generation: str | None = None
+        self._aspect_ratio_direct_write_supported: bool | None = None
         self._aspect_ratio_retries = 3
 
         _LOG.debug("[%s] LG TV created", device_config.address)
@@ -605,7 +606,11 @@ class LGDevice:
             await self._tv.subscribe(
                 _on_aspect_ratio_changed,
                 ep.GET_SYSTEM_SETTINGS,
-                payload={"category": "aspectRatio", "keys": ["arcPerApp"]},
+                payload={
+                    "category": "aspectRatio",
+                    "keys": ["arcPerApp"],
+                    "current_app": True,
+                },
             )
         # Aspect ratio settings are unavailable for some apps and older TVs.
         # pylint: disable=W0718
@@ -2040,9 +2045,13 @@ class LGDevice:
 
         return await self.call_luna_command(ep.LUNA_SET_SYSTEM_SETTINGS, params)
 
-    async def get_system_settings(self, category: str, keys: list[str]):
+    async def get_system_settings(
+        self, category: str, keys: list[str], current_app: bool | None = None
+    ):
         """Get system settings. See available settings docs for details."""
-        payload = {"category": category, "keys": keys}
+        payload: dict[str, Any] = {"category": category, "keys": keys}
+        if current_app is not None:
+            payload["current_app"] = current_app
         return await self._tv.request(ep.GET_SYSTEM_SETTINGS, payload=payload)
 
     async def set_system_settings(self, category, settings, current_app=None):
@@ -2079,7 +2088,9 @@ class LGDevice:
 
     async def get_aspect_ratio(self) -> str:
         """Retrieve the aspect ratio for the active input or application."""
-        result = await self.get_system_settings("aspectRatio", keys=["arcPerApp"])
+        result = await self.get_system_settings(
+            "aspectRatio", keys=["arcPerApp"], current_app=True
+        )
         return result["settings"]["arcPerApp"]
 
     @retry()
@@ -2089,11 +2100,35 @@ class LGDevice:
         if value is None:
             return ucapi.StatusCodes.BAD_REQUEST
 
-        result = await self.set_system_settings(
-            "aspectRatio",
-            {"arcPerApp": value},
-            current_app=True,
-        )
+        settings = {"arcPerApp": value}
+        params: dict[str, Any] = {
+            "category": "aspectRatio",
+            "settings": settings,
+            "current_app": True,
+        }
+        result: dict[str, Any] | None
+        if self._aspect_ratio_direct_write_supported is False:
+            result = await self.luna_command(ep.LUNA_SET_SYSTEM_SETTINGS, params)
+        else:
+            try:
+                result = await self.set_system_settings(
+                    "aspectRatio",
+                    settings,
+                    current_app=True,
+                )
+                self._aspect_ratio_direct_write_supported = True
+            except WebOsTvResponseTypeError as ex:
+                error = str(ex).lower()
+                if "401" not in error and "insufficient permissions" not in error:
+                    raise
+                _LOG.debug(
+                    "[%s] Direct aspect ratio selection is not permitted; "
+                    "using Luna fallback",
+                    self._device_config.address,
+                )
+                self._aspect_ratio_direct_write_supported = False
+                result = await self.luna_command(ep.LUNA_SET_SYSTEM_SETTINGS, params)
+
         if result and result.get("returnValue") is True:
             attributes = self._aspect_ratio_attributes(value)
             if attributes:

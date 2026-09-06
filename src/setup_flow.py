@@ -858,9 +858,7 @@ class SetupFlow:
                 raise
             except WEBOSTV_EXCEPTIONS as ex:
                 _LOG.error("Cannot pair with %s: %r", device.address, ex)
-                return SetupError(
-                    error_type=IntegrationSetupError.CONNECTION_REFUSED
-                )
+                return SetupError(error_type=IntegrationSetupError.CONNECTION_REFUSED)
             finally:
                 # connect() can fail after partially opening a session. Cleanup
                 # must not replace the useful setup error with a generic OTHER.
