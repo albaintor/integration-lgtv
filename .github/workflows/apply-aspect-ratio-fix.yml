@@ -39,137 +39,118 @@ jobs:
 
           def replace_once(old: str, new: str) -> None:
               global text
-              count = text.count(old)
-              if count != 1:
-                  raise RuntimeError(f"Expected exactly one match, got {count}: {old[:80]!r}")
+              if text.count(old) != 1:
+                  raise RuntimeError(f"Expected one occurrence of {old!r}")
               text = text.replace(old, new, 1)
 
+          def replace_section(start: str, end: str, new: str) -> None:
+              global text
+              start_pos = text.index(start)
+              end_pos = text.index(end, start_pos)
+              text = text[:start_pos] + new + text[end_pos:]
+
+          generation_line = "        self._aspect_ratio_generation: str | None = None\n"
           replace_once(
-              '''        self._aspect_ratio_generation: str | None = None
-          self._aspect_ratio_retries = 3
-          ''',
-              '''        self._aspect_ratio_generation: str | None = None
-          self._aspect_ratio_direct_write_supported: bool | None = None
-          self._aspect_ratio_retries = 3
-          ''',
+              generation_line,
+              generation_line
+              + "        self._aspect_ratio_direct_write_supported: bool | None = None\n",
           )
 
-          replace_once(
-              '''                payload={"category": "aspectRatio", "keys": ["arcPerApp"]},
-          ''',
-              '''                payload={
-                      "category": "aspectRatio",
-                      "keys": ["arcPerApp"],
-                      "current_app": True,
-                  },
-          ''',
+          old_payload = '                payload={"category": "aspectRatio", "keys": ["arcPerApp"]},\n'
+          new_payload = (
+              "                payload={\n"
+              '                    "category": "aspectRatio",\n'
+              '                    "keys": ["arcPerApp"],\n'
+              '                    "current_app": True,\n'
+              "                },\n"
+          )
+          replace_once(old_payload, new_payload)
+
+          get_settings = "\n".join(
+              [
+                  "    async def get_system_settings(",
+                  "        self, category: str, keys: list[str], current_app: bool | None = None",
+                  "    ):",
+                  '        """Get system settings. See available settings docs for details."""',
+                  '        payload: dict[str, Any] = {"category": category, "keys": keys}',
+                  "        if current_app is not None:",
+                  '            payload["current_app"] = current_app',
+                  "        return await self._tv.request(ep.GET_SYSTEM_SETTINGS, payload=payload)",
+                  "",
+                  "",
+              ]
+          )
+          replace_section(
+              "    async def get_system_settings(",
+              "    async def set_system_settings(",
+              get_settings,
           )
 
-          replace_once(
-              '''    async def get_system_settings(self, category: str, keys: list[str]):
-              """Get system settings. See available settings docs for details."""
-              payload = {"category": category, "keys": keys}
-              return await self._tv.request(ep.GET_SYSTEM_SETTINGS, payload=payload)
-          ''',
-              '''    async def get_system_settings(
-              self, category: str, keys: list[str], current_app: bool | None = None
-          ):
-              """Get system settings. See available settings docs for details."""
-              payload: dict[str, Any] = {"category": category, "keys": keys}
-              if current_app is not None:
-                  payload["current_app"] = current_app
-              return await self._tv.request(ep.GET_SYSTEM_SETTINGS, payload=payload)
-          ''',
+          aspect_methods = "\n".join(
+              [
+                  "    async def get_aspect_ratio(self) -> str:",
+                  '        """Retrieve the aspect ratio for the active input or application."""',
+                  "        result = await self.get_system_settings(",
+                  '            "aspectRatio", keys=["arcPerApp"], current_app=True',
+                  "        )",
+                  '        return result["settings"]["arcPerApp"]',
+                  "",
+                  "    @retry()",
+                  "    async def set_aspect_ratio(self, aspect_ratio: str) -> ucapi.StatusCodes:",
+                  '        """Set the aspect ratio for the active input or application."""',
+                  "        value = self._aspect_ratios.get(aspect_ratio)",
+                  "        if value is None:",
+                  "            return ucapi.StatusCodes.BAD_REQUEST",
+                  "",
+                  '        settings = {"arcPerApp": value}',
+                  "        params: dict[str, Any] = {",
+                  '            "category": "aspectRatio",',
+                  '            "settings": settings,',
+                  '            "current_app": True,',
+                  "        }",
+                  "        result: dict[str, Any] | None",
+                  "        if self._aspect_ratio_direct_write_supported is False:",
+                  "            result = await self.luna_command(ep.LUNA_SET_SYSTEM_SETTINGS, params)",
+                  "        else:",
+                  "            try:",
+                  "                result = await self.set_system_settings(",
+                  '                    "aspectRatio",',
+                  "                    settings,",
+                  "                    current_app=True,",
+                  "                )",
+                  "                self._aspect_ratio_direct_write_supported = True",
+                  "            except WebOsTvResponseTypeError as ex:",
+                  "                error = str(ex).lower()",
+                  '                if "401" not in error and "insufficient permissions" not in error:',
+                  "                    raise",
+                  "                _LOG.debug(",
+                  '                    "[%s] Direct aspect ratio selection is not permitted; "',
+                  '                    "using Luna fallback",',
+                  "                    self._device_config.address,",
+                  "                )",
+                  "                self._aspect_ratio_direct_write_supported = False",
+                  "                result = await self.luna_command(",
+                  "                    ep.LUNA_SET_SYSTEM_SETTINGS, params",
+                  "                )",
+                  "",
+                  '        if result and result.get("returnValue") is True:',
+                  "            attributes = self._aspect_ratio_attributes(value)",
+                  "            if attributes:",
+                  "                self.events.emit(",
+                  "                    Events.UPDATE,",
+                  "                    self.id,",
+                  "                    {LGSelects.SELECT_ASPECT_RATIO: attributes},",
+                  "                )",
+                  "            return ucapi.StatusCodes.OK",
+                  "        return ucapi.StatusCodes.BAD_REQUEST",
+                  "",
+                  "",
+              ]
           )
-
-          replace_once(
-              '''    async def get_aspect_ratio(self) -> str:
-              """Retrieve the aspect ratio for the active input or application."""
-              result = await self.get_system_settings("aspectRatio", keys=["arcPerApp"])
-              return result["settings"]["arcPerApp"]
-          ''',
-              '''    async def get_aspect_ratio(self) -> str:
-              """Retrieve the aspect ratio for the active input or application."""
-              result = await self.get_system_settings(
-                  "aspectRatio", keys=["arcPerApp"], current_app=True
-              )
-              return result["settings"]["arcPerApp"]
-          ''',
-          )
-
-          replace_once(
-              '''    @retry()
-              async def set_aspect_ratio(self, aspect_ratio: str) -> ucapi.StatusCodes:
-                  """Set the aspect ratio for the active input or application."""
-                  value = self._aspect_ratios.get(aspect_ratio)
-                  if value is None:
-                      return ucapi.StatusCodes.BAD_REQUEST
-          
-                  result = await self.set_system_settings(
-                      "aspectRatio",
-                      {"arcPerApp": value},
-                      current_app=True,
-                  )
-                  if result and result.get("returnValue") is True:
-                      attributes = self._aspect_ratio_attributes(value)
-                      if attributes:
-                          self.events.emit(
-                              Events.UPDATE,
-                              self.id,
-                              {LGSelects.SELECT_ASPECT_RATIO: attributes},
-                          )
-                      return ucapi.StatusCodes.OK
-                  return ucapi.StatusCodes.BAD_REQUEST
-          ''',
-              '''    @retry()
-              async def set_aspect_ratio(self, aspect_ratio: str) -> ucapi.StatusCodes:
-                  """Set the aspect ratio for the active input or application."""
-                  value = self._aspect_ratios.get(aspect_ratio)
-                  if value is None:
-                      return ucapi.StatusCodes.BAD_REQUEST
-          
-                  settings = {"arcPerApp": value}
-                  params: dict[str, Any] = {
-                      "category": "aspectRatio",
-                      "settings": settings,
-                      "current_app": True,
-                  }
-                  result: dict[str, Any] | None
-                  if self._aspect_ratio_direct_write_supported is False:
-                      result = await self.luna_command(ep.LUNA_SET_SYSTEM_SETTINGS, params)
-                  else:
-                      try:
-                          result = await self.set_system_settings(
-                              "aspectRatio",
-                              settings,
-                              current_app=True,
-                          )
-                          self._aspect_ratio_direct_write_supported = True
-                      except WebOsTvResponseTypeError as ex:
-                          error = str(ex).lower()
-                          if "401" not in error and "insufficient permissions" not in error:
-                              raise
-                          _LOG.debug(
-                              "[%s] Direct aspect ratio selection is not permitted; "
-                              "using Luna fallback",
-                              self._device_config.address,
-                          )
-                          self._aspect_ratio_direct_write_supported = False
-                          result = await self.luna_command(
-                              ep.LUNA_SET_SYSTEM_SETTINGS, params
-                          )
-          
-                  if result and result.get("returnValue") is True:
-                      attributes = self._aspect_ratio_attributes(value)
-                      if attributes:
-                          self.events.emit(
-                              Events.UPDATE,
-                              self.id,
-                              {LGSelects.SELECT_ASPECT_RATIO: attributes},
-                          )
-                      return ucapi.StatusCodes.OK
-                  return ucapi.StatusCodes.BAD_REQUEST
-          ''',
+          replace_section(
+              "    async def get_aspect_ratio(self) -> str:",
+              "    @retry()\n    async def set_channel(",
+              aspect_methods,
           )
 
           path.write_text(text)
