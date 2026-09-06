@@ -560,6 +560,7 @@ def _register_available_entities(
         remote.LGRemote(device_config, device),
         selector.LGInputSourceSelect(device_config, device),
         selector.LGPictureModeSelect(device_config, device),
+        selector.LGAspectRatioSelect(device_config, device),
         selector.LGSoundOutputSelect(device_config, device),
         sensor.LGSensorInputSource(device_config, device),
         sensor.LGSensorVolume(device_config, device),

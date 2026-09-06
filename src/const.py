@@ -32,6 +32,7 @@ class LGSelects(str, Enum):
 
     SELECT_INPUT_SOURCE = "select_input_source"
     SELECT_PICTURE_MODE = "select_picture_mode"
+    SELECT_ASPECT_RATIO = "select_aspect_ratio"
     SELECT_SOUND_OUTPUT = "select_sound_output"
 
 

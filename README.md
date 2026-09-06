@@ -33,6 +33,7 @@ The driver discovers LG TVs on the network. A media player, a remote entity and 
 - Input source
 - Sound output
 - Picture preset
+- Aspect ratio
 
 **Sensors exposed :**
 - Current input source

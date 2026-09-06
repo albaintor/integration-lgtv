@@ -197,6 +197,38 @@ class LGPictureModeSelect(LGSelect):
         return self._device.picture_modes or []
 
 
+class LGAspectRatioSelect(LGSelect):
+    """Aspect ratio selector entity."""
+
+    ENTITY_NAME = "aspect_ratio"
+    SELECT_NAME = LGSelects.SELECT_ASPECT_RATIO
+
+    def __init__(self, config_device: LGConfigDevice, device: lg.LGDevice):
+        """Initialize the class."""
+        # pylint: disable=W1405,R0801
+        entity_id = f"{create_entity_id(config_device.id, EntityTypes.SELECT)}.{self.ENTITY_NAME}"
+        super().__init__(
+            entity_id,
+            {
+                "en": f"{config_device.get_device_part()}Aspect ratio",
+                "fr": f"{config_device.get_device_part()}Format d'image",
+            },
+            config_device,
+            device,
+            device.set_aspect_ratio,
+        )
+
+    @property
+    def current_option(self) -> str:
+        """Return selector value."""
+        return self._device.aspect_ratio
+
+    @property
+    def select_options(self) -> list[str]:
+        """Return selection list."""
+        return self._device.aspect_ratios
+
+
 class LGSoundOutputSelect(LGSelect):
     """Picture mode selector entity."""
 

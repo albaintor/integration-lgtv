@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/integration-sonyavr.iml" filepath="$PROJECT_DIR$/.idea/integration-sonyavr.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/intg-sonyavr.iml" filepath="$PROJECT_DIR$/.idea/intg-sonyavr.iml" />
     </modules>
   </component>
 </project>

@@ -42,6 +42,10 @@ from ucapi.select import Attributes as SelectAttributes
 from ucapi.select import States as SelectStates
 from ucapi.ui import UiPage
 
+from aspect_ratios import (
+    DEFAULT_ASPECT_RATIO_GENERATION,
+    LG_ASPECT_RATIOS_GENERATION,
+)
 from config import LGConfigDevice
 from const import (
     LG_ADDITIONAL_ENDPOINTS,
@@ -326,6 +330,10 @@ class LGDevice:
         self._picture_mode = ""
         self._picture_modes: dict[str, str] = {}
         self._picture_mode_retries = 3
+        self._aspect_ratio = ""
+        self._aspect_ratios: dict[str, str] = {}
+        self._aspect_ratio_generation: str | None = None
+        self._aspect_ratio_retries = 3
 
         _LOG.debug("[%s] LG TV created", device_config.address)
 
@@ -593,8 +601,35 @@ class LGDevice:
                         },
                     )
 
+        async def _on_aspect_ratio_changed(payload: dict[str, Any]):
+            settings = payload.get("settings", {}) if payload else {}
+            aspect_ratio = settings.get("arcPerApp")
+            if not isinstance(aspect_ratio, str):
+                return
+            attributes = self._aspect_ratio_attributes(aspect_ratio)
+            if attributes:
+                self.events.emit(
+                    Events.UPDATE,
+                    self.id,
+                    {LGSelects.SELECT_ASPECT_RATIO: attributes},
+                )
+
         await self._tv.register_state_update_callback(_on_state_changed)
         await self._tv.subscribe_sound_output(_on_sound_output_changed)
+        try:
+            await self._tv.subscribe(
+                _on_aspect_ratio_changed,
+                ep.GET_SYSTEM_SETTINGS,
+                payload={"category": "aspectRatio", "keys": ["arcPerApp"]},
+            )
+        # Aspect ratio settings are unavailable for some apps and older TVs.
+        # pylint: disable=W0718
+        except Exception as ex:
+            _LOG.debug(
+                "[%s] Aspect ratio subscription is unavailable: %s",
+                self._device_config.address,
+                ex,
+            )
 
     def _update_sources(self, updated_data: dict[str, Any]) -> None:
         """Update list of sources from current source, apps, inputs and configured list."""
@@ -663,6 +698,7 @@ class LGDevice:
         """Update entity state attributes."""
         # pylint: disable = R0915,R0914
         self._update_picture_modes()
+        self._update_aspect_ratios()
         updated_data = {}
         if not self._sources:
             try:
@@ -715,7 +751,34 @@ class LGDevice:
                 )
                 self._picture_mode_retries -= 1
 
+        previous_source = self._active_source
         self._update_sources(updated_data)
+        source_changed = previous_source != self._active_source
+        if source_changed:
+            self._aspect_ratio_retries = 3
+
+        if (
+            not self._aspect_ratio or source_changed
+        ) and self._aspect_ratio_retries > 0:
+            try:
+                aspect_ratio = await self.get_aspect_ratio()
+                updated_data[LGSelects.SELECT_ASPECT_RATIO] = (
+                    self._aspect_ratio_attributes(aspect_ratio)
+                )
+                self._aspect_ratio_retries = 3
+            # Aspect ratio settings can be locked by the active application.
+            # pylint: disable=W0718
+            except Exception as ex:
+                _LOG.debug(
+                    "[%s] Failed to extract current aspect ratio, will retry %s times: %s",
+                    self._device_config.address,
+                    self._aspect_ratio_retries,
+                    ex,
+                )
+                self._aspect_ratio_retries -= 1
+
+        if not updated_data.get(LGSelects.SELECT_ASPECT_RATIO):
+            updated_data.pop(LGSelects.SELECT_ASPECT_RATIO, None)
 
         # Bug on LG library where power_state not updated, force it
         try:
@@ -860,6 +923,57 @@ class LGDevice:
                     }
                 },
             )
+
+    def _update_aspect_ratios(self) -> None:
+        """Load candidate aspect ratios for the detected model generation."""
+        generation = self.model_version
+        if generation is None or generation == self._aspect_ratio_generation:
+            return
+
+        ratios = LG_ASPECT_RATIOS_GENERATION.get(
+            generation,
+            LG_ASPECT_RATIOS_GENERATION[DEFAULT_ASPECT_RATIO_GENERATION],
+        )
+        current_value = self._aspect_ratios.get(self._aspect_ratio)
+        self._aspect_ratios = dict(ratios)
+        self._aspect_ratio_generation = generation
+
+        if current_value and current_value not in self._aspect_ratios.values():
+            self._aspect_ratios[current_value] = current_value
+
+        _LOG.debug(
+            "[%s] Aspect ratios loaded for LG generation %s: %s",
+            self._device_config.address,
+            generation,
+            self.aspect_ratios,
+        )
+        self.events.emit(
+            Events.UPDATE,
+            self.id,
+            {
+                LGSelects.SELECT_ASPECT_RATIO: {
+                    SelectAttributes.OPTIONS: self.aspect_ratios
+                }
+            },
+        )
+
+    def _aspect_ratio_attributes(self, value: str) -> dict[str, Any]:
+        """Apply a raw webOS aspect ratio and return changed select attributes."""
+        attributes: dict[str, Any] = {}
+        option = next(
+            (label for label, raw in self._aspect_ratios.items() if raw == value),
+            None,
+        )
+        if option is None:
+            option = value
+            self._aspect_ratios[option] = value
+            attributes[SelectAttributes.OPTIONS] = self.aspect_ratios
+
+        if option != self._aspect_ratio:
+            self._aspect_ratio = option
+            attributes[SelectAttributes.CURRENT_OPTION] = option
+
+        return attributes
 
     async def _connect_loop(self) -> None:
         """Connect loop.
@@ -1321,6 +1435,16 @@ class LGDevice:
         return self._picture_mode
 
     @property
+    def aspect_ratios(self) -> list[str]:
+        """Candidate aspect ratios for the current model generation."""
+        return list(self._aspect_ratios.keys())
+
+    @property
+    def aspect_ratio(self) -> str:
+        """Current aspect ratio."""
+        return self._aspect_ratio
+
+    @property
     def model_version(self) -> str | None:
         """Current model version."""
         if (
@@ -1332,9 +1456,9 @@ class LGDevice:
         model = self._tv.tv_info.system.get("modelName", None)
         if model is None:
             return None
-        m = re.search(r"OLED\d{2,3}([A-Z])(\d)", model)
+        m = re.search(r"OLED\d{2,3}([A-Z])([0-9X])", model, re.IGNORECASE)
         if m:
-            return f"{m.group(1)}{m.group(2)}"  # ex "G3", "C1"
+            return f"{m.group(1)}{m.group(2)}".upper()  # ex "G3", "C1", "CX"
         return None
 
     async def power_toggle(self) -> ucapi.StatusCodes:
@@ -1952,10 +2076,33 @@ class LGDevice:
             {"category": "picture", "settings": {option: value}},
         )
 
+    async def get_aspect_ratio(self) -> str:
+        """Retrieve the aspect ratio for the active input or application."""
+        result = await self.get_system_settings("aspectRatio", keys=["arcPerApp"])
+        return result["settings"]["arcPerApp"]
+
     @retry()
-    async def set_aspect_ratio(self, value: dict[str, Any]):
-        """Set aspect ratio."""
-        return await self.set_settings("aspectRatio", value)
+    async def set_aspect_ratio(self, aspect_ratio: str) -> ucapi.StatusCodes:
+        """Set the aspect ratio for the active input or application."""
+        value = self._aspect_ratios.get(aspect_ratio)
+        if value is None:
+            return ucapi.StatusCodes.BAD_REQUEST
+
+        result = await self.set_system_settings(
+            "aspectRatio",
+            {"arcPerApp": value},
+            current_app=True,
+        )
+        if result and result.get("returnValue") is True:
+            attributes = self._aspect_ratio_attributes(value)
+            if attributes:
+                self.events.emit(
+                    Events.UPDATE,
+                    self.id,
+                    {LGSelects.SELECT_ASPECT_RATIO: attributes},
+                )
+            return ucapi.StatusCodes.OK
+        return ucapi.StatusCodes.BAD_REQUEST
 
     @retry()
     async def set_channel(self, channel: str) -> ucapi.StatusCodes:
