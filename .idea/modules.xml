@@ -2,8 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/integration-lgtv.iml" filepath="$PROJECT_DIR$/.idea/integration-lgtv.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/integration-sonyavr.iml" filepath="$PROJECT_DIR$/.idea/integration-sonyavr.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/integration-lgtv@1.iml" filepath="$PROJECT_DIR$/.idea/integration-lgtv@1.iml" />
     </modules>
   </component>
 </project>

@@ -167,6 +167,12 @@ LG_SIMPLE_COMMANDS = [
 # installed apps discovered from the TV. Examples: LAUNCH_YOUTUBE, LAUNCH_DISNEY_PLUS, etc.
 
 LG_REMOTE_BUTTONS_MAPPING: list[DeviceButtonMapping] = [
+    DeviceButtonMapping(
+        **{
+            "button": Buttons.POWER,
+            "short_press": {"cmd_id": "remote.toggle"},
+        }
+    ),
     DeviceButtonMapping(**{"button": Buttons.BACK, "short_press": {"cmd_id": "BACK"}}),
     DeviceButtonMapping(**{"button": Buttons.HOME, "short_press": {"cmd_id": "HOME"}}),
     DeviceButtonMapping(
@@ -212,7 +218,7 @@ LG_REMOTE_UI_PAGES: list[UiPage] = [
             "grid": {"width": 4, "height": 6},
             "items": [
                 {
-                    "command": {"cmd_id": "toggle"},
+                    "command": {"cmd_id": "remote.toggle"},
                     "icon": "uc:power-on",
                     "location": {"x": 0, "y": 0},
                     "type": "icon",

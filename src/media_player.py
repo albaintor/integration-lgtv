@@ -77,131 +77,133 @@ class LGTVMediaPlayer(MediaPlayer, LGEntity):
         # pylint: disable = R0915
         _LOG.info("Got %s command request: %s %s", self.id, cmd_id, params)
         params = params or {}
-        res = StatusCodes.NOT_IMPLEMENTED
 
         if self._device is None:
             _LOG.warning("No LG TV instance for entity: %s", self.id)
             return StatusCodes.SERVICE_UNAVAILABLE
 
-        if cmd_id == Commands.VOLUME:
-            res = await self._device.set_volume_level(params.get("volume"))
-        elif cmd_id == Commands.VOLUME_UP:
-            res = await self._device.volume_up()
-        elif cmd_id == Commands.VOLUME_DOWN:
-            res = await self._device.volume_down()
-        elif cmd_id == Commands.MUTE_TOGGLE:
-            res = await self._device.mute(not self.attributes[Attributes.MUTED])
-        elif cmd_id == Commands.MUTE:
-            res = await self._device.mute(True)
-        elif cmd_id == Commands.UNMUTE:
-            res = await self._device.mute(False)
-        elif cmd_id == Commands.ON:
-            res = await self._device.power_on()
-        elif cmd_id == Commands.OFF:
-            res = await self._device.power_off()
-        elif cmd_id == Commands.SELECT_SOURCE:
-            res = await self._device.select_source(params.get("source"))
-        elif cmd_id == Commands.NEXT:
-            res = await self._device.next()
-        elif cmd_id == Commands.PREVIOUS:
-            res = await self._device.previous()
-        elif cmd_id == Commands.CHANNEL_UP:
-            res = await self._device.button("CHANNELUP")
-        elif cmd_id == Commands.CHANNEL_DOWN:
-            res = await self._device.button("CHANNELDOWN")
-        elif cmd_id == Commands.PREVIOUS:
-            res = await self._device.previous()
-        elif cmd_id == Commands.PLAY_PAUSE:
-            res = await self._device.play_pause()
-        elif cmd_id == Commands.CURSOR_UP:
-            res = await self._device.button("UP")
-        elif cmd_id == Commands.CURSOR_DOWN:
-            res = await self._device.button("DOWN")
-        elif cmd_id == Commands.CURSOR_LEFT:
-            res = await self._device.button("LEFT")
-        elif cmd_id == Commands.CURSOR_RIGHT:
-            res = await self._device.button("RIGHT")
-        elif cmd_id == Commands.CURSOR_ENTER:
-            res = await self._device.button("ENTER")
-        elif cmd_id == Commands.BACK:
-            res = await self._device.button("BACK")
-        elif cmd_id == Commands.HOME:
-            res = await self._device.button_retry("HOME")
-        elif cmd_id == Commands.SETTINGS:
-            res = await self._device.button("QMENU")
-        elif cmd_id == Commands.MENU:
-            res = await self._device.button("INPUT_HUB")
-        elif cmd_id == Commands.CONTEXT_MENU:
-            res = await self._device.button("MENU")
-        elif cmd_id == Commands.INFO:
-            res = await self._device.button("INFO")
-        elif cmd_id == Commands.DIGIT_0:
-            res = await self._device.button("0")
-        elif cmd_id == Commands.DIGIT_1:
-            res = await self._device.button("1")
-        elif cmd_id == Commands.DIGIT_2:
-            res = await self._device.button("2")
-        elif cmd_id == Commands.DIGIT_3:
-            res = await self._device.button("3")
-        elif cmd_id == Commands.DIGIT_4:
-            res = await self._device.button("4")
-        elif cmd_id == Commands.DIGIT_5:
-            res = await self._device.button("5")
-        elif cmd_id == Commands.DIGIT_6:
-            res = await self._device.button("6")
-        elif cmd_id == Commands.DIGIT_7:
-            res = await self._device.button("7")
-        elif cmd_id == Commands.DIGIT_8:
-            res = await self._device.button("8")
-        elif cmd_id == Commands.DIGIT_9:
-            res = await self._device.button("9")
-        elif cmd_id == Commands.RECORD:
-            res = await self._device.button("RECORD")
-        elif cmd_id == Commands.SUBTITLE:
-            res = await self._device.button("CC")
-        elif cmd_id == Commands.AUDIO_TRACK:
-            res = await self._device.button("AD")
-        elif cmd_id == Commands.FUNCTION_GREEN:
-            res = await self._device.button("GREEN")
-        elif cmd_id == Commands.FUNCTION_YELLOW:
-            res = await self._device.button("YELLOW")
-        elif cmd_id == Commands.FUNCTION_RED:
-            res = await self._device.button("RED")
-        elif cmd_id == Commands.FUNCTION_BLUE:
-            res = await self._device.button("BLUE")
-        elif cmd_id == Commands.GUIDE:
-            res = await self._device.button("GUIDE")
-        elif cmd_id == Commands.LIVE:
-            res = await self._device.button("DASH")
-        elif cmd_id == Commands.MY_RECORDINGS:
-            res = await self._device.button("LIST")
-        elif cmd_id == Commands.FAST_FORWARD:
-            res = await self._device.button("FASTFORWARD")
-        elif cmd_id == Commands.REWIND:
-            res = await self._device.button("REWIND")
-        elif cmd_id == Commands.SELECT_SOUND_MODE:
-            res = await self._device.select_sound_output(params.get("mode"))
-        elif cmd_id in (self.options or {}).get(Options.SIMPLE_COMMANDS, []):
-            if cmd_id.startswith("LAUNCH_"):
-                # Handle dynamic app launch commands
-                app_name = cmd_id[7:]  # Remove "LAUNCH_" prefix
-                res = await self._device.launch_app_by_name(app_name)
-            elif cmd_id in LG_SIMPLE_COMMANDS_CUSTOM:
-                if cmd_id == "INPUT_SOURCE":
-                    res = await self._device.select_source_next()
-                elif cmd_id == "TURN_SCREEN_ON":
-                    res = await self._device.turn_screen_on()
-                elif cmd_id == "TURN_SCREEN_OFF":
-                    res = await self._device.turn_screen_off()
-                elif cmd_id == "TURN_SCREEN_ON4":
-                    res = await self._device.turn_screen_on(webos_ver="4")
-                elif cmd_id == "TURN_SCREEN_OFF4":
-                    res = await self._device.turn_screen_off(webos_ver="4")
-            else:
-                res = await self._device.button(cmd_id)
-        else:
-            return StatusCodes.NOT_IMPLEMENTED
-        return res
+        simple_commands = (self.options or {}).get(Options.SIMPLE_COMMANDS, [])
+        match cmd_id:
+            case Commands.VOLUME:
+                return await self._device.set_volume_level(params.get("volume"))
+            case Commands.VOLUME_UP:
+                return await self._device.volume_up()
+            case Commands.VOLUME_DOWN:
+                return await self._device.volume_down()
+            case Commands.MUTE_TOGGLE:
+                return await self._device.mute(not self.attributes[Attributes.MUTED])
+            case Commands.MUTE:
+                return await self._device.mute(True)
+            case Commands.UNMUTE:
+                return await self._device.mute(False)
+            case Commands.ON:
+                return await self._device.power_on()
+            case Commands.OFF:
+                return await self._device.power_off()
+            case Commands.TOGGLE:
+                return await self._device.power_toggle()
+            case Commands.SELECT_SOURCE:
+                return await self._device.select_source(params.get("source"))
+            case Commands.NEXT:
+                return await self._device.next()
+            case Commands.PREVIOUS:
+                return await self._device.previous()
+            case Commands.CHANNEL_UP:
+                return await self._device.button("CHANNELUP")
+            case Commands.CHANNEL_DOWN:
+                return await self._device.button("CHANNELDOWN")
+            case Commands.PLAY_PAUSE:
+                return await self._device.play_pause()
+            case Commands.CURSOR_UP:
+                return await self._device.button("UP")
+            case Commands.CURSOR_DOWN:
+                return await self._device.button("DOWN")
+            case Commands.CURSOR_LEFT:
+                return await self._device.button("LEFT")
+            case Commands.CURSOR_RIGHT:
+                return await self._device.button("RIGHT")
+            case Commands.CURSOR_ENTER:
+                return await self._device.button("ENTER")
+            case Commands.BACK:
+                return await self._device.button("BACK")
+            case Commands.HOME:
+                return await self._device.button_retry("HOME")
+            case Commands.SETTINGS:
+                return await self._device.button("QMENU")
+            case Commands.MENU:
+                return await self._device.button("INPUT_HUB")
+            case Commands.CONTEXT_MENU:
+                return await self._device.button("MENU")
+            case Commands.INFO:
+                return await self._device.button("INFO")
+            case Commands.DIGIT_0:
+                return await self._device.button("0")
+            case Commands.DIGIT_1:
+                return await self._device.button("1")
+            case Commands.DIGIT_2:
+                return await self._device.button("2")
+            case Commands.DIGIT_3:
+                return await self._device.button("3")
+            case Commands.DIGIT_4:
+                return await self._device.button("4")
+            case Commands.DIGIT_5:
+                return await self._device.button("5")
+            case Commands.DIGIT_6:
+                return await self._device.button("6")
+            case Commands.DIGIT_7:
+                return await self._device.button("7")
+            case Commands.DIGIT_8:
+                return await self._device.button("8")
+            case Commands.DIGIT_9:
+                return await self._device.button("9")
+            case Commands.RECORD:
+                return await self._device.button("RECORD")
+            case Commands.SUBTITLE:
+                return await self._device.button("CC")
+            case Commands.AUDIO_TRACK:
+                return await self._device.button("AD")
+            case Commands.FUNCTION_GREEN:
+                return await self._device.button("GREEN")
+            case Commands.FUNCTION_YELLOW:
+                return await self._device.button("YELLOW")
+            case Commands.FUNCTION_RED:
+                return await self._device.button("RED")
+            case Commands.FUNCTION_BLUE:
+                return await self._device.button("BLUE")
+            case Commands.GUIDE:
+                return await self._device.button("GUIDE")
+            case Commands.LIVE:
+                return await self._device.button("DASH")
+            case Commands.MY_RECORDINGS:
+                return await self._device.button("LIST")
+            case Commands.FAST_FORWARD:
+                return await self._device.button("FASTFORWARD")
+            case Commands.REWIND:
+                return await self._device.button("REWIND")
+            case Commands.SELECT_SOUND_MODE:
+                return await self._device.select_sound_output(params.get("mode"))
+            case command if command in simple_commands:
+                match command:
+                    case command if command.startswith("LAUNCH_"):
+                        # Handle dynamic app launch commands
+                        app_name = command[7:]  # Remove "LAUNCH_" prefix
+                        return await self._device.launch_app_by_name(app_name)
+                    case "INPUT_SOURCE":
+                        return await self._device.select_source_next()
+                    case "TURN_SCREEN_ON":
+                        return await self._device.turn_screen_on()
+                    case "TURN_SCREEN_OFF":
+                        return await self._device.turn_screen_off()
+                    case "TURN_SCREEN_ON4":
+                        return await self._device.turn_screen_on(webos_ver="4")
+                    case "TURN_SCREEN_OFF4":
+                        return await self._device.turn_screen_off(webos_ver="4")
+                    case command if command in LG_SIMPLE_COMMANDS_CUSTOM:
+                        return StatusCodes.NOT_IMPLEMENTED
+                    case command:
+                        return await self._device.button(command)
+            case _:
+                return StatusCodes.NOT_IMPLEMENTED
 
     def filter_changed_attributes(self, update: dict[str, Any]) -> dict[str, Any]:
         """
