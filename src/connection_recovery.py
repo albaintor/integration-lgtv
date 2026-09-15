@@ -160,7 +160,9 @@ class GracefulWebOsClient(WebOsClient):
     def _ensure_client_session(self) -> None:
         """Create an aiohttp session with connection-stage diagnostics."""
         if self.client_session is None:
-            self.client_session = ClientSession(trace_configs=[self._build_trace_config()])
+            self.client_session = ClientSession(
+                trace_configs=[self._build_trace_config()]
+            )
             self.created_client_session = True
 
     async def _ws_connect(
