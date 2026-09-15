@@ -1,7 +1,9 @@
 """Connection recovery helpers for transient Remote network outages."""
 
 import asyncio
+import errno
 import logging
+import ssl
 import time
 from asyncio import CancelledError, Task
 from contextlib import suppress
@@ -46,7 +48,9 @@ class GracefulWebOsClient(WebOsClient):
     - use a 30 second heartbeat instead of 5 seconds;
     - try the modern secure webOS endpoint (WSS/3001) before legacy WS/3000,
       matching the connection path used by LG ConnectSDK on current TVs;
-    - do not fall back to legacy WS/3000 when WSS/3001 merely times out;
+    - use a fresh TLS context for every WSS connection, matching ConnectSDK and
+      avoiding TLS session state reuse across Remote standby/resume cycles;
+    - fall back to legacy WS/3000 only on explicit refusal/handshake rejection;
     - emit detailed TCP/TLS/HTTP/SSAP diagnostics for reconnect analysis;
     - close INPUT and MAIN WebSockets before cancelling receive tasks so a
       normal CLOSE/CLOSE handshake can complete.
@@ -169,6 +173,22 @@ class GracefulWebOsClient(WebOsClient):
             )
             self.created_client_session = True
 
+    @staticmethod
+    def _new_ssl_context() -> ssl.SSLContext:
+        """Return a fresh unverified TLS context for one LG WSS connection.
+
+        LG ConnectSDK creates a new SSLContext for every connect attempt. aiohttp's
+        ssl=False path reuses a process-global unverified SSLContext, which can keep
+        TLS session state between reconnects. Using a fresh context preserves the
+        same certificate policy while avoiding stale TLS session/resumption state.
+        """
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        context.options |= ssl.OP_NO_COMPRESSION
+        context.set_alpn_protocols(("http/1.1",))
+        return context
+
     async def _ws_connect(self, uri: str, max_msg_size: int) -> ClientWebSocketResponse:
         """Create one WebSocket and log the complete connection stage."""
         started = time.monotonic()
@@ -179,8 +199,21 @@ class GracefulWebOsClient(WebOsClient):
             self.timeout_connect,
             self.heartbeat,
         )
+        if self.client_session is None:
+            self._ensure_client_session()
+        assert self.client_session is not None
+
+        request_ssl: ssl.SSLContext | bool = (
+            self._new_ssl_context() if uri.startswith("wss://") else False
+        )
         try:
-            ws = await super()._ws_connect(uri, max_msg_size)
+            async with asyncio.timeout(self.timeout_connect):
+                ws = await self.client_session.ws_connect(
+                    uri,
+                    heartbeat=self.heartbeat,
+                    ssl=request_ssl,
+                    max_msg_size=max_msg_size,
+                )
         except CancelledError:
             _LOG.debug(
                 "[%s] LG WS connect cancelled: %s after %.3fs",
@@ -212,19 +245,25 @@ class GracefulWebOsClient(WebOsClient):
         return ws
 
     async def _create_main_ws(self) -> ClientWebSocketResponse:
-        """Prefer current webOS WSS/3001 and fall back on connection errors."""
+        """Prefer WSS/3001; use WS/3000 only for an explicit legacy signal."""
         secure_uri = f"wss://{self.host}:{WSS_PORT}"
         try:
             return await self._ws_connect(secure_uri, MAIN_WS_MAX_MSG_SIZE)
-        except aiohttp.ClientConnectionError as ex:
-            # Keep legacy webOS support when the secure endpoint explicitly
-            # fails at the connection layer. A TimeoutError is intentionally
-            # allowed to propagate: on current TVs it may simply mean WSS/3001
-            # needs longer than aiowebostv's historical 2 second timeout.
+        except aiohttp.WSServerHandshakeError as ex:
             _LOG.debug(
-                "[%s] WSS/3001 connection error (%r), trying legacy WS/%s",
+                "[%s] WSS/3001 websocket handshake rejected (%r), trying legacy WS/%s",
                 self.host,
                 ex,
+                WS_PORT,
+            )
+        except aiohttp.ClientConnectionError as ex:
+            os_error = getattr(ex, "os_error", None)
+            error_number = getattr(os_error, "errno", None)
+            if error_number != errno.ECONNREFUSED:
+                raise
+            _LOG.debug(
+                "[%s] WSS/3001 explicitly refused (ECONNREFUSED), trying legacy WS/%s",
+                self.host,
                 WS_PORT,
             )
 

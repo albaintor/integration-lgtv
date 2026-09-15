@@ -3,6 +3,8 @@
 # pylint: disable=protected-access,wrong-import-position
 
 import asyncio
+import errno
+import ssl
 import sys
 import unittest
 from pathlib import Path
@@ -63,9 +65,9 @@ class ConnectionProfileTest(unittest.IsolatedAsyncioTestCase):
     async def test_connection_rejection_falls_back_to_legacy_port(self) -> None:
         client = GracefulWebOsClient("test-tv")
         expected_ws = object()
-        client._ws_connect = AsyncMock(
-            side_effect=[aiohttp.ClientConnectionError("rejected"), expected_ws]
-        )
+        refused = aiohttp.ClientConnectionError("rejected")
+        refused.os_error = OSError(errno.ECONNREFUSED, "Connection refused")
+        client._ws_connect = AsyncMock(side_effect=[refused, expected_ws])
 
         result = await client._create_main_ws()
 
@@ -88,6 +90,29 @@ class ConnectionProfileTest(unittest.IsolatedAsyncioTestCase):
         client._ws_connect.assert_awaited_once_with(
             "wss://test-tv:3001", MAIN_WS_MAX_MSG_SIZE
         )
+
+    async def test_host_unreachable_does_not_fall_back_to_legacy_port(self) -> None:
+        client = GracefulWebOsClient("test-tv")
+        unreachable = aiohttp.ClientConnectionError("unreachable")
+        unreachable.os_error = OSError(errno.EHOSTUNREACH, "No route to host")
+        client._ws_connect = AsyncMock(side_effect=unreachable)
+
+        with self.assertRaises(aiohttp.ClientConnectionError):
+            await client._create_main_ws()
+
+        client._ws_connect.assert_awaited_once_with(
+            "wss://test-tv:3001", MAIN_WS_MAX_MSG_SIZE
+        )
+
+    async def test_tls_context_is_fresh_for_each_connection(self) -> None:
+        first = GracefulWebOsClient._new_ssl_context()
+        second = GracefulWebOsClient._new_ssl_context()
+
+        self.assertIsNot(first, second)
+        self.assertFalse(first.check_hostname)
+        self.assertEqual(first.verify_mode, ssl.CERT_NONE)
+        self.assertFalse(second.check_hostname)
+        self.assertEqual(second.verify_mode, ssl.CERT_NONE)
 
     async def test_duplicate_reconnect_trigger_reuses_active_task(self) -> None:
         device = object.__new__(LGDevice)
