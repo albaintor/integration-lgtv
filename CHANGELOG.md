@@ -11,5 +11,11 @@ _Changes in the next release_
 
 ---
 
+## v1.17.1 - 2026-09-15
+### Fixed
+- Close the LG input and main WebSocket sessions gracefully before cancelling receive tasks, avoiding abnormal close code 1006 and temporary reconnect blocking on some webOS TVs after Remote standby/network loss.
+
+---
+
 ## v1.0.0 - 2024-04-25
 ### Initial release
