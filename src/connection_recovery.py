@@ -2,20 +2,33 @@
 
 import asyncio
 import logging
+import time
 from asyncio import AbstractEventLoop, CancelledError, Task
 from contextlib import suppress
 from typing import Any, Awaitable, cast
 
+import aiohttp
 import aiowebostv
 import ucapi
-from aiohttp import ClientWebSocketResponse
+from aiohttp import ClientSession, ClientWebSocketResponse, TraceConfig
 from aiowebostv import WebOsClient
+from aiowebostv.webos_client import (
+    CONNECT_TIMEOUT,
+    MAIN_WS_MAX_MSG_SIZE,
+    WS_PORT,
+    WSS_PORT,
+)
 from ucapi.media_player import States
 
 import lg
 from config import LGConfigDevice
 
 _LOG = logging.getLogger("lg")
+
+# Keep LG connections responsive, but avoid treating a short Remote Wi-Fi
+# transition as a dead WebSocket. aiohttp waits heartbeat/2 for the PONG, so a
+# 30 s heartbeat tolerates about 15 s of missing PONGs before closing.
+LG_HEARTBEAT = 30.0
 
 # ucapi 0.7.x does not expose WIFI_CHANGE yet, but newer Remote firmware can
 # send the raw event. Typing it as ucapi.Events keeps IntegrationAPI.listens_to
@@ -26,17 +39,187 @@ WIFI_UNAVAILABLE_STATES = {"DISCONNECTED", "OUT_OF_RANGE"}
 
 
 class GracefulWebOsClient(WebOsClient):
-    """WebOsClient workaround for graceful websocket shutdown.
+    """webOS client tuned for Remote standby/network transitions.
 
-    aiowebostv 0.9.2 cancels its receive tasks before closing the websocket
-    connections. aiohttp turns a cancelled receive into close code 1006, so the
-    subsequent websocket close no longer performs a normal CLOSE/CLOSE
-    handshake. Some LG TVs then temporarily reject new websocket handshakes
-    from that client.
+    Differences from aiowebostv 0.9.2:
+    - use a 30 second heartbeat instead of 5 seconds;
+    - try the modern secure webOS endpoint (WSS/3001) before legacy WS/3000,
+      matching the connection path used by LG ConnectSDK on current TVs;
+    - emit detailed TCP/TLS/HTTP-upgrade diagnostics for reconnect analysis;
+    - close INPUT and MAIN WebSockets before cancelling receive tasks so a
+      normal CLOSE/CLOSE handshake can complete.
 
-    Keep receive tasks alive until the INPUT and MAIN websocket closing
-    handshakes have completed, then perform the normal task/session cleanup.
+    The graceful close fixes abnormal local cleanup, but is intentionally not
+    treated as the root cause of the long reconnect timeout under investigation.
     """
+
+    def __init__(
+        self,
+        host: str,
+        client_key: str | None = None,
+        connect_timeout: float = CONNECT_TIMEOUT,
+        heartbeat: float = LG_HEARTBEAT,
+        client_session: ClientSession | None = None,
+    ) -> None:
+        super().__init__(
+            host=host,
+            client_key=client_key,
+            connect_timeout=connect_timeout,
+            heartbeat=heartbeat,
+            client_session=client_session,
+        )
+
+    @staticmethod
+    def _elapsed(started: float | None) -> str:
+        if started is None:
+            return "?"
+        return f"{time.monotonic() - started:.3f}s"
+
+    async def _trace_request_start(
+        self, session: ClientSession, ctx: Any, params: Any
+    ) -> None:
+        del session
+        ctx.lg_request_started = time.monotonic()
+        ctx.lg_request_url = str(getattr(params, "url", "?"))
+        _LOG.debug(
+            "[%s] LG NET HTTP start: %s %s",
+            self.host,
+            getattr(params, "method", "?"),
+            ctx.lg_request_url,
+        )
+
+    async def _trace_connection_create_start(
+        self, session: ClientSession, ctx: Any, params: Any
+    ) -> None:
+        del session, params
+        ctx.lg_connection_started = time.monotonic()
+        _LOG.debug(
+            "[%s] LG NET TCP/TLS connect start: %s",
+            self.host,
+            getattr(ctx, "lg_request_url", "?"),
+        )
+
+    async def _trace_connection_create_end(
+        self, session: ClientSession, ctx: Any, params: Any
+    ) -> None:
+        del session, params
+        _LOG.debug(
+            "[%s] LG NET TCP/TLS ready: %s in %s",
+            self.host,
+            getattr(ctx, "lg_request_url", "?"),
+            self._elapsed(getattr(ctx, "lg_connection_started", None)),
+        )
+
+    async def _trace_request_headers_sent(
+        self, session: ClientSession, ctx: Any, params: Any
+    ) -> None:
+        del session, params
+        _LOG.debug(
+            "[%s] LG NET HTTP Upgrade headers sent: %s in %s",
+            self.host,
+            getattr(ctx, "lg_request_url", "?"),
+            self._elapsed(getattr(ctx, "lg_request_started", None)),
+        )
+
+    async def _trace_request_end(
+        self, session: ClientSession, ctx: Any, params: Any
+    ) -> None:
+        del session
+        response = getattr(params, "response", None)
+        _LOG.debug(
+            "[%s] LG NET HTTP response: %s status=%s in %s",
+            self.host,
+            getattr(ctx, "lg_request_url", "?"),
+            getattr(response, "status", "?"),
+            self._elapsed(getattr(ctx, "lg_request_started", None)),
+        )
+
+    async def _trace_request_exception(
+        self, session: ClientSession, ctx: Any, params: Any
+    ) -> None:
+        del session
+        exception = getattr(params, "exception", None)
+        _LOG.warning(
+            "[%s] LG NET HTTP exception: %s after %s: %s: %r",
+            self.host,
+            getattr(ctx, "lg_request_url", "?"),
+            self._elapsed(getattr(ctx, "lg_request_started", None)),
+            type(exception).__name__ if exception is not None else "?",
+            exception,
+        )
+
+    def _build_trace_config(self) -> TraceConfig:
+        trace = TraceConfig()
+        trace.on_request_start.append(self._trace_request_start)
+        trace.on_connection_create_start.append(self._trace_connection_create_start)
+        trace.on_connection_create_end.append(self._trace_connection_create_end)
+        trace.on_request_headers_sent.append(self._trace_request_headers_sent)
+        trace.on_request_end.append(self._trace_request_end)
+        trace.on_request_exception.append(self._trace_request_exception)
+        return trace
+
+    def _ensure_client_session(self) -> None:
+        """Create an aiohttp session with connection-stage diagnostics."""
+        if self.client_session is None:
+            self.client_session = ClientSession(trace_configs=[self._build_trace_config()])
+            self.created_client_session = True
+
+    async def _ws_connect(
+        self, uri: str, max_msg_size: int
+    ) -> ClientWebSocketResponse:
+        """Create one WebSocket and log the complete connection stage."""
+        started = time.monotonic()
+        _LOG.debug(
+            "[%s] LG WS connect start: %s heartbeat=%.1fs",
+            self.host,
+            uri,
+            self.heartbeat,
+        )
+        try:
+            ws = await super()._ws_connect(uri, max_msg_size)
+        except BaseException as ex:
+            _LOG.warning(
+                "[%s] LG WS connect failed: %s after %.3fs: %s: %r",
+                self.host,
+                uri,
+                time.monotonic() - started,
+                type(ex).__name__,
+                ex,
+            )
+            raise
+
+        _LOG.debug(
+            "[%s] LG WS connected: %s in %.3fs local=%r peer=%r ssl=%s",
+            self.host,
+            uri,
+            time.monotonic() - started,
+            ws.get_extra_info("sockname"),
+            ws.get_extra_info("peername"),
+            ws.get_extra_info("ssl_object") is not None,
+        )
+        return ws
+
+    async def _create_main_ws(self) -> ClientWebSocketResponse:
+        """Prefer current webOS WSS/3001 and fall back to legacy WS/3000.
+
+        A timeout on 3001 is *not* followed by a 3000 attempt: when a modern TV
+        accepts TCP/TLS but stalls the WebSocket upgrade, trying another endpoint
+        would hide the condition we need to diagnose. Legacy fallback is only
+        used for an actual connection-level rejection of 3001.
+        """
+        secure_uri = f"wss://{self.host}:{WSS_PORT}"
+        try:
+            return await self._ws_connect(secure_uri, MAIN_WS_MAX_MSG_SIZE)
+        except aiohttp.ClientConnectionError as ex:
+            _LOG.debug(
+                "[%s] WSS/3001 unavailable (%r), trying legacy WS/%s",
+                self.host,
+                ex,
+                WS_PORT,
+            )
+
+        legacy_uri = f"ws://{self.host}:{WS_PORT}"
+        return await self._ws_connect(legacy_uri, MAIN_WS_MAX_MSG_SIZE)
 
     @staticmethod
     async def _finish_cleanup(awaitable: Awaitable[Any]) -> Any:
@@ -100,9 +283,10 @@ class GracefulWebOsClient(WebOsClient):
                 await asyncio.shield(closeout_task)
 
 
-# Temporary compatibility patch until the graceful close fix is available in a
-# released aiowebostv version. lg.py imports WebOsClient at module load time,
-# while setup_flow imports it later, so patch both references.
+# Temporary compatibility patch until the connection-profile and graceful-close
+# changes are available in a released aiowebostv version. lg.py imports
+# WebOsClient at module load time, while setup_flow imports it later, so patch
+# both references.
 setattr(aiowebostv, "WebOsClient", GracefulWebOsClient)
 setattr(lg, "WebOsClient", GracefulWebOsClient)
 
@@ -127,45 +311,33 @@ class IntegrationAPI(ucapi.IntegrationAPI):
 
 
 class LGDevice(lg.LGDevice):
-    """LG device whose reconnect backoff can be interrupted safely."""
-
-    def __init__(
-        self,
-        device_config: LGConfigDevice,
-        loop: AbstractEventLoop | None = None,
-    ) -> None:
-        super().__init__(device_config, loop=loop)
-        self._reconnect_wakeup = asyncio.Event()
+    """LG device with one stable reconnect state machine."""
 
     def _ensure_connect_task(self) -> Task[None]:
-        """Return the reconnect task and wake its backoff for external callers."""
+        """Return the active reconnect task without forcing another attempt."""
         task = self._connect_task
-        if task is not None and not task.done() and asyncio.current_task() is not task:
-            # A command (or another external trigger) arrived while reconnecting.
-            # Keep the existing task, but make the next retry immediate. If the
-            # current connect attempt is still running, the event stays set until
-            # the loop reaches its backoff wait.
-            self._reconnect_wakeup.set()
-            _LOG.debug(
-                "[%s] Reconnect retry requested while connection task is active",
-                self._device_config.address,
-            )
+        if task is not None and not task.done():
+            if asyncio.current_task() is not task:
+                _LOG.debug(
+                    "[%s] Reconnect already active; keep current attempt/backoff",
+                    self._device_config.address,
+                )
+            return task
 
         return super()._ensure_connect_task()
 
     def request_reconnect(self, reason: str = "external request") -> Task[None]:
-        """Start a reconnect loop or wake the existing loop immediately."""
-        self._reconnect_retry = 0
+        """Start one reconnect loop, or reuse the one already running."""
         task = self._connect_task
         if task is not None and not task.done():
-            self._reconnect_wakeup.set()
             _LOG.debug(
-                "[%s] Wake reconnect loop: %s",
+                "[%s] Reconnect already active, ignore duplicate trigger: %s",
                 self._device_config.address,
                 reason,
             )
             return task
 
+        self._reconnect_retry = 0
         _LOG.debug(
             "[%s] Start reconnect loop: %s",
             self._device_config.address,
@@ -179,7 +351,13 @@ class LGDevice(lg.LGDevice):
         return self._connect_task is not None and not self._connect_task.done()
 
     async def _connect_loop(self) -> None:
-        """Reconnect with an interruptible delay between attempts."""
+        """Reconnect serially with a stable backoff between attempts.
+
+        The retry count is local so button presses cannot reset an active loop
+        through lg.retry_call_command(). This mirrors LG ConnectSDK's approach:
+        an existing connection attempt stays authoritative until it completes.
+        """
+        retry_count = 0
         try:
             while True:
                 try:
@@ -205,9 +383,10 @@ class LGDevice(lg.LGDevice):
                         ex,
                     )
 
-                self._reconnect_retry += 1
+                retry_count += 1
+                self._reconnect_retry = retry_count
                 self._attr_state = States.OFF
-                if self._reconnect_retry > lg.CONNECTION_RETRIES:
+                if retry_count > lg.CONNECTION_RETRIES:
                     _LOG.debug(
                         "[%s] LG not connected abort retries",
                         self._device_config.address,
@@ -218,31 +397,16 @@ class LGDevice(lg.LGDevice):
                     self.wakeonlan()
 
                 _LOG.debug(
-                    "[%s] LG not connected, retry %s / %s",
+                    "[%s] LG not connected, retry %s / %s in %ss",
                     self._device_config.address,
-                    self._reconnect_retry,
+                    retry_count,
                     lg.CONNECTION_RETRIES,
+                    lg.DEFAULT_TIMEOUT,
                 )
-
-                try:
-                    await asyncio.wait_for(
-                        self._reconnect_wakeup.wait(), timeout=lg.DEFAULT_TIMEOUT
-                    )
-                except asyncio.TimeoutError:
-                    # Normal backoff expiration. Do not clear the event here: if
-                    # a wakeup races with the timeout, keeping it set makes the
-                    # following backoff interruptible as well.
-                    pass
-                else:
-                    self._reconnect_wakeup.clear()
-                    _LOG.debug(
-                        "[%s] Reconnect wait interrupted, retrying immediately",
-                        self._device_config.address,
-                    )
+                await asyncio.sleep(lg.DEFAULT_TIMEOUT)
         except CancelledError:
             _LOG.debug("[%s] LG TV connect task cancelled", self._device_config.address)
         finally:
-            self._reconnect_wakeup.clear()
             self._retry_wakeonlan = False
             self._connect_task = None
             self._reconnect_retry = 0
