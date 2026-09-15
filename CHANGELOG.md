@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keep a single reconnect loop active and ignore duplicate reconnect triggers instead of forcing immediate retries from button presses.
 
 ### Diagnostics
-- Add detailed LG connection-stage logging for TCP/TLS setup, HTTP WebSocket upgrade, SSAP HELLO, pre-registration system information, and REGISTER.
+- Add detailed LG connection-stage logging for raw TCP connect, TLS handshake, negotiated TLS version/cipher, HTTP WebSocket upgrade, SSAP HELLO, pre-registration system information, and REGISTER.
 
 ---
 
