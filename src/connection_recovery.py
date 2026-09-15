@@ -3,9 +3,13 @@
 import asyncio
 import logging
 from asyncio import AbstractEventLoop, CancelledError, Task
-from typing import Any, cast
+from contextlib import suppress
+from typing import Any, Awaitable, cast
 
+import aiowebostv
 import ucapi
+from aiohttp import ClientWebSocketResponse
+from aiowebostv import WebOsClient
 from ucapi.media_player import States
 
 import lg
@@ -19,6 +23,88 @@ _LOG = logging.getLogger("lg")
 WIFI_CHANGE_EVENT = cast(ucapi.Events, "wifi_change")
 WIFI_CONNECTED = "CONNECTED"
 WIFI_UNAVAILABLE_STATES = {"DISCONNECTED", "OUT_OF_RANGE"}
+
+
+class GracefulWebOsClient(WebOsClient):
+    """WebOsClient workaround for graceful websocket shutdown.
+
+    aiowebostv 0.9.2 cancels its receive tasks before closing the websocket
+    connections. aiohttp turns a cancelled receive into close code 1006, so the
+    subsequent websocket close no longer performs a normal CLOSE/CLOSE
+    handshake. Some LG TVs then temporarily reject new websocket handshakes
+    from that client.
+
+    Keep receive tasks alive until the INPUT and MAIN websocket closing
+    handshakes have completed, then perform the normal task/session cleanup.
+    """
+
+    @staticmethod
+    async def _finish_cleanup(awaitable: Awaitable[Any]) -> Any:
+        """Finish one cleanup operation even while connect_handler is cancelled."""
+        task = asyncio.ensure_future(awaitable)
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except CancelledError:
+                # disconnect() cancels connect_handler to enter its finally
+                # block. The websocket closing handshake itself must finish.
+                continue
+        return task.result()
+
+    async def _closeout_tasks(
+        self,
+        main_ws: ClientWebSocketResponse | None,
+        input_ws: ClientWebSocketResponse | None,
+    ) -> None:
+        """Close websocket handshakes before cancelling receive tasks."""
+        # The input websocket depends on the main SSAP session, close it first.
+        if input_ws is not None and not input_ws.closed:
+            await self._finish_cleanup(input_ws.close())
+        if main_ws is not None and not main_ws.closed:
+            await self._finish_cleanup(main_ws.close())
+
+        _LOG.debug(
+            "[%s] Graceful websocket close completed: main=%s input=%s",
+            self.host,
+            main_ws.close_code if main_ws is not None else None,
+            input_ws.close_code if input_ws is not None else None,
+        )
+
+        # Mirror aiowebostv cleanup, but only after both WebSocket CLOSE
+        # handshakes have completed.
+        closeout: set[asyncio.Task[Any]] = set()
+        self._cancel_tasks()
+
+        if callback_tasks := set(self.callback_tasks.values()):
+            closeout.update(callback_tasks)
+
+        closeout.update(self._rx_tasks)
+
+        if self.created_client_session:
+            closeout.add(asyncio.create_task(self.close_client_session()))
+
+        self.connection = None
+        self.input_connection = None
+        self.do_state_update = False
+        self.tv_state.clear()
+
+        for callback in self.state_update_callbacks:
+            closeout.add(asyncio.create_task(callback(self.tv_state)))
+
+        if not closeout:
+            return
+
+        closeout_task = asyncio.create_task(asyncio.wait(closeout))
+        while not closeout_task.done():
+            with suppress(CancelledError):
+                await asyncio.shield(closeout_task)
+
+
+# Temporary compatibility patch until the graceful close fix is available in a
+# released aiowebostv version. lg.py imports WebOsClient at module load time,
+# while setup_flow imports it later, so patch both references.
+setattr(aiowebostv, "WebOsClient", GracefulWebOsClient)
+setattr(lg, "WebOsClient", GracefulWebOsClient)
 
 
 class IntegrationAPI(ucapi.IntegrationAPI):
