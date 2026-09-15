@@ -12,17 +12,17 @@ import aiowebostv
 import ucapi
 from aiohttp import ClientSession, ClientWebSocketResponse, TraceConfig
 from aiowebostv import WebOsClient
-from aiowebostv.webos_client import (
-    CONNECT_TIMEOUT,
-    MAIN_WS_MAX_MSG_SIZE,
-    WS_PORT,
-    WSS_PORT,
-)
+from aiowebostv.webos_client import MAIN_WS_MAX_MSG_SIZE, WS_PORT, WSS_PORT
 from ucapi.media_player import States
 
 import lg
 
 _LOG = logging.getLogger("lg")
+
+# Match LG ConnectSDK more closely by allowing the complete TCP/TLS/WebSocket
+# setup more time than aiowebostv's 2 second default without making failures
+# excessively slow to recover from.
+LG_CONNECT_TIMEOUT = 6.0
 
 # Keep LG connections responsive, but avoid treating a short Remote Wi-Fi
 # transition as a dead WebSocket. aiohttp waits heartbeat/2 for the PONG, so a
@@ -41,9 +41,11 @@ class GracefulWebOsClient(WebOsClient):
     """webOS client tuned for Remote standby/network transitions.
 
     Differences from aiowebostv 0.9.2:
+    - use a 6 second connection timeout instead of 2 seconds;
     - use a 30 second heartbeat instead of 5 seconds;
     - try the modern secure webOS endpoint (WSS/3001) before legacy WS/3000,
       matching the connection path used by LG ConnectSDK on current TVs;
+    - do not fall back to legacy WS/3000 when WSS/3001 merely times out;
     - emit detailed TCP/TLS/HTTP/SSAP diagnostics for reconnect analysis;
     - close INPUT and MAIN WebSockets before cancelling receive tasks so a
       normal CLOSE/CLOSE handshake can complete.
@@ -56,7 +58,7 @@ class GracefulWebOsClient(WebOsClient):
         self,
         host: str,
         client_key: str | None = None,
-        connect_timeout: float = CONNECT_TIMEOUT,
+        connect_timeout: float = LG_CONNECT_TIMEOUT,
         heartbeat: float = LG_HEARTBEAT,
         client_session: ClientSession | None = None,
     ) -> None:
@@ -169,9 +171,10 @@ class GracefulWebOsClient(WebOsClient):
         """Create one WebSocket and log the complete connection stage."""
         started = time.monotonic()
         _LOG.debug(
-            "[%s] LG WS connect start: %s heartbeat=%.1fs",
+            "[%s] LG WS connect start: %s timeout=%.1fs heartbeat=%.1fs",
             self.host,
             uri,
+            self.timeout_connect,
             self.heartbeat,
         )
         try:
@@ -207,15 +210,17 @@ class GracefulWebOsClient(WebOsClient):
         return ws
 
     async def _create_main_ws(self) -> ClientWebSocketResponse:
-        """Prefer current webOS WSS/3001 and fall back to legacy WS/3000."""
+        """Prefer current webOS WSS/3001 and fall back on connection errors."""
         secure_uri = f"wss://{self.host}:{WSS_PORT}"
         try:
             return await self._ws_connect(secure_uri, MAIN_WS_MAX_MSG_SIZE)
-        except (aiohttp.ClientConnectionError, asyncio.TimeoutError) as ex:
-            # Keep legacy webOS support. The preceding diagnostics still show
-            # whether 3001 failed before TCP/TLS, during TLS, or after Upgrade.
+        except aiohttp.ClientConnectionError as ex:
+            # Keep legacy webOS support when the secure endpoint explicitly
+            # fails at the connection layer. A TimeoutError is intentionally
+            # allowed to propagate: on current TVs it may simply mean WSS/3001
+            # needs longer than aiowebostv's historical 2 second timeout.
             _LOG.debug(
-                "[%s] WSS/3001 unavailable (%r), trying legacy WS/%s",
+                "[%s] WSS/3001 connection error (%r), trying legacy WS/%s",
                 self.host,
                 ex,
                 WS_PORT,
