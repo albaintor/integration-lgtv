@@ -20,6 +20,7 @@ from connection_recovery import (  # noqa: E402
     GracefulWebOsClient,
     LGDevice,
 )
+from lg_tcp_connector import LGDiagnosticTCPConnector  # noqa: E402
 
 
 class ConnectionProfileTest(unittest.IsolatedAsyncioTestCase):
@@ -34,6 +35,18 @@ class ConnectionProfileTest(unittest.IsolatedAsyncioTestCase):
         client = GracefulWebOsClient("test-tv")
         self.assertEqual(client.heartbeat, LG_HEARTBEAT)
         self.assertEqual(client.heartbeat, 30.0)
+
+    async def test_default_session_uses_tcp_tls_diagnostic_connector(self) -> None:
+        client = GracefulWebOsClient("test-tv")
+        client._ensure_client_session()
+        try:
+            self.assertIsNotNone(client.client_session)
+            self.assertIsInstance(
+                client.client_session.connector,
+                LGDiagnosticTCPConnector,
+            )
+        finally:
+            await client.close_client_session()
 
     async def test_secure_port_is_tried_first(self) -> None:
         client = GracefulWebOsClient("test-tv")
