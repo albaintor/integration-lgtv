@@ -192,9 +192,10 @@ async def on_wifi_change(
     if network_state in connection_recovery.WIFI_UNAVAILABLE_STATES:
         _wifi_reconnect_devices.clear()
         for device_id, device in _configured_devices.items():
-            reconnect_active = isinstance(
-                device, connection_recovery.LGDevice
-            ) and device.reconnect_active
+            reconnect_active = (
+                isinstance(device, connection_recovery.LGDevice)
+                and device.reconnect_active
+            )
             if device.is_connected or reconnect_active:
                 _wifi_reconnect_devices.add(device_id)
         _LOG.debug(
@@ -208,10 +209,7 @@ async def on_wifi_change(
 
     reconnect_devices = set(_wifi_reconnect_devices)
     for device_id, device in _configured_devices.items():
-        if (
-            isinstance(device, connection_recovery.LGDevice)
-            and device.reconnect_active
-        ):
+        if isinstance(device, connection_recovery.LGDevice) and device.reconnect_active:
             reconnect_devices.add(device_id)
     _wifi_reconnect_devices.clear()
 
