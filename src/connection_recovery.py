@@ -165,9 +165,7 @@ class GracefulWebOsClient(WebOsClient):
             )
             self.created_client_session = True
 
-    async def _ws_connect(
-        self, uri: str, max_msg_size: int
-    ) -> ClientWebSocketResponse:
+    async def _ws_connect(self, uri: str, max_msg_size: int) -> ClientWebSocketResponse:
         """Create one WebSocket and log the complete connection stage."""
         started = time.monotonic()
         _LOG.debug(
