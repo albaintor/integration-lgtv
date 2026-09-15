@@ -79,28 +79,6 @@ If you have troubles connecting to the TV, try to unplug and replug electrically
 - At the end, most users should enable the `Media Player` entity. `Remote entity` is useful for custom commands and commands sequence
 
 
-### Upgrade and backup/restore
-
-The remote doesn't allow to upgrade an existing integration yet : it is necessary to remove the existing integration (twice) before being able to install a new release.<br>
-However the integration lets backup or restore the devices configuration (in JSON format), so that you don't have to perform the setup and pairing process again.
-
-If you want to upgrade the integration to a new release, or simply wants to backup the configuration for later restore or cloning the configuration to another remote, you can use backup/restore.
-
-To use this functionality, launch the setup flow of your existing integration, and select the `Backup or restore` option in the setup flow :
-<img width="350" alt="image" src="https://github.com/user-attachments/assets/28799000-d6c9-4f99-86b1-286a857d12bb" />
-
-Then you will have a text field with the current configuration. This field which will be empty if no devices are configured. 
-Then just save the content of the text field in a file for later restore and abort the setup flow (clicking next will apply this configuration)
-
-You can now remove the integration and upload the new one. Once you launch the setup flow, you will have an option to perform the normal setup flow or restore a configuration.
-Select this option and just replace the content of the text field by the previously saved configuration and click on next to apply it. 
-<br>
-Beware while using this functionality : the expected format should be respected and could change in the future.
-If the format is not recognized, the import will be aborted and existing configuration will remain unchanged.
-
-This functionnality can also be used to clone a configuration from one remote to another.
-
-
 ## Configuration
 
 ### Wake on lan
@@ -285,7 +263,33 @@ The following commands depend on your TV model
 - luna picture {'pictureMode' : 'dolbyHdrCinema'}
 
 
+### Troubleshooting
+
+Sometimes the TV may no be accessible anymore by the remote (but still be from other devices). When the network resets or a power outage occurs, TV webOS doesn't always recover properly. It may block new connections from the same device (remote) as a previous connection wasn't closed properly.
+In that case, there is no other way to unplug/replug the TV electrically.
+
 ## Advanced usage
+
+### Custom upgrade and backup/restore
+
+The remote now allows to upgrade an existing integration : this backup/restore procedure is still maintained but no longer recommended or useful. <br>
+The integration lets backup or restore the devices configuration (in JSON format), so that you don't have to perform the setup and pairing process again.
+
+If you want to upgrade the integration to a new release, or simply wants to backup the configuration for later restore or cloning the configuration to another remote, you can use backup/restore.
+
+To use this functionality, launch the setup flow of your existing integration, and select the `Backup or restore` option in the setup flow :
+<img width="350" alt="image" src="https://github.com/user-attachments/assets/28799000-d6c9-4f99-86b1-286a857d12bb" />
+
+Then you will have a text field with the current configuration. This field which will be empty if no devices are configured. 
+Then just save the content of the text field in a file for later restore and abort the setup flow (clicking next will apply this configuration)
+
+You can now remove the integration and upload the new one. Once you launch the setup flow, you will have an option to perform the normal setup flow or restore a configuration.
+Select this option and just replace the content of the text field by the previously saved configuration and click on next to apply it. 
+<br>
+Beware while using this functionality : the expected format should be respected and could change in the future.
+If the format is not recognized, the import will be aborted and existing configuration will remain unchanged.
+
+This functionnality can also be used to clone a configuration from one remote to another.
 
 ### Setup as external integration
 
