@@ -50,3 +50,6 @@ jobs:
           diff -u /tmp/connection_recovery.before.py src/connection_recovery.py || true
       - name: Type check with pyright
         run: python -m pyright src
+      - name: Run reconnect regression tests
+        run: |
+          python -m pytest -q test/test_connection_recovery_profile.py test/test_button_reconnection.py
