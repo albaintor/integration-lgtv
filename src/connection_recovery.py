@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import time
-from asyncio import AbstractEventLoop, CancelledError, Task
+from asyncio import CancelledError, Task
 from contextlib import suppress
 from typing import Any, Awaitable, cast
 
@@ -21,7 +21,6 @@ from aiowebostv.webos_client import (
 from ucapi.media_player import States
 
 import lg
-from config import LGConfigDevice
 
 _LOG = logging.getLogger("lg")
 
@@ -45,7 +44,7 @@ class GracefulWebOsClient(WebOsClient):
     - use a 30 second heartbeat instead of 5 seconds;
     - try the modern secure webOS endpoint (WSS/3001) before legacy WS/3000,
       matching the connection path used by LG ConnectSDK on current TVs;
-    - emit detailed TCP/TLS/HTTP-upgrade diagnostics for reconnect analysis;
+    - emit detailed TCP/TLS/HTTP/SSAP diagnostics for reconnect analysis;
     - close INPUT and MAIN WebSockets before cancelling receive tasks so a
       normal CLOSE/CLOSE handshake can complete.
 
@@ -177,7 +176,15 @@ class GracefulWebOsClient(WebOsClient):
         )
         try:
             ws = await super()._ws_connect(uri, max_msg_size)
-        except BaseException as ex:
+        except CancelledError:
+            _LOG.debug(
+                "[%s] LG WS connect cancelled: %s after %.3fs",
+                self.host,
+                uri,
+                time.monotonic() - started,
+            )
+            raise
+        except Exception as ex:
             _LOG.warning(
                 "[%s] LG WS connect failed: %s after %.3fs: %s: %r",
                 self.host,
@@ -200,17 +207,13 @@ class GracefulWebOsClient(WebOsClient):
         return ws
 
     async def _create_main_ws(self) -> ClientWebSocketResponse:
-        """Prefer current webOS WSS/3001 and fall back to legacy WS/3000.
-
-        A timeout on 3001 is *not* followed by a 3000 attempt: when a modern TV
-        accepts TCP/TLS but stalls the WebSocket upgrade, trying another endpoint
-        would hide the condition we need to diagnose. Legacy fallback is only
-        used for an actual connection-level rejection of 3001.
-        """
+        """Prefer current webOS WSS/3001 and fall back to legacy WS/3000."""
         secure_uri = f"wss://{self.host}:{WSS_PORT}"
         try:
             return await self._ws_connect(secure_uri, MAIN_WS_MAX_MSG_SIZE)
-        except aiohttp.ClientConnectionError as ex:
+        except (aiohttp.ClientConnectionError, asyncio.TimeoutError) as ex:
+            # Keep legacy webOS support. The preceding diagnostics still show
+            # whether 3001 failed before TCP/TLS, during TLS, or after Upgrade.
             _LOG.debug(
                 "[%s] WSS/3001 unavailable (%r), trying legacy WS/%s",
                 self.host,
@@ -220,6 +223,66 @@ class GracefulWebOsClient(WebOsClient):
 
         legacy_uri = f"ws://{self.host}:{WS_PORT}"
         return await self._ws_connect(legacy_uri, MAIN_WS_MAX_MSG_SIZE)
+
+    async def _get_hello_info(self, ws: ClientWebSocketResponse) -> None:
+        started = time.monotonic()
+        _LOG.debug("[%s] LG SSAP HELLO start", self.host)
+        try:
+            await super()._get_hello_info(ws)
+        except Exception as ex:
+            _LOG.warning(
+                "[%s] LG SSAP HELLO failed after %.3fs: %s: %r",
+                self.host,
+                time.monotonic() - started,
+                type(ex).__name__,
+                ex,
+            )
+            raise
+        _LOG.debug(
+            "[%s] LG SSAP HELLO completed in %.3fs",
+            self.host,
+            time.monotonic() - started,
+        )
+
+    async def _get_pre_reg_system_info(self, ws: ClientWebSocketResponse) -> None:
+        started = time.monotonic()
+        _LOG.debug("[%s] LG SSAP pre-registration system info start", self.host)
+        try:
+            await super()._get_pre_reg_system_info(ws)
+        except Exception as ex:
+            _LOG.warning(
+                "[%s] LG SSAP pre-registration system info failed after %.3fs: %s: %r",
+                self.host,
+                time.monotonic() - started,
+                type(ex).__name__,
+                ex,
+            )
+            raise
+        _LOG.debug(
+            "[%s] LG SSAP pre-registration system info completed in %.3fs",
+            self.host,
+            time.monotonic() - started,
+        )
+
+    async def _check_registration(self, ws: ClientWebSocketResponse) -> None:
+        started = time.monotonic()
+        _LOG.debug("[%s] LG SSAP REGISTER start", self.host)
+        try:
+            await super()._check_registration(ws)
+        except Exception as ex:
+            _LOG.warning(
+                "[%s] LG SSAP REGISTER failed after %.3fs: %s: %r",
+                self.host,
+                time.monotonic() - started,
+                type(ex).__name__,
+                ex,
+            )
+            raise
+        _LOG.debug(
+            "[%s] LG SSAP REGISTER completed in %.3fs",
+            self.host,
+            time.monotonic() - started,
+        )
 
     @staticmethod
     async def _finish_cleanup(awaitable: Awaitable[Any]) -> Any:
