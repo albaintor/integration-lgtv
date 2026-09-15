@@ -12,8 +12,9 @@ from aiohttp.client_exceptions import (
     ClientConnectorCertificateError,
     ClientConnectorError,
     ClientConnectorSSLError,
+    cert_errors,
+    ssl_errors,
 )
-from aiohttp.connector import cert_errors, ssl_errors
 from aiohttp.helpers import ceil_timeout
 
 _LOG = logging.getLogger("lg")
