@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-_Changes in the next release_
+### Changed
+- Prefer the modern secure LG webOS WebSocket endpoint on port 3001, with legacy port 3000 fallback for older TVs.
+- Increase the LG WebSocket heartbeat from 5 seconds to 30 seconds to tolerate short Remote Wi-Fi transitions while retaining dead-connection detection.
+- Keep a single reconnect loop active and ignore duplicate reconnect triggers instead of forcing immediate retries from button presses.
+
+### Diagnostics
+- Add detailed LG connection-stage logging for TCP/TLS setup, HTTP WebSocket upgrade, SSAP HELLO, pre-registration system information, and REGISTER.
 
 ---
 
