@@ -59,15 +59,22 @@ class ConnectionProfileTest(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
-    async def test_secure_timeout_does_not_probe_legacy_port(self) -> None:
+    async def test_secure_timeout_also_falls_back_for_legacy_tvs(self) -> None:
         client = GracefulWebOsClient("test-tv")
-        client._ws_connect = AsyncMock(side_effect=asyncio.TimeoutError())
+        expected_ws = object()
+        client._ws_connect = AsyncMock(
+            side_effect=[asyncio.TimeoutError(), expected_ws]
+        )
 
-        with self.assertRaises(asyncio.TimeoutError):
-            await client._create_main_ws()
+        result = await client._create_main_ws()
 
-        client._ws_connect.assert_awaited_once_with(
-            "wss://test-tv:3001", MAIN_WS_MAX_MSG_SIZE
+        self.assertIs(result, expected_ws)
+        self.assertEqual(
+            client._ws_connect.await_args_list,
+            [
+                call("wss://test-tv:3001", MAIN_WS_MAX_MSG_SIZE),
+                call("ws://test-tv:3000", MAIN_WS_MAX_MSG_SIZE),
+            ],
         )
 
     async def test_duplicate_reconnect_trigger_reuses_active_task(self) -> None:
