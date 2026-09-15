@@ -16,6 +16,7 @@ import ucapi
 from ucapi.media_player import Attributes as MediaAttr
 
 import config
+import connection_recovery
 import lg
 import media_player
 import remote
@@ -32,9 +33,11 @@ _LOOP = asyncio.new_event_loop()
 asyncio.set_event_loop(_LOOP)
 
 # Global variables
-api = ucapi.IntegrationAPI(_LOOP)
+api = connection_recovery.IntegrationAPI(_LOOP)
 # Map of id -> LG instance
 _configured_devices: dict[str, lg.LGDevice] = {}
+# Devices which had an active connection/reconnect when the Remote lost WiFi.
+_wifi_reconnect_devices: set[str] = set()
 
 
 def _device_configurations() -> config.Devices:
@@ -71,7 +74,10 @@ async def on_connect_cmd() -> None:
         # TODO ? what is the connect event for (against exit from standby)
         # await _LOOP.create_task(device.power_on())
         try:
-            _create_task(device.connect(), f"Connect task for {device.id}")
+            if isinstance(device, connection_recovery.LGDevice):
+                device.request_reconnect("connect event")
+            else:
+                _create_task(device.connect(), f"Connect task for {device.id}")
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.debug(
                 "[%s] Could not connect to device, probably because it is starting with magic packet %s",
@@ -105,7 +111,10 @@ async def connect_device(device: lg.LGDevice):
     """Connect device and send state."""
     try:
         _LOG.debug("[%s] Connecting device %s...", device.host, device.id)
-        await device.connect()
+        if isinstance(device, connection_recovery.LGDevice):
+            await device.request_reconnect("driver connect")
+        else:
+            await device.connect()
         _LOG.debug(
             "[%s] Device %s connected, sending attributes for subscribed entities",
             device.host,
@@ -164,13 +173,62 @@ async def on_exit_standby() -> None:
     for configured in _configured_devices.values():
         # start background task
         try:
-            # await _LOOP.create_task(configured.connect())
             await _LOOP.create_task(connect_device(configured))
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error(
                 "[%s] Error while reconnecting to the LG TV %s", configured.host, ex
             )
-        # _LOOP.create_task(configured.connect())
+
+
+@api.listens_to(connection_recovery.WIFI_CHANGE_EVENT)
+async def on_wifi_change(
+    state: str | None = None, msg_data: dict[str, Any] | None = None
+) -> None:
+    """Resume only connections which were active before a Remote WiFi outage."""
+    raw_state = state or (msg_data or {}).get("state")
+    network_state = str(raw_state).upper() if raw_state is not None else ""
+    _LOG.debug("WiFi change event: state=%s data=%s", network_state, msg_data)
+
+    if network_state in connection_recovery.WIFI_UNAVAILABLE_STATES:
+        _wifi_reconnect_devices.clear()
+        for device_id, device in _configured_devices.items():
+            reconnect_active = (
+                isinstance(device, connection_recovery.LGDevice)
+                and device.reconnect_active
+            )
+            if device.is_connected or reconnect_active:
+                _wifi_reconnect_devices.add(device_id)
+        _LOG.debug(
+            "WiFi unavailable, remember reconnect state for devices: %s",
+            sorted(_wifi_reconnect_devices),
+        )
+        return
+
+    if network_state != connection_recovery.WIFI_CONNECTED:
+        return
+
+    reconnect_devices = set(_wifi_reconnect_devices)
+    for device_id, device in _configured_devices.items():
+        if isinstance(device, connection_recovery.LGDevice) and device.reconnect_active:
+            reconnect_devices.add(device_id)
+    _wifi_reconnect_devices.clear()
+
+    if not reconnect_devices:
+        _LOG.debug("WiFi connected, no LG connection needs to be resumed")
+        return
+
+    _LOG.debug(
+        "WiFi connected, resume LG connection for devices: %s",
+        sorted(reconnect_devices),
+    )
+    for device_id in reconnect_devices:
+        device = _configured_devices.get(device_id)
+        if device is None:
+            continue
+        if isinstance(device, connection_recovery.LGDevice):
+            device.request_reconnect("WiFi connected")
+        else:
+            _create_task(device.connect(), f"WiFi reconnect task for {device.id}")
 
 
 @api.listens_to(ucapi.Events.SUBSCRIBE_ENTITIES)
@@ -214,7 +272,10 @@ async def on_subscribe_entities(entity_ids: list[str]) -> None:
                 )
             try:
                 if not device.available:
-                    await _LOOP.create_task(device.connect())
+                    if isinstance(device, connection_recovery.LGDevice):
+                        await device.request_reconnect("entity subscription")
+                    else:
+                        await _LOOP.create_task(device.connect())
             except WEBOSTV_EXCEPTIONS as ex:
                 _LOG.error(
                     "[%s] Error while reconnecting to the LG TV %s", device.host, ex
@@ -505,7 +566,7 @@ def _configure_new_device(
             f"Reconfigure task for {device.id}",
         )
     else:
-        device = lg.LGDevice(device_config, loop=_LOOP)
+        device = connection_recovery.LGDevice(device_config, loop=_LOOP)
 
         _create_task(
             on_device_connected(device.id),
@@ -523,7 +584,10 @@ def _configure_new_device(
     if connect and not existing_device:
         # start background connection task
         try:
-            _create_task(device.connect(), f"Connect task for {device.id}")
+            if isinstance(device, connection_recovery.LGDevice):
+                device.request_reconnect("new device configuration")
+            else:
+                _create_task(device.connect(), f"Connect task for {device.id}")
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.debug(
                 "[%s] Could not connect to device, probably because it is starting with magic packet %s",
@@ -542,7 +606,10 @@ async def _reconfigure_device(
     await device.disconnect()
     device.update_config(device_config)
     if connect:
-        await device.connect()
+        if isinstance(device, connection_recovery.LGDevice):
+            await device.request_reconnect("device reconfiguration")
+        else:
+            await device.connect()
 
 
 async def _suspend_device_for_pairing(device_id: str) -> None:
@@ -556,16 +623,19 @@ async def _resume_device_after_pairing_failure(device_id: str) -> None:
     """Restore the configured client when setup could not obtain a new key."""
     if device := _configured_devices.get(device_id):
         _LOG.debug("[%s] Resume connection after failed re-pairing", device.host)
-        _create_task(
-            device.connect(), f"Resume after failed re-pairing for {device.id}"
-        )
+        if isinstance(device, connection_recovery.LGDevice):
+            device.request_reconnect("resume after failed re-pairing")
+        else:
+            _create_task(
+                device.connect(), f"Resume after failed re-pairing for {device.id}"
+            )
 
 
 def _register_available_entities(
     device_config: config.LGConfigDevice, device: lg.LGDevice
 ) -> None:
     """
-    Create entities for given receiver device and register them as available entities.
+    Create entities for given receiver device and register them in the integration library as available entities.
 
     :param device_config: Receiver
     """
@@ -624,9 +694,11 @@ def on_device_removed(device: config.LGConfigDevice | None) -> None:
         for configured in _configured_devices.values():
             _create_task(_async_remove(configured), f"Remove task for {configured.id}")
         _configured_devices.clear()
+        _wifi_reconnect_devices.clear()
         api.configured_entities.clear()
         api.available_entities.clear()
     else:
+        _wifi_reconnect_devices.discard(device.id)
         if device.id in _configured_devices:
             _LOG.debug(
                 "[%s] Disconnecting from removed LG TV %s", device.address, device.id
