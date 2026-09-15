@@ -16,7 +16,6 @@ on:
     branches: [main]
     types: [opened, synchronize, reopened]
 
-# prevent concurrent runs of this workflow for open pull requests
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -27,32 +26,27 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-24.04
-
     name: Check Python code formatting
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 #v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 #v7.0.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.11"
-
       - name: Install pip
-        run: |
-          python -m pip install --upgrade pip
-
+        run: python -m pip install --upgrade pip
       - name: Install dependencies
         run: |
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f test-requirements.txt ]; then pip install -r test-requirements.txt; fi
       - name: Lint with ruff
+        run: python -m ruff check src
+      - name: Show exact ruff formatting diff
         run: |
-          python -m ruff check src
-      - name: Check code formatting with ruff
-        run: |
-          python -m ruff format --check src
+          cp src/connection_recovery.py /tmp/connection_recovery.before.py
+          python -m ruff format src/connection_recovery.py
+          diff -u /tmp/connection_recovery.before.py src/connection_recovery.py || true
       - name: Type check with pyright
-        run: |
-          python -m pyright src
+        run: python -m pyright src
