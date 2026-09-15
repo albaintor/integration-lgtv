@@ -185,6 +185,7 @@ def retry(
         ) -> ucapi.StatusCodes:
             """Wrap all command methods."""
             # pylint: disable = W0212
+            retry_attempted = False
             try:
                 if obj.available:
                     await func(obj, *args, **kwargs)
@@ -193,6 +194,7 @@ def retry(
                     "[%s] Device is unavailable, connecting before executing command...",
                     obj._device_config.address,
                 )
+                retry_attempted = True
                 if power_on:
                     await obj.power_on()
                 return await retry_call_command(
@@ -205,13 +207,25 @@ def retry(
                     log_function = _LOG.debug
                 else:
                     log_function = _LOG.error
-                log_function(
-                    "[%s] Error calling %s on [%s]: %r trying to reconnect",
-                    obj._device_config.address,
-                    func.__name__,
-                    obj._name,
-                    ex,
-                )
+                if retry_attempted:
+                    log_function(
+                        "[%s] Error calling %s on [%s]: %r",
+                        obj._device_config.address,
+                        func.__name__,
+                        obj._name,
+                        ex,
+                    )
+                    if no_error:
+                        return ucapi.StatusCodes.OK
+                    return ucapi.StatusCodes.BAD_REQUEST
+                else:
+                    log_function(
+                        "[%s] Error calling %s on [%s]: %r trying to reconnect",
+                        obj._device_config.address,
+                        func.__name__,
+                        obj._name,
+                        ex,
+                    )
                 try:
                     if power_on:
                         await obj.power_on()
