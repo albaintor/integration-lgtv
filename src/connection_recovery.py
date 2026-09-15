@@ -54,11 +54,7 @@ class LGDevice(lg.LGDevice):
     def _ensure_connect_task(self) -> Task[None]:
         """Return the reconnect task and wake its backoff for external callers."""
         task = self._connect_task
-        if (
-            task is not None
-            and not task.done()
-            and asyncio.current_task() is not task
-        ):
+        if task is not None and not task.done() and asyncio.current_task() is not task:
             # A command (or another external trigger) arrived while reconnecting.
             # Keep the existing task, but make the next retry immediate. If the
             # current connect attempt is still running, the event stays set until
@@ -158,9 +154,7 @@ class LGDevice(lg.LGDevice):
                         self._device_config.address,
                     )
         except CancelledError:
-            _LOG.debug(
-                "[%s] LG TV connect task cancelled", self._device_config.address
-            )
+            _LOG.debug("[%s] LG TV connect task cancelled", self._device_config.address)
         finally:
             self._reconnect_wakeup.clear()
             self._retry_wakeonlan = False
