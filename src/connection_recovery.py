@@ -16,6 +16,7 @@ from aiowebostv.webos_client import MAIN_WS_MAX_MSG_SIZE, WS_PORT, WSS_PORT
 from ucapi.media_player import States
 
 import lg
+from lg_tcp_connector import LGDiagnosticTCPConnector
 
 _LOG = logging.getLogger("lg")
 
@@ -163,7 +164,8 @@ class GracefulWebOsClient(WebOsClient):
         """Create an aiohttp session with connection-stage diagnostics."""
         if self.client_session is None:
             self.client_session = ClientSession(
-                trace_configs=[self._build_trace_config()]
+                connector=LGDiagnosticTCPConnector(),
+                trace_configs=[self._build_trace_config()],
             )
             self.created_client_session = True
 
