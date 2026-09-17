@@ -3,6 +3,7 @@
 import asyncio
 import errno
 import logging
+import socket
 import ssl
 import time
 from asyncio import CancelledError, Task
@@ -481,8 +482,45 @@ class LGDevice(lg.LGDevice):
 
         return None
 
+    def _network_snapshot(self) -> str:
+        """Return kernel route/source information for wake-from-standby diagnosis."""
+        host = self._device_config.address
+        selected_source = "unknown"
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe_socket:
+                # UDP connect selects a local route/source address without sending
+                # traffic. ENETUNREACH here proves the kernel has no IPv4 route.
+                probe_socket.connect((host, WSS_PORT))
+                selected_source = str(probe_socket.getsockname()[0])
+        except OSError as ex:
+            selected_source = f"error:{ex.errno}:{ex.strerror}"
+
+        routes: list[str] = []
+        try:
+            with open("/proc/net/route", encoding="ascii") as route_file:
+                next(route_file, None)
+                for line in route_file:
+                    fields = line.split()
+                    if len(fields) < 8:
+                        continue
+                    try:
+                        flags = int(fields[3], 16)
+                    except ValueError:
+                        continue
+                    if not flags & 0x1:
+                        continue
+                    routes.append(
+                        f"{fields[0]}:dst={fields[1]}:gw={fields[2]}:"
+                        f"flags={fields[3]}:metric={fields[6]}:mask={fields[7]}"
+                    )
+        except OSError as ex:
+            routes.append(f"unavailable:{type(ex).__name__}:{ex}")
+
+        return f"source={selected_source} routes=[{' | '.join(routes)}]"
+
     async def _network_path_ready(self) -> bool:
         """Probe LG TCP endpoints without starting TLS/WebSocket negotiation."""
+        outcomes: list[str] = []
         for port in (WSS_PORT, WS_PORT):
             writer: asyncio.StreamWriter | None = None
             try:
@@ -492,11 +530,14 @@ class LGDevice(lg.LGDevice):
                         port,
                     )
             except TimeoutError:
+                outcomes.append(f"{port}=timeout")
                 continue
             except OSError as ex:
+                outcomes.append(f"{port}=errno:{ex.errno}")
                 if ex.errno in LG_NETWORK_PATH_ERRNOS:
                     continue
 
+                self._last_network_probe = ",".join(outcomes)
                 # ECONNREFUSED (or another immediate host response) proves that
                 # the LAN path is back. Let the normal LG negotiation decide
                 # whether WSS/3001 or legacy WS/3000 should be used.
@@ -509,6 +550,8 @@ class LGDevice(lg.LGDevice):
                 )
                 return True
             else:
+                outcomes.append(f"{port}=connected")
+                self._last_network_probe = ",".join(outcomes)
                 writer.close()
                 with suppress(Exception):
                     await writer.wait_closed()
@@ -517,12 +560,14 @@ class LGDevice(lg.LGDevice):
                 if writer is not None and not writer.is_closing():
                     writer.close()
 
+        self._last_network_probe = ",".join(outcomes) or "no-result"
         return False
 
     async def _wait_for_network_path(self) -> bool:
         """Poll the LAN path quickly for one bounded recovery window."""
         started = time.monotonic()
         deadline = started + LG_NETWORK_RECOVERY_WINDOW
+        probe_outcomes: dict[str, int] = {}
         _LOG.debug(
             "[%s] LG network recovery mode: probing ports %s/%s every %.1fs",
             self._device_config.address,
@@ -533,21 +578,29 @@ class LGDevice(lg.LGDevice):
 
         while True:
             probe_started = time.monotonic()
-            if await self._network_path_ready():
+            path_ready = await self._network_path_ready()
+            outcome = getattr(self, "_last_network_probe", "unknown")
+            probe_outcomes[outcome] = probe_outcomes.get(outcome, 0) + 1
+            if path_ready:
                 _LOG.debug(
                     "[%s] LG network path recovered after %.3fs; "
-                    "resume WebSocket/TLS connection",
+                    "resume WebSocket/TLS connection; probe=%s net=%s",
                     self._device_config.address,
                     time.monotonic() - started,
+                    outcome,
+                    self._network_snapshot(),
                 )
                 return True
 
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 _LOG.debug(
-                    "[%s] LG network path still unavailable after %.1fs",
+                    "[%s] LG network path still unavailable after %.1fs; "
+                    "probes=%s net=%s",
                     self._device_config.address,
                     LG_NETWORK_RECOVERY_WINDOW,
+                    probe_outcomes,
+                    self._network_snapshot(),
                 )
                 return False
 
@@ -643,8 +696,11 @@ class LGDevice(lg.LGDevice):
                         network_path_failure = True
                         _LOG.debug(
                             "[%s] LG connect ended unavailable and TCP endpoints "
-                            "are unreachable; switch to fast TCP probes",
+                            "are unreachable; switch to fast TCP probes; "
+                            "probe=%s net=%s",
                             self._device_config.address,
+                            getattr(self, "_last_network_probe", "unknown"),
+                            self._network_snapshot(),
                         )
                 except CancelledError:
                     _LOG.debug(
@@ -664,9 +720,10 @@ class LGDevice(lg.LGDevice):
                         network_path_failure = True
                         _LOG.debug(
                             "[%s] LG network path failure errno=%s; "
-                            "switch to fast TCP probes",
+                            "switch to fast TCP probes; net=%s",
                             self._device_config.address,
                             network_path_errno,
+                            self._network_snapshot(),
                         )
 
                 retry_count += 1
