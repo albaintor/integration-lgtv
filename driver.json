@@ -1,6 +1,6 @@
 {
   "driver_id": "lgwebos_driver",
-  "version": "1.17.3",
+  "version": "1.17.4",
   "min_core_api": "0.20.0",
   "name": {
     "en": "LG WebOS"
@@ -28,7 +28,7 @@
         "id": "info",
         "label": {
           "en": "Setup process",
-          "de": "Setup Fortschritt",
+          "de": "Integrationssetup",
           "fr": "Progrès de la configuration"
         },
         "field": {
