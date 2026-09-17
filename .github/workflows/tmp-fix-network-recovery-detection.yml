@@ -28,125 +28,80 @@ jobs:
               file = Path(path)
               text = file.read_text()
               if old not in text:
-                  raise SystemExit(f"Expected block not found in {path}")
+                  raise SystemExit(f"Expected block not found in {path}: {old[:80]!r}")
               file.write_text(text.replace(old, new, 1))
 
-          path = Path("src/connection_recovery.py")
-          text = path.read_text()
-          start = text.index("    async def _connect_loop(self) -> None:\n")
-          old = text[start:]
-          new = '''    async def _connect_loop(self) -> None:
-              """Reconnect serially, using fast LAN probes after route failures.
-
-              The retry count is local so button presses cannot reset an active loop
-              through lg.retry_call_command(). ``lg.LGDevice.connect()`` logs and
-              absorbs WEBOSTV_EXCEPTIONS, so after a failed connect we also inspect
-              endpoint reachability directly instead of relying only on propagated
-              ENETUNREACH/EHOSTUNREACH exceptions. Wake-on-LAN remains armed
-              throughout recovery.
-              """
-              retry_count = 0
-              network_recovery = False
-              try:
-                  while True:
-                      if network_recovery:
-                          if await self._wait_for_network_path():
-                              network_recovery = False
-                          else:
-                              retry_count += 1
-                              self._reconnect_retry = retry_count
-                              self._attr_state = States.OFF
-                              if retry_count > lg.CONNECTION_RETRIES:
+          replace_once(
+              "src/connection_recovery.py",
+              '''                network_path_errno: int | None = None
+                          try:
+                              await self.connect()
+                              if self._tv.tv_state.is_on:
                                   _LOG.debug(
-                                      "[%s] LG not connected abort retries",
+                                      "[%s] LG TV connection succeeded",
                                       self._device_config.address,
                                   )
+                                  self._update_picture_modes()
+                                  break
+                          except CancelledError:
+          ''',
+              '''                network_path_failure = False
+                          try:
+                              await self.connect()
+                              if self._tv.tv_state.is_on:
+                                  _LOG.debug(
+                                      "[%s] LG TV connection succeeded",
+                                      self._device_config.address,
+                                  )
+                                  self._update_picture_modes()
                                   break
 
-                              if self._retry_wakeonlan:
-                                  self._try_wakeonlan(
-                                      f"network recovery {retry_count}"
+                              # lg.LGDevice.connect() logs and absorbs WEBOSTV_EXCEPTIONS.
+                              # If it returned unavailable, verify the LAN path directly
+                              # instead of waiting for an exception that will never escape.
+                              if not self._available and not await self._network_path_ready():
+                                  network_path_failure = True
+                                  _LOG.debug(
+                                      "[%s] LG connect ended unavailable and TCP endpoints "
+                                      "are unreachable; switch to fast TCP probes",
+                                      self._device_config.address,
                                   )
-                              continue
+                          except CancelledError:
+          ''',
+          )
 
-                      network_path_failure = False
-                      try:
-                          await self.connect()
-                          if self._tv.tv_state.is_on:
-                              _LOG.debug(
-                                  "[%s] LG TV connection succeeded",
-                                  self._device_config.address,
-                              )
-                              self._update_picture_modes()
-                              break
+          replace_once(
+              "src/connection_recovery.py",
+              '''                    if network_path_errno is not None:
+                                  _LOG.debug(
+                                      "[%s] LG network path failure errno=%s; "
+                                      "switch to fast TCP probes",
+                                      self._device_config.address,
+                                      network_path_errno,
+                                  )
+          ''',
+              '''                    if network_path_errno is not None:
+                                  network_path_failure = True
+                                  _LOG.debug(
+                                      "[%s] LG network path failure errno=%s; "
+                                      "switch to fast TCP probes",
+                                      self._device_config.address,
+                                      network_path_errno,
+                                  )
+          ''',
+          )
 
-                          # lg.LGDevice.connect() catches WEBOSTV_EXCEPTIONS and
-                          # returns normally after marking the device unavailable.
-                          # Probe the endpoints here so ENETUNREACH/EHOSTUNREACH
-                          # cannot be hidden from this recovery state machine.
-                          if not self._available and not await self._network_path_ready():
-                              network_path_failure = True
-                              _LOG.debug(
-                                  "[%s] LG connect ended unavailable and TCP endpoints "
-                                  "are unreachable; switch to fast TCP probes",
-                                  self._device_config.address,
-                              )
-                      except CancelledError:
-                          _LOG.debug(
-                              "[%s] LG TV connect task cancelled",
-                              self._device_config.address,
-                          )
-                          break
-                      # pylint: disable=W0718
-                      except Exception as ex:
-                          network_path_errno = self._network_path_errno(ex)
-                          _LOG.warning(
-                              "[%s] LG TV connection failed %s",
-                              self._device_config.address,
-                              ex,
-                          )
-                          if network_path_errno is not None:
-                              network_path_failure = True
-                              _LOG.debug(
-                                  "[%s] LG network path failure errno=%s; "
-                                  "switch to fast TCP probes",
-                                  self._device_config.address,
-                                  network_path_errno,
-                              )
-
-                      retry_count += 1
-                      self._reconnect_retry = retry_count
-                      self._attr_state = States.OFF
-                      if retry_count > lg.CONNECTION_RETRIES:
-                          _LOG.debug(
-                              "[%s] LG not connected abort retries",
-                              self._device_config.address,
-                          )
-                          break
-
-                      if self._retry_wakeonlan:
-                          self._try_wakeonlan(f"retry {retry_count}")
-
-                      if network_path_failure:
+          replace_once(
+              "src/connection_recovery.py",
+              '''                if network_path_errno is not None:
                           network_recovery = True
                           continue
-
-                      _LOG.debug(
-                          "[%s] LG not connected, retry %s / %s in %ss",
-                          self._device_config.address,
-                          retry_count,
-                          lg.CONNECTION_RETRIES,
-                          lg.DEFAULT_TIMEOUT,
-                      )
-                      await asyncio.sleep(lg.DEFAULT_TIMEOUT)
-              except CancelledError:
-                  _LOG.debug("[%s] LG TV connect task cancelled", self._device_config.address)
-              finally:
-                  self._retry_wakeonlan = False
-                  self._connect_task = None
-                  self._reconnect_retry = 0
-          '''
-          path.write_text(text[:start] + new)
+          ''',
+              '''                if network_path_failure:
+                          network_recovery = True
+                          continue
+          ''',
+          )
 
           replace_once(
               "src/driver.py",
@@ -177,30 +132,14 @@ jobs:
 
           replace_once(
               "test/test_connection_recovery_profile.py",
-              '''    async def test_host_unreachable_switches_to_fast_network_probe(self) -> None:
-                  device = object.__new__(LGDevice)
-                  device._device_config = SimpleNamespace(address="test-tv")
-                  device._retry_wakeonlan = False
-                  device._connect_task = None
-                  device._reconnect_retry = 0
-                  device._attr_state = States.OFF
-                  device._tv = SimpleNamespace(tv_state=SimpleNamespace(is_on=True))
-                  device.connect = AsyncMock(
-                      side_effect=[
-                          OSError(errno.EHOSTUNREACH, "No route to host"),
-                          None,
-                      ]
-                  )
-                  device._wait_for_network_path = AsyncMock(return_value=True)
-                  device._update_picture_modes = MagicMock()
+              '''        device._update_picture_modes.assert_called_once_with()
 
-                  await device._connect_loop()
 
-                  self.assertEqual(device.connect.await_count, 2)
-                  device._wait_for_network_path.assert_awaited_once_with()
-                  device._update_picture_modes.assert_called_once_with()
+          if __name__ == "__main__":
           ''',
-              '''    async def test_swallowed_network_error_switches_to_fast_probe(self) -> None:
+              '''        device._update_picture_modes.assert_called_once_with()
+
+              async def test_swallowed_network_error_switches_to_fast_probe(self) -> None:
                   device = object.__new__(LGDevice)
                   device._device_config = SimpleNamespace(address="test-tv")
                   device._retry_wakeonlan = False
@@ -216,8 +155,8 @@ jobs:
                       nonlocal connect_calls
                       connect_calls += 1
                       if connect_calls == 1:
-                          # Production lg.LGDevice.connect() logs connector errors,
-                          # sets _available=False and returns without re-raising.
+                          # Production connect() logs the connector error, marks the
+                          # device unavailable and returns without re-raising it.
                           device._available = False
                           device._tv.tv_state.is_on = False
                           return
@@ -235,6 +174,9 @@ jobs:
                   device._network_path_ready.assert_awaited_once_with()
                   device._wait_for_network_path.assert_awaited_once_with()
                   device._update_picture_modes.assert_called_once_with()
+
+
+          if __name__ == "__main__":
           ''',
           )
 
