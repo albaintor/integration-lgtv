@@ -32,6 +32,14 @@ LG_CONNECT_TIMEOUT = 6.0
 # 30 s heartbeat tolerates about 15 s of missing PONGs before closing.
 LG_HEARTBEAT = 30.0
 
+# After ENETUNREACH/EHOSTUNREACH, avoid repeatedly paying the full LG
+# TCP/TLS/WebSocket timeout while the Remote LAN route is still recovering.
+# Short raw TCP probes detect when either LG endpoint becomes reachable again.
+LG_NETWORK_PROBE_TIMEOUT = 0.5
+LG_NETWORK_PROBE_INTERVAL = 0.5
+LG_NETWORK_RECOVERY_WINDOW = 5.0
+LG_NETWORK_PATH_ERRNOS = {errno.ENETUNREACH, errno.EHOSTUNREACH}
+
 # ucapi 0.7.x does not expose WIFI_CHANGE yet, but newer Remote firmware can
 # send the raw event. Typing it as ucapi.Events keeps IntegrationAPI.listens_to
 # compatible while the runtime value remains the protocol event name.
@@ -455,6 +463,102 @@ class LGDevice(lg.LGDevice):
         )
         return True
 
+    @staticmethod
+    def _network_path_errno(ex: BaseException) -> int | None:
+        """Return ENETUNREACH/EHOSTUNREACH found in a wrapped connection error."""
+        current: BaseException | None = ex
+        seen: set[int] = set()
+        while current is not None and id(current) not in seen:
+            seen.add(id(current))
+            os_error = getattr(current, "os_error", None)
+            for candidate in (current, os_error):
+                error_number = getattr(candidate, "errno", None)
+                if error_number in LG_NETWORK_PATH_ERRNOS:
+                    return error_number
+
+            nested = current.__cause__ or current.__context__
+            current = nested if isinstance(nested, BaseException) else None
+
+        return None
+
+    async def _network_path_ready(self) -> bool:
+        """Probe LG TCP endpoints without starting TLS/WebSocket negotiation."""
+        for port in (WSS_PORT, WS_PORT):
+            writer: asyncio.StreamWriter | None = None
+            try:
+                async with asyncio.timeout(LG_NETWORK_PROBE_TIMEOUT):
+                    _, writer = await asyncio.open_connection(
+                        self._device_config.address,
+                        port,
+                    )
+            except TimeoutError:
+                continue
+            except OSError as ex:
+                if ex.errno in LG_NETWORK_PATH_ERRNOS:
+                    continue
+
+                # ECONNREFUSED (or another immediate host response) proves that
+                # the LAN path is back. Let the normal LG negotiation decide
+                # whether WSS/3001 or legacy WS/3000 should be used.
+                _LOG.debug(
+                    "[%s] LG network probe reached port %s with errno %s; "
+                    "resume full connection",
+                    self._device_config.address,
+                    port,
+                    ex.errno,
+                )
+                return True
+            else:
+                writer.close()
+                with suppress(Exception):
+                    await writer.wait_closed()
+                return True
+            finally:
+                if writer is not None and not writer.is_closing():
+                    writer.close()
+
+        return False
+
+    async def _wait_for_network_path(self) -> bool:
+        """Poll the LAN path quickly for one bounded recovery window."""
+        started = time.monotonic()
+        deadline = started + LG_NETWORK_RECOVERY_WINDOW
+        _LOG.debug(
+            "[%s] LG network recovery mode: probing ports %s/%s every %.1fs",
+            self._device_config.address,
+            WSS_PORT,
+            WS_PORT,
+            LG_NETWORK_PROBE_INTERVAL,
+        )
+
+        while True:
+            probe_started = time.monotonic()
+            if await self._network_path_ready():
+                _LOG.debug(
+                    "[%s] LG network path recovered after %.3fs; "
+                    "resume WebSocket/TLS connection",
+                    self._device_config.address,
+                    time.monotonic() - started,
+                )
+                return True
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                _LOG.debug(
+                    "[%s] LG network path still unavailable after %.1fs",
+                    self._device_config.address,
+                    LG_NETWORK_RECOVERY_WINDOW,
+                )
+                return False
+
+            probe_elapsed = time.monotonic() - probe_started
+            delay = min(
+                max(0.0, LG_NETWORK_PROBE_INTERVAL - probe_elapsed),
+                remaining,
+            )
+            if delay > 0:
+                await asyncio.sleep(delay)
+
     def request_reconnect(
         self,
         reason: str = "external request",
@@ -492,15 +596,36 @@ class LGDevice(lg.LGDevice):
         return self._connect_task is not None and not self._connect_task.done()
 
     async def _connect_loop(self) -> None:
-        """Reconnect serially with a stable backoff between attempts.
+        """Reconnect serially, using fast LAN probes after route failures.
 
         The retry count is local so button presses cannot reset an active loop
-        through lg.retry_call_command(). This mirrors LG ConnectSDK's approach:
-        an existing connection attempt stays authoritative until it completes.
+        through lg.retry_call_command(). Once ENETUNREACH/EHOSTUNREACH is seen,
+        raw TCP probes replace expensive TLS/WebSocket attempts until the Remote
+        can reach the TV again. Wake-on-LAN remains armed throughout recovery.
         """
         retry_count = 0
+        network_recovery = False
         try:
             while True:
+                if network_recovery:
+                    if await self._wait_for_network_path():
+                        network_recovery = False
+                    else:
+                        retry_count += 1
+                        self._reconnect_retry = retry_count
+                        self._attr_state = States.OFF
+                        if retry_count > lg.CONNECTION_RETRIES:
+                            _LOG.debug(
+                                "[%s] LG not connected abort retries",
+                                self._device_config.address,
+                            )
+                            break
+
+                        if self._retry_wakeonlan:
+                            self._try_wakeonlan(f"network recovery {retry_count}")
+                        continue
+
+                network_path_errno: int | None = None
                 try:
                     await self.connect()
                     if self._tv.tv_state.is_on:
@@ -518,11 +643,19 @@ class LGDevice(lg.LGDevice):
                     break
                 # pylint: disable=W0718
                 except Exception as ex:
+                    network_path_errno = self._network_path_errno(ex)
                     _LOG.warning(
                         "[%s] LG TV connection failed %s",
                         self._device_config.address,
                         ex,
                     )
+                    if network_path_errno is not None:
+                        _LOG.debug(
+                            "[%s] LG network path failure errno=%s; "
+                            "switch to fast TCP probes",
+                            self._device_config.address,
+                            network_path_errno,
+                        )
 
                 retry_count += 1
                 self._reconnect_retry = retry_count
@@ -536,6 +669,10 @@ class LGDevice(lg.LGDevice):
 
                 if self._retry_wakeonlan:
                     self._try_wakeonlan(f"retry {retry_count}")
+
+                if network_path_errno is not None:
+                    network_recovery = True
+                    continue
 
                 _LOG.debug(
                     "[%s] LG not connected, retry %s / %s in %ss",

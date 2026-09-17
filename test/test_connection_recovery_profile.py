@@ -23,6 +23,7 @@ from connection_recovery import (  # noqa: E402
     LGDevice,
 )
 from lg_tcp_connector import LGDiagnosticTCPConnector  # noqa: E402
+from ucapi.media_player import States  # noqa: E402
 
 
 class ConnectionProfileTest(unittest.IsolatedAsyncioTestCase):
@@ -144,6 +145,29 @@ class ConnectionProfileTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(device._retry_wakeonlan)
         device.wakeonlan.assert_called_once_with()
         await active_task
+
+    async def test_host_unreachable_switches_to_fast_network_probe(self) -> None:
+        device = object.__new__(LGDevice)
+        device._device_config = SimpleNamespace(address="test-tv")
+        device._retry_wakeonlan = False
+        device._connect_task = None
+        device._reconnect_retry = 0
+        device._attr_state = States.OFF
+        device._tv = SimpleNamespace(tv_state=SimpleNamespace(is_on=True))
+        device.connect = AsyncMock(
+            side_effect=[
+                OSError(errno.EHOSTUNREACH, "No route to host"),
+                None,
+            ]
+        )
+        device._wait_for_network_path = AsyncMock(return_value=True)
+        device._update_picture_modes = MagicMock()
+
+        await device._connect_loop()
+
+        self.assertEqual(device.connect.await_count, 2)
+        device._wait_for_network_path.assert_awaited_once_with()
+        device._update_picture_modes.assert_called_once_with()
 
 
 if __name__ == "__main__":
