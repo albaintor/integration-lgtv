@@ -30,7 +30,7 @@ jobs:
           python -m ruff format src test/test_connection_recovery_profile.py
           python -m ruff check src test/test_connection_recovery_profile.py
           python -m pyright src
-          python -m unittest test.test_connection_recovery_profile
+          python -m pytest -q test/test_connection_recovery_profile.py
       - name: Commit fix and remove temporary files
         run: |
           rm .github/scripts/tmp_fix_wol_reconnect.py
