@@ -1,0 +1,16 @@
+name: Temporary Ruff format diff
+on:
+  push:
+    branches: [main]
+jobs:
+  format-diff:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install ruff==0.15.21
+      - run: |
+          python -m ruff format src/connection_recovery.py
+          git diff -- src/connection_recovery.py
