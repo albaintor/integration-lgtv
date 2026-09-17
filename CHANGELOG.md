@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Diagnostics
 - Add detailed LG connection-stage logging for raw TCP connect, TLS handshake, negotiated TLS version/cipher, HTTP WebSocket upgrade, SSAP HELLO, pre-registration system information, and REGISTER.
+- Log whether Wake-on-LAN is deferred because the Remote network is not ready or successfully sent on a reconnect retry.
 
 ---
 
