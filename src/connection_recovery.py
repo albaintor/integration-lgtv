@@ -435,8 +435,40 @@ class LGDevice(lg.LGDevice):
 
         return super()._ensure_connect_task()
 
-    def request_reconnect(self, reason: str = "external request") -> Task[None]:
-        """Start one reconnect loop, or reuse the one already running."""
+    def _try_wakeonlan(self, reason: str) -> bool:
+        """Send WOL without letting a transient Remote network outage stop recovery."""
+        try:
+            self.wakeonlan()
+        except OSError as ex:
+            _LOG.debug(
+                "[%s] LG WOL deferred, network not ready (%s): %s",
+                self._device_config.address,
+                reason,
+                ex,
+            )
+            return False
+
+        _LOG.debug(
+            "[%s] LG WOL sent during reconnect: %s",
+            self._device_config.address,
+            reason,
+        )
+        return True
+
+    def request_reconnect(
+        self,
+        reason: str = "external request",
+        *,
+        wake_on_lan: bool = False,
+    ) -> Task[None]:
+        """Start one reconnect loop, optionally arming repeated Wake-on-LAN."""
+        if wake_on_lan:
+            # EXIT_STANDBY can arrive before the Remote Wi-Fi route is ready. Keep
+            # WOL armed even when this first packet cannot be sent so subsequent
+            # reconnect retries will send it once networking is usable.
+            self._retry_wakeonlan = True
+            self._try_wakeonlan(reason)
+
         task = self._connect_task
         if task is not None and not task.done():
             _LOG.debug(
@@ -503,7 +535,7 @@ class LGDevice(lg.LGDevice):
                     break
 
                 if self._retry_wakeonlan:
-                    self.wakeonlan()
+                    self._try_wakeonlan(f"retry {retry_count}")
 
                 _LOG.debug(
                     "[%s] LG not connected, retry %s / %s in %ss",

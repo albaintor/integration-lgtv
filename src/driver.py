@@ -107,12 +107,12 @@ async def on_enter_standby() -> None:
         await configured.disconnect()
 
 
-async def connect_device(device: lg.LGDevice):
-    """Connect device and send state."""
+async def connect_device(device: lg.LGDevice, *, wake_on_lan: bool = False):
+    """Connect device and send state, optionally waking the TV first."""
     try:
         _LOG.debug("[%s] Connecting device %s...", device.host, device.id)
         if isinstance(device, connection_recovery.LGDevice):
-            await device.request_reconnect("driver connect")
+            await device.request_reconnect("driver connect", wake_on_lan=wake_on_lan)
         else:
             await device.connect()
         _LOG.debug(
@@ -173,7 +173,7 @@ async def on_exit_standby() -> None:
     for configured in _configured_devices.values():
         # start background task
         try:
-            await _LOOP.create_task(connect_device(configured))
+            await _LOOP.create_task(connect_device(configured, wake_on_lan=True))
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error(
                 "[%s] Error while reconnecting to the LG TV %s", configured.host, ex

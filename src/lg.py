@@ -1511,9 +1511,16 @@ class LGDevice:
             socket_instance.close()
 
     async def _deferred_wakeonlan(self, delay: float):
-        """Send WakeOnLan packets after given delay."""
+        """Best-effort delayed WakeOnLan while the Remote network comes back."""
         await asyncio.sleep(delay)
-        self.wakeonlan()
+        try:
+            self.wakeonlan()
+        except OSError as ex:
+            _LOG.debug(
+                "[%s] Deferred WakeOnLan skipped, network not ready: %s",
+                self._device_config.address,
+                ex,
+            )
 
     async def check_connect(self) -> LGState:
         """Check power and connection state."""
@@ -1573,12 +1580,22 @@ class LGDevice:
                 self._device_config.wol_port,
                 ip_address,
             )
-            self.wakeonlan()
-            # Send another WakeOnLan request after a delay in case the remote is waking up otherwise it won't be sent
+            # Arm retries before the first send: EXIT_STANDBY can be delivered
+            # while the Remote still has no route, and a failed UDP broadcast must
+            # not disable later Wake-on-LAN attempts.
+            self._retry_wakeonlan = True
+            try:
+                self.wakeonlan()
+            except OSError as ex:
+                _LOG.debug(
+                    "[%s] Initial WakeOnLan skipped, network not ready: %s",
+                    self._device_config.address,
+                    ex,
+                )
+            # Send another WakeOnLan request after a delay in case the Remote is waking up.
             self._track_task(
                 asyncio.create_task(self._deferred_wakeonlan(ERROR_OS_WAIT))
             )
-            self._retry_wakeonlan = True
             # This method power_on seems to no longer be supported
             self._track_task(asyncio.create_task(self.check_connect()))
             return ucapi.StatusCodes.OK

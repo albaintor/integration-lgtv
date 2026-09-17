@@ -9,7 +9,7 @@ import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, call
+from unittest.mock import AsyncMock, MagicMock, call
 
 import aiohttp
 
@@ -125,6 +125,24 @@ class ConnectionProfileTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertIs(returned, active_task)
         self.assertEqual(device._reconnect_retry, 7)
+        await active_task
+
+    async def test_wake_trigger_survives_network_unreachable(self) -> None:
+        device = object.__new__(LGDevice)
+        device._device_config = SimpleNamespace(address="test-tv")
+        device._retry_wakeonlan = False
+        device.wakeonlan = MagicMock(
+            side_effect=OSError(errno.ENETUNREACH, "Network is unreachable")
+        )
+        active_task = asyncio.create_task(asyncio.sleep(0.05))
+        device._connect_task = active_task
+        device._reconnect_retry = 3
+
+        returned = device.request_reconnect("exit standby", wake_on_lan=True)
+
+        self.assertIs(returned, active_task)
+        self.assertTrue(device._retry_wakeonlan)
+        device.wakeonlan.assert_called_once_with()
         await active_task
 
 

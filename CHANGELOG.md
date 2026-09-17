@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use a fresh unverified TLS context for every secure WebSocket connection, matching LG ConnectSDK's per-connect SSL context and avoiding TLS session state reuse across Remote standby/resume cycles.
 - Increase the LG WebSocket heartbeat from 5 seconds to 30 seconds to tolerate short Remote Wi-Fi transitions while retaining dead-connection detection.
 - Keep a single reconnect loop active and ignore duplicate reconnect triggers instead of forcing immediate retries from button presses.
+- Make Wake-on-LAN best-effort during Remote wake: a transient `ENETUNREACH` can no longer terminate the reconnect loop, and `EXIT_STANDBY` keeps WOL armed for subsequent retries until the TV becomes reachable.
 
 ### Diagnostics
 - Add detailed LG connection-stage logging for raw TCP connect, TLS handshake, negotiated TLS version/cipher, HTTP WebSocket upgrade, SSAP HELLO, pre-registration system information, and REGISTER.
