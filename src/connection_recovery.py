@@ -625,7 +625,7 @@ class LGDevice(lg.LGDevice):
                             self._try_wakeonlan(f"network recovery {retry_count}")
                         continue
 
-                network_path_errno: int | None = None
+                network_path_failure = False
                 try:
                     await self.connect()
                     if self._tv.tv_state.is_on:
@@ -635,6 +635,17 @@ class LGDevice(lg.LGDevice):
                         )
                         self._update_picture_modes()
                         break
+
+                    # lg.LGDevice.connect() logs and absorbs WEBOSTV_EXCEPTIONS.
+                    # If it returned unavailable, verify the LAN path directly
+                    # instead of waiting for an exception that will never escape.
+                    if not self._available and not await self._network_path_ready():
+                        network_path_failure = True
+                        _LOG.debug(
+                            "[%s] LG connect ended unavailable and TCP endpoints "
+                            "are unreachable; switch to fast TCP probes",
+                            self._device_config.address,
+                        )
                 except CancelledError:
                     _LOG.debug(
                         "[%s] LG TV connect task cancelled",
@@ -650,6 +661,7 @@ class LGDevice(lg.LGDevice):
                         ex,
                     )
                     if network_path_errno is not None:
+                        network_path_failure = True
                         _LOG.debug(
                             "[%s] LG network path failure errno=%s; "
                             "switch to fast TCP probes",
@@ -670,7 +682,7 @@ class LGDevice(lg.LGDevice):
                 if self._retry_wakeonlan:
                     self._try_wakeonlan(f"retry {retry_count}")
 
-                if network_path_errno is not None:
+                if network_path_failure:
                     network_recovery = True
                     continue
 

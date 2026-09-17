@@ -115,6 +115,13 @@ async def connect_device(device: lg.LGDevice, *, wake_on_lan: bool = False):
             await device.request_reconnect("driver connect", wake_on_lan=wake_on_lan)
         else:
             await device.connect()
+        if not device.available:
+            _LOG.debug(
+                "[%s] Device %s reconnect ended without an active LG connection",
+                device.host,
+                device.id,
+            )
+            return
         _LOG.debug(
             "[%s] Device %s connected, sending attributes for subscribed entities",
             device.host,

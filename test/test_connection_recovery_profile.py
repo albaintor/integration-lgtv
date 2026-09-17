@@ -169,6 +169,42 @@ class ConnectionProfileTest(unittest.IsolatedAsyncioTestCase):
         device._wait_for_network_path.assert_awaited_once_with()
         device._update_picture_modes.assert_called_once_with()
 
+    async def test_swallowed_network_error_switches_to_fast_probe(self) -> None:
+        device = object.__new__(LGDevice)
+        device._device_config = SimpleNamespace(address="test-tv")
+        device._retry_wakeonlan = False
+        device._connect_task = None
+        device._reconnect_retry = 0
+        device._attr_state = States.OFF
+        device._available = False
+        device._tv = SimpleNamespace(tv_state=SimpleNamespace(is_on=False))
+
+        connect_calls = 0
+
+        async def connect_like_production() -> None:
+            nonlocal connect_calls
+            connect_calls += 1
+            if connect_calls == 1:
+                # Production connect() logs the connector error, marks the
+                # device unavailable and returns without re-raising it.
+                device._available = False
+                device._tv.tv_state.is_on = False
+                return
+            device._available = True
+            device._tv.tv_state.is_on = True
+
+        device.connect = AsyncMock(side_effect=connect_like_production)
+        device._network_path_ready = AsyncMock(return_value=False)
+        device._wait_for_network_path = AsyncMock(return_value=True)
+        device._update_picture_modes = MagicMock()
+
+        await device._connect_loop()
+
+        self.assertEqual(device.connect.await_count, 2)
+        device._network_path_ready.assert_awaited_once_with()
+        device._wait_for_network_path.assert_awaited_once_with()
+        device._update_picture_modes.assert_called_once_with()
+
 
 if __name__ == "__main__":
     unittest.main()
