@@ -13,9 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use a fresh unverified TLS context for every secure WebSocket connection, matching LG ConnectSDK's per-connect SSL context and avoiding TLS session state reuse across Remote standby/resume cycles.
 - Increase the LG WebSocket heartbeat from 5 seconds to 30 seconds to tolerate short Remote Wi-Fi transitions while retaining dead-connection detection.
 - Keep a single reconnect loop active and ignore duplicate reconnect triggers instead of forcing immediate retries from button presses.
-- Make Wake-on-LAN best-effort during Remote wake: a transient `ENETUNREACH` can no longer terminate the reconnect loop, and `EXIT_STANDBY` keeps WOL armed for subsequent retries until the TV becomes reachable.
+- Make Wake-on-LAN best-effort for explicit power-on recovery: a transient `ENETUNREACH` can no longer terminate the reconnect loop, and WOL remains armed for subsequent retries until the TV becomes reachable.
 - After `ENETUNREACH`/`EHOSTUNREACH`, switch to short raw TCP probes of LG ports 3001/3000 before resuming full TLS/WebSocket negotiation, so Remote LAN recovery is detected quickly without repeated multi-second connection attempts.
 - Detect LAN-path outages even when `LGDevice.connect()` logs and absorbs the connector exception; a failed reconnect now checks endpoint reachability directly before applying the normal 5-second backoff.
+
+### Fixed
+- Prevent `EXIT_STANDBY` from sending Wake-on-LAN packets. Waking the Remote now reconnects to an already-on TV without powering on a sleeping TV (#26).
 
 ### Diagnostics
 - Add detailed LG connection-stage logging for raw TCP connect, TLS handshake, negotiated TLS version/cipher, HTTP WebSocket upgrade, SSAP HELLO, pre-registration system information, and REGISTER.
