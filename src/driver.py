@@ -180,7 +180,7 @@ async def on_exit_standby() -> None:
     for configured in _configured_devices.values():
         # start background task
         try:
-            await _LOOP.create_task(connect_device(configured, wake_on_lan=True))
+            await _LOOP.create_task(connect_device(configured))
         except WEBOSTV_EXCEPTIONS as ex:
             _LOG.error(
                 "[%s] Error while reconnecting to the LG TV %s", configured.host, ex
