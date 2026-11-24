@@ -63,6 +63,8 @@ class LGConfigDevice:
     wol_port: int | None = field(default=9)
     log: bool | None = field(default=False)
     update_apps_list: bool | None = field(default=True)
+    enable_hdmi_cec: bool = field(default=False)
+    cec_source_names: dict[str, str] = field(default_factory=dict)
     sensor_include_device_name: bool = field(default=True)
 
     def __post_init__(self):
@@ -168,6 +170,8 @@ class Devices:
                 item.wol_port = device.wol_port
                 item.log = device.log
                 item.update_apps_list = device.update_apps_list
+                item.enable_hdmi_cec = device.enable_hdmi_cec
+                item.cec_source_names = dict(device.cec_source_names)
                 item.sensor_include_device_name = device.sensor_include_device_name
                 return self.store()
         return False

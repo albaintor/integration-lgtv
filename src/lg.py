@@ -28,6 +28,8 @@ from typing import (
 )
 
 import aiowebostv.endpoints as ep
+import cec
+import config
 import ucapi
 from aiohttp import ClientConnectionResetError, ClientOSError
 from aiowebostv import (
@@ -82,6 +84,7 @@ PICTURE_MODE_CONFIRM_INTERVAL = 0.25
 PICTURE_MODE_CONFIRM_TIMEOUT = 2.0
 
 SOURCE_IS_APP = "isApp"
+SOURCE_IS_CEC = "isCec"
 
 LUNA_SYSTEM_COMMAND = "luna"
 LUNA_SYSTEM_ENDPOINT = "com.webos.settingsservice/setSystemSettings"
@@ -137,6 +140,7 @@ async def retry_call_command(
     obj: "LGDevice",
     *args: Any,
     deferred_ttl: float = BUFFER_LIFETIME,
+    propagate_status: bool = False,
     **kwargs: Any,
 ) -> ucapi.StatusCodes:
     """Retry call command when failed."""
@@ -173,8 +177,10 @@ async def retry_call_command(
         func.__name__,
         obj._name,
     )
-    await func(obj, *args, **kwargs)
-    return ucapi.StatusCodes.OK
+    if not obj.is_connected:
+        return ucapi.StatusCodes.SERVICE_UNAVAILABLE
+    result = await func(obj, *args, **kwargs)
+    return result if propagate_status else ucapi.StatusCodes.OK
 
 
 def retry(
@@ -184,6 +190,7 @@ def retry(
     no_error=False,
     power_on=False,
     deferred_ttl: float = BUFFER_LIFETIME,
+    propagate_status: bool = False,
 ) -> Callable[[_RetryCallable], _RetryCallable]:
     """Retry command."""
 
@@ -197,8 +204,8 @@ def retry(
             retry_attempted = False
             try:
                 if obj.available:
-                    await func(obj, *args, **kwargs)
-                    return ucapi.StatusCodes.OK
+                    result = await func(obj, *args, **kwargs)
+                    return result if propagate_status else ucapi.StatusCodes.OK
                 _LOG.debug(
                     "[%s] Device is unavailable, connecting before executing command...",
                     obj._device_config.address,
@@ -213,6 +220,7 @@ def retry(
                     obj,
                     *args,
                     deferred_ttl=deferred_ttl,
+                    propagate_status=propagate_status,
                     **kwargs,
                 )
             # New bug "Received message 8:1008 is not WSMsgType.TEXT" for some commands (power_off at least)
@@ -230,6 +238,8 @@ def retry(
                         obj._name,
                         ex,
                     )
+                    if not obj.is_connected:
+                        return ucapi.StatusCodes.SERVICE_UNAVAILABLE
                     if no_error:
                         return ucapi.StatusCodes.OK
                     return ucapi.StatusCodes.BAD_REQUEST
@@ -251,6 +261,7 @@ def retry(
                         obj,
                         *args,
                         deferred_ttl=deferred_ttl,
+                        propagate_status=propagate_status,
                         **kwargs,
                     )
                 except Exception as wex:
@@ -261,6 +272,8 @@ def retry(
                         obj._name,
                         wex,
                     )
+                    if not obj.is_connected:
+                        return ucapi.StatusCodes.SERVICE_UNAVAILABLE
                     if no_error:
                         return ucapi.StatusCodes.OK
                     return ucapi.StatusCodes.BAD_REQUEST
@@ -324,6 +337,12 @@ class LGDevice:
         self._attr_is_volume_muted = False
         self._active_source = None
         self._sources = {}
+        self._cec_devices: list[dict[str, Any]] = []
+        self._cec_selections: dict[str, cec.CecSelection] = {}
+        self._cec_task: Task[Any] | None = None
+        self._cec_client: WebOsClient | None = None
+        self._cec_signature: tuple[Any, ...] | None = None
+        self._cec_generation = 0
         self._unique_id: str | None = None
         self._supported_features = LG_FEATURES
         self._paused = False
@@ -358,6 +377,19 @@ class LGDevice:
     def update_config(self, device_config: LGConfigDevice):
         """Update existing configuration."""
         self._device_config = device_config
+        if not device_config.enable_hdmi_cec:
+            self._cec_generation += 1
+            if self._cec_task and not self._cec_task.done():
+                self._cec_task.cancel()
+            self._cec_devices = []
+            self._cec_signature = None
+            if self.is_connected:
+                updated: dict[str, Any] = {}
+                self._update_sources(updated)
+                if updated:
+                    self.events.emit(Events.UPDATE, self.id, updated)
+        else:
+            self._schedule_cec_refresh(force=True)
 
     def _track_task(self, task: Task[Any]) -> Task[Any]:
         """Track background tasks to prevent lost exceptions and allow cancellation."""
@@ -528,6 +560,11 @@ class LGDevice:
                     continue
 
                 result = await cmd.callback(*cmd.args, **cmd.kwargs)
+                if (
+                    isinstance(result, ucapi.StatusCodes)
+                    and result != ucapi.StatusCodes.OK
+                ):
+                    _LOG.warning("[%s] Deferred command returned %s", self.id, result)
                 if cmd.future and not cmd.future.done():
                     cmd.future.set_result(result)
             except CancelledError:
@@ -673,10 +710,112 @@ class LGDevice:
                 ex,
             )
 
+    def _schedule_cec_refresh(self, *, force: bool = False) -> Task[Any] | None:
+        """Discover CEC outside the connection and state-update critical paths."""
+        if not self._device_config.enable_hdmi_cec or not self.is_connected:
+            return None
+        tv = self._tv
+        signature = (
+            tv.tv_state.current_app_id,
+            tuple(
+                sorted(
+                    "|".join(str(row.get(key)) for key in ("id", "appId", "label"))
+                    for row in tv.tv_state.inputs.values()
+                )
+            ),
+        )
+        if self._cec_client is not tv:
+            self._cec_client = tv
+            self._cec_signature = None
+            self._cec_devices = []
+            self._cec_generation += 1
+            if self._cec_task and not self._cec_task.done():
+                self._cec_task.cancel()
+        if self._cec_task and not self._cec_task.done():
+            if signature == self._cec_signature:
+                return self._cec_task
+            self._cec_task.cancel()
+        if not force and signature == self._cec_signature:
+            return None
+        self._cec_signature = signature
+        self._cec_generation += 1
+        generation = self._cec_generation
+        self._cec_task = self._track_task(
+            asyncio.create_task(self._refresh_cec_devices(tv, generation))
+        )
+        return self._cec_task
+
+    async def _refresh_cec_devices(
+        self, tv: WebOsClient, generation: int
+    ) -> None:
+        """Read EIM with a bounded timeout, and publish only current-session data."""
+        try:
+            async with asyncio.timeout(3):
+                response = await tv.request(cec.CEC_EIM_STATUS, payload={})
+            devices = response.get("devices")
+            if not isinstance(devices, list):
+                raise ValueError("Missing EIM devices")
+            if (
+                self._tv is not tv
+                or generation != self._cec_generation
+                or not self._device_config.enable_hdmi_cec
+                or not self.is_connected
+            ):
+                return
+            self._cec_devices = [row for row in devices if isinstance(row, dict)]
+            updated: dict[str, Any] = {}
+            self._update_sources(updated)
+            if updated:
+                self.events.emit(Events.UPDATE, self.id, updated)
+        except Exception as ex:
+            _LOG.debug("[%s] Optional CEC refresh failed: %s", self.id, ex)
+
+    async def _await_cec_source(self, source: str) -> cec.CecSelection | None:
+        """Resolve an activity's source even while initial discovery is pending."""
+        task = self._schedule_cec_refresh(force=True)
+        if task:
+            try:
+                async with asyncio.timeout(3):
+                    await shield(task)
+            except TimeoutError:
+                _LOG.debug("[%s] CEC discovery timed out", self.id)
+        return self._cec_selections.get(source)
+
+    def _stable_cec_sources(
+        self, external_inputs: list[dict[str, Any]]
+    ) -> list[tuple[str, cec.CecSelection]]:
+        """Reserve published names across refreshes and restarts."""
+        names = self._device_config.cec_source_names
+        before = dict(names)
+        reserved = set(names.values()) | set(self._sources)
+        found = []
+        for proposed, selection in cec.discover_children(
+            external_inputs, self._cec_devices, set(self._sources)
+        ):
+            key = selection.parent_input_id + "|" + selection.unique_id
+            name = names.get(key)
+            if not name or name in self._sources:
+                name = proposed
+                suffix = 2
+                while name in reserved:
+                    name = f"{proposed} ({suffix})"
+                    suffix += 1
+                names[key] = name
+            reserved.add(name)
+            found.append((name, selection))
+        if names != before and config.devices is not None:
+            stored = config.devices.get(self.id)
+            if stored is not None:
+                stored.cec_source_names = dict(names)
+                config.devices.update(stored)
+        return found
+
     def _update_sources(self, updated_data: dict[str, Any]) -> None:
-        """Update list of sources from current source, apps, inputs and configured list."""
+        """Update list of sources from current source, apps, inputs and CEC children."""
         current_source_list = self._sources
+        current_cec_selections = self._cec_selections
         self._sources = {}
+        self._cec_selections = {}
         active_source = None
         found_live_tv = False
         for app in self._tv.tv_state.apps.values():
@@ -687,7 +826,8 @@ class LGDevice:
             self._sources[app["title"]] = app
             self._sources[app["title"]][SOURCE_IS_APP] = True
 
-        for source in self._tv.tv_state.inputs.values():
+        external_inputs = list(self._tv.tv_state.inputs.values())
+        for source in external_inputs:
             if source["appId"] == LIVE_TV_APP_ID:
                 found_live_tv = True
             if source["appId"] == self._tv.tv_state.current_app_id:
@@ -695,26 +835,76 @@ class LGDevice:
             self._sources[source["id"]] = source
             self._sources[source["id"]][SOURCE_IS_APP] = False
 
-        # empty list, TV may be off, keep previous list
+        # An empty TV state can occur during standby/reconnect. Preserve the last
+        # known source list and its CEC selection metadata until inputs return.
         if not self._sources and current_source_list:
             self._sources = current_source_list
-        # special handling of live tv since this might
-        # not appear in the app or input lists in some cases
-        elif not found_live_tv:
+            self._cec_selections = (
+                current_cec_selections if self._device_config.enable_hdmi_cec else {}
+            )
+            if not self._device_config.enable_hdmi_cec:
+                self._sources = {
+                    name: row
+                    for name, row in self._sources.items()
+                    if not row.get(SOURCE_IS_CEC)
+                }
+        else:
+            for source_name, selection in (
+                self._stable_cec_sources(external_inputs)
+                if self._device_config.enable_hdmi_cec
+                else []
+            ):
+                self._sources[source_name] = {
+                    "id": source_name,
+                    "label": source_name,
+                    SOURCE_IS_APP: False,
+                    SOURCE_IS_CEC: True,
+                }
+                self._cec_selections[source_name] = selection
+
+            # EIM reports the selected child on its HDMI parent. Reflect that
+            # child as the active source when the parent HDMI app is foreground.
+            current_app_id = self._tv.tv_state.current_app_id
+            for parent in self._cec_devices:
+                parent_id = cec.row_input_id(parent)
+                last_unique_id = cec.scalar(parent.get("lastUniqueId"))
+                if not parent_id or not last_unique_id:
+                    continue
+                active_child = next(
+                    (
+                        name
+                        for name, selection in self._cec_selections.items()
+                        if selection.parent_input_id == parent_id
+                        and selection.parent_app_id == current_app_id
+                        and selection.unique_id == last_unique_id
+                    ),
+                    None,
+                )
+                if active_child:
+                    active_source = active_child
+                    break
+
+        # Special handling of Live TV since it may not appear in the app or input lists.
+        if self._sources and not found_live_tv and "Live TV" not in self._sources:
             app = {"id": LIVE_TV_APP_ID, "title": "Live TV"}
             if self._tv.tv_state.current_app_id == LIVE_TV_APP_ID:
                 active_source = app["title"]
             self._sources["Live TV"] = app
             self._sources[app["title"]][SOURCE_IS_APP] = True
 
-        # Always update SOURCE_LIST when sources change
+        # Always update SOURCE_LIST when source names or ordering change.
         if self._sources:
             new_source_list = self.source_list
-            # Compare with previous source list (convert dict keys to sorted list for comparison)
-            old_source_list = (
-                sorted(current_source_list.keys()) if current_source_list else []
+            old_source_list = sorted(
+                name
+                for name, source in current_source_list.items()
+                if source.get(SOURCE_IS_APP) is False
+            ) + sorted(
+                name
+                for name, source in current_source_list.items()
+                if source.get(SOURCE_IS_APP) is True
             )
-            if len(new_source_list) != len(old_source_list):
+            if new_source_list != old_source_list:
                 _LOG.debug(
                     "[%s] Source list updated: %s",
                     self._device_config.address,
@@ -791,6 +981,7 @@ class LGDevice:
                 )
                 self._picture_mode_retries -= 1
 
+        self._schedule_cec_refresh()
         previous_source = self._active_source
         self._update_sources(updated_data)
         source_changed = previous_source != self._active_source
@@ -1142,6 +1333,7 @@ class LGDevice:
                         await self._update_system()
                     await self.register_websocket_events()
                     self._available = True
+                    self._schedule_cec_refresh(force=True)
                     await self._run_buffered_commands()
                 except CancelledError:
                     self._tv = old_tv
@@ -1227,7 +1419,7 @@ class LGDevice:
     @property
     def is_connected(self) -> bool:
         """Connected state."""
-        return self._tv.connection is not None and self._available
+        return self._available and self._tv.connection is not None
 
     @property
     def attributes(self) -> dict[str, Any]:
@@ -1801,6 +1993,8 @@ class LGDevice:
             return ucapi.StatusCodes.SERVICE_UNAVAILABLE
         sources: list[dict] = list(self._tv.tv_state.inputs.values())
         current_source = self.source
+        if selection := self._cec_selections.get(current_source):
+            current_source = selection.parent_input_id
         if not sources or len(sources) == 0:
             _LOG.error(
                 "[%s] LG TV next input command : sources list is not feed yet",
@@ -1826,7 +2020,70 @@ class LGDevice:
                 current_source = sources[0]["id"]
         return await self.select_source(current_source)
 
-    @retry(bufferize=True, power_on=True)
+    async def _select_cec_source(
+        self, selection: cec.CecSelection
+    ) -> ucapi.StatusCodes:
+        """Validate a CEC child, send selection, and refresh asynchronously."""
+        try:
+            async with asyncio.timeout(3):
+                before = await self._tv.request(cec.CEC_EIM_STATUS, payload={})
+        except Exception as ex:  # pylint: disable=W0718
+            _LOG.warning(
+                "[%s] Unable to validate HDMI-CEC source %s: %s",
+                self._device_config.address,
+                selection.unique_id,
+                ex,
+            )
+            return (
+                ucapi.StatusCodes.BAD_REQUEST
+                if self.is_connected
+                else ucapi.StatusCodes.SERVICE_UNAVAILABLE
+            )
+
+        if not cec.contains_unique_id(before, selection):
+            _LOG.warning(
+                "[%s] HDMI-CEC source %s is no longer present on %s",
+                self._device_config.address,
+                selection.unique_id,
+                selection.parent_input_id,
+            )
+            return ucapi.StatusCodes.BAD_REQUEST
+
+        try:
+            response = await self._tv.request(
+                cec.CEC_LAUNCH_ENDPOINT,
+                payload={
+                    "id": selection.parent_app_id,
+                    "params": {"id": "uniqueId", "value": selection.unique_id},
+                },
+            )
+        except TimeoutError:
+            self._schedule_cec_refresh(force=True)
+            return (
+                ucapi.StatusCodes.OK
+                if self.is_connected
+                else ucapi.StatusCodes.SERVICE_UNAVAILABLE
+            )
+        except Exception as ex:  # pylint: disable=W0718
+            # Do not retry a launch with an uncertain outcome.
+            _LOG.warning(
+                "[%s] HDMI-CEC launch request failed for %s: %s",
+                self._device_config.address,
+                selection.unique_id,
+                ex,
+            )
+            return (
+                ucapi.StatusCodes.BAD_REQUEST
+                if self.is_connected
+                else ucapi.StatusCodes.SERVICE_UNAVAILABLE
+            )
+
+        if response.get("returnValue") is False:
+            return ucapi.StatusCodes.BAD_REQUEST
+        self._schedule_cec_refresh(force=True)
+        return ucapi.StatusCodes.OK
+
+    @retry(bufferize=True, power_on=True, propagate_status=True)
     async def select_source(self, source: str | None) -> ucapi.StatusCodes:
         """Send input_source command to LG TV."""
         if not source:
@@ -1838,7 +2095,15 @@ class LGDevice:
             # If sources is empty, device is not connected so raise error to trigger connection
             if not self._sources:
                 raise WebOsTvCommandError
-            if (source_dict := self._sources.get(source)) is None:
+            source_dict = self._sources.get(source)
+            if self._device_config.enable_hdmi_cec and (
+                source_dict is None or source_dict.get(SOURCE_IS_CEC)
+            ):
+                selection = await self._await_cec_source(source)
+                if selection is not None:
+                    return await self._select_cec_source(selection)
+                return ucapi.StatusCodes.BAD_REQUEST
+            if source_dict is None:
                 _LOG.warning(
                     "[%s] Source %s not found for %s",
                     self._device_config.address,

@@ -77,6 +77,14 @@ SETUP_FIELDS = [
         "field": {"checkbox": {"value": True}},
     },
     {
+        "id": "enable_hdmi_cec",
+        "label": {
+            "en": "Discover and select HDMI-CEC devices",
+            "fr": "Découvrir et sélectionner les appareils HDMI-CEC",
+        },
+        "field": {"checkbox": {"value": False}},
+    },
+    {
         "id": "log",
         "label": {
             "en": "Enable additional traces for debugging",

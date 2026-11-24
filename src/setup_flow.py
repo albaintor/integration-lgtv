@@ -780,6 +780,7 @@ class SetupFlow:
             "update_apps_list",
             device.update_apps_list,
         )
+        set_setup_field(user_input.settings, "enable_hdmi_cec", device.enable_hdmi_cec)
         set_setup_field(user_input.settings, "log", device.log)
 
         return user_input
@@ -823,6 +824,9 @@ class SetupFlow:
         device.wol_port = wolport
         device.log = log
         device.update_apps_list = update_apps_list
+        device.enable_hdmi_cec = msg.input_values.get(
+            "enable_hdmi_cec", str(device.enable_hdmi_cec).lower()
+        ) in ("true", True)
 
         if pairing:
             device_suspended = False

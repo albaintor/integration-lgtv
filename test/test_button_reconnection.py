@@ -45,8 +45,8 @@ class ButtonReconnectionTest(unittest.IsolatedAsyncioTestCase):
         result = await device.button("MENU")
         await connect_task
 
-        self.assertEqual(result, StatusCodes.BAD_REQUEST)
-        button.assert_awaited_once_with("MENU")
+        self.assertEqual(result, StatusCodes.SERVICE_UNAVAILABLE)
+        button.assert_not_awaited()
 
 
 if __name__ == "__main__":
