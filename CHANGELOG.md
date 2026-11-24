@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.17.6 - 2026-11-24
+
+### Added
+- Optional HDMI-CEC child source discovery and selection, including devices behind an AV receiver. Enable it per TV in the setup or reconfiguration flow (disabled by default). Thanks to @joemacjr92 for the original contribution (#30).
+
+### Changed
+- Discover CEC sources asynchronously with bounded on-demand discovery during activity startup, event-driven refreshes rather than periodic polling, and no fixed selection delay.
+- Persist published CEC source names, filter duplicate devices, and retain physical HDMI input cycling.
+- Preserve acknowledgement of deferred commands; log subsequent failures without displaying misleading errors on the Remote. Report unavailable connections when commands cannot be retained, and propagate source selection status selectively.
+
+### Fixed
+- Prevent power-off commands from being lost during Remote standby recovery: use the registered main SSAP connection when available even if pointer setup is pending, otherwise queue the command immediately with a 60-second lifetime (#28).
+- Send power-off without a preliminary power-state request, stop Wake-on-LAN retries, and log deferred-command failures.
+
+---
+
+## Earlier unreleased changes
+
 ### Changed
 - Prefer the modern secure LG webOS WebSocket endpoint on port 3001, with legacy port 3000 fallback only when the secure endpoint is explicitly refused or rejects the WebSocket handshake.
 - Increase the LG WebSocket connect timeout from 2 seconds to 6 seconds to allow slower TCP/TLS/WebSocket setup observed after Remote standby.
