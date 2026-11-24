@@ -274,8 +274,6 @@ def retry(
                     )
                     if not obj.is_connected:
                         return ucapi.StatusCodes.SERVICE_UNAVAILABLE
-                    if not obj.is_connected:
-                        return ucapi.StatusCodes.SERVICE_UNAVAILABLE
                     if no_error:
                         return ucapi.StatusCodes.OK
                     return ucapi.StatusCodes.BAD_REQUEST
@@ -562,7 +560,10 @@ class LGDevice:
                     continue
 
                 result = await cmd.callback(*cmd.args, **cmd.kwargs)
-                if isinstance(result, ucapi.StatusCodes) and result != ucapi.StatusCodes.OK:
+                if (
+                    isinstance(result, ucapi.StatusCodes)
+                    and result != ucapi.StatusCodes.OK
+                ):
                     _LOG.warning("[%s] Deferred command returned %s", self.id, result)
                 if cmd.future and not cmd.future.done():
                     cmd.future.set_result(result)
@@ -716,11 +717,13 @@ class LGDevice:
         tv = self._tv
         signature = (
             tv.tv_state.current_app_id,
-            tuple(sorted(
-                str(row.get("id")) + "|" + str(row.get("appId"))
-                + "|" + str(row.get("label"))
-                for row in tv.tv_state.inputs.values()
-            )),
+            tuple(
+                sorted(
+                    str(row.get("id")) + "|" + str(row.get("appId")) + "|"
+                    + str(row.get("label"))
+                    for row in tv.tv_state.inputs.values()
+                )
+            ),
         )
         if self._cec_client is not tv:
             self._cec_client = tv
@@ -842,13 +845,15 @@ class LGDevice:
             )
             if not self._device_config.enable_hdmi_cec:
                 self._sources = {
-                    name: row for name, row in self._sources.items()
+                    name: row
+                    for name, row in self._sources.items()
                     if not row.get(SOURCE_IS_CEC)
                 }
         else:
             for source_name, selection in (
                 self._stable_cec_sources(external_inputs)
-                if self._device_config.enable_hdmi_cec else []
+                if self._device_config.enable_hdmi_cec
+                else []
             ):
                 self._sources[source_name] = {
                     "id": source_name,
@@ -1415,7 +1420,7 @@ class LGDevice:
     @property
     def is_connected(self) -> bool:
         """Connected state."""
-        return self._tv.connection is not None and self._available
+        return self._available and self._tv.connection is not None
 
     @property
     def attributes(self) -> dict[str, Any]:
@@ -2051,8 +2056,11 @@ class LGDevice:
             )
         except TimeoutError:
             self._schedule_cec_refresh(force=True)
-            return (ucapi.StatusCodes.OK if self.is_connected
-                    else ucapi.StatusCodes.SERVICE_UNAVAILABLE)
+            return (
+                ucapi.StatusCodes.OK
+                if self.is_connected
+                else ucapi.StatusCodes.SERVICE_UNAVAILABLE
+            )
         except Exception as ex:  # pylint: disable=W0718
             # Do not retry a launch with an uncertain outcome.
             _LOG.warning(
