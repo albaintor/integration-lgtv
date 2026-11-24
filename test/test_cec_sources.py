@@ -150,7 +150,10 @@ class CecDiscoveryTest(unittest.TestCase):
                 "subList": [{"uniqueId": 8, "osdName": "Unknown parent"}],
             },
         ]
-        self.assertEqual(cec.discover_children(external_inputs(), rows), [])
+        found = cec.discover_children(external_inputs(), rows)
+        # An empty OSD name falls back to the unique ID; malformed depth and
+        # unmatched parents are still rejected.
+        self.assertEqual([name for name, _ in found], ["6 · HDMI 1"])
 
     def test_depth_one_name_already_exposed_as_top_level_is_suppressed(self) -> None:
         inputs = external_inputs() + [{"id": "CEC_AUDIO", "label": "Audio System"}]
@@ -243,7 +246,7 @@ class CecDiscoveryTest(unittest.TestCase):
 class CecDeviceIntegrationTest(unittest.IsolatedAsyncioTestCase):
     """Test source-list integration and the guarded launch transaction."""
 
-    def setUp(self) -> None:
+    async def asyncSetUp(self) -> None:
         self.device = make_device()
         self.inputs = external_inputs()
         self.device._tv.tv_state.inputs = {
