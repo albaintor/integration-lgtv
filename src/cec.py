@@ -119,8 +119,11 @@ def discover_children(
             if not isinstance(child, dict):
                 continue
             unique_id = scalar(child.get("uniqueId"))
-            if (not unique_id or unique_id in seen_unique_ids
-                or (parent_id, unique_id) in seen_children):
+            if (
+                not unique_id
+                or unique_id in seen_unique_ids
+                or (parent_id, unique_id) in seen_children
+            ):
                 continue
             depth = child.get("depth")
             if depth is not None and (
@@ -134,8 +137,10 @@ def discover_children(
 
             child_identity = _identity(child)
             if child_identity is not None:
-                if (child_identity in seen_identities
-                    or (parent_id, *child_identity) in seen_parent_identities):
+                if (
+                    child_identity in seen_identities
+                    or (parent_id, *child_identity) in seen_parent_identities
+                ):
                     continue
                 seen_identities.add(child_identity)
                 if child_identity in top_level_identities:
