@@ -719,8 +719,7 @@ class LGDevice:
             tv.tv_state.current_app_id,
             tuple(
                 sorted(
-                    str(row.get("id")) + "|" + str(row.get("appId")) + "|"
-                    + str(row.get("label"))
+                    "|".join(str(row.get(key)) for key in ("id", "appId", "label"))
                     for row in tv.tv_state.inputs.values()
                 )
             ),
@@ -2024,7 +2023,7 @@ class LGDevice:
     async def _select_cec_source(
         self, selection: cec.CecSelection
     ) -> ucapi.StatusCodes:
-        """Select a CEC child only after validating and verifying the EIM state."""
+        """Validate a CEC child, send selection, and refresh asynchronously."""
         try:
             async with asyncio.timeout(3):
                 before = await self._tv.request(cec.CEC_EIM_STATUS, payload={})
@@ -2035,7 +2034,11 @@ class LGDevice:
                 selection.unique_id,
                 ex,
             )
-            return ucapi.StatusCodes.BAD_REQUEST
+            return (
+                ucapi.StatusCodes.BAD_REQUEST
+                if self.is_connected
+                else ucapi.StatusCodes.SERVICE_UNAVAILABLE
+            )
 
         if not cec.contains_unique_id(before, selection):
             _LOG.warning(
@@ -2069,7 +2072,11 @@ class LGDevice:
                 selection.unique_id,
                 ex,
             )
-            return ucapi.StatusCodes.BAD_REQUEST
+            return (
+                ucapi.StatusCodes.BAD_REQUEST
+                if self.is_connected
+                else ucapi.StatusCodes.SERVICE_UNAVAILABLE
+            )
 
         if response.get("returnValue") is False:
             return ucapi.StatusCodes.BAD_REQUEST
