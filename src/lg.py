@@ -140,6 +140,7 @@ async def retry_call_command(
     obj: "LGDevice",
     *args: Any,
     deferred_ttl: float = BUFFER_LIFETIME,
+    propagate_status: bool = False,
     **kwargs: Any,
 ) -> ucapi.StatusCodes:
     """Retry call command when failed."""
@@ -176,7 +177,10 @@ async def retry_call_command(
         func.__name__,
         obj._name,
     )
-    return await func(obj, *args, **kwargs)
+    if not obj.is_connected:
+        return ucapi.StatusCodes.SERVICE_UNAVAILABLE
+    result = await func(obj, *args, **kwargs)
+    return result if propagate_status else ucapi.StatusCodes.OK
 
 
 def retry(
@@ -186,6 +190,7 @@ def retry(
     no_error=False,
     power_on=False,
     deferred_ttl: float = BUFFER_LIFETIME,
+    propagate_status: bool = False,
 ) -> Callable[[_RetryCallable], _RetryCallable]:
     """Retry command."""
 
@@ -199,7 +204,8 @@ def retry(
             retry_attempted = False
             try:
                 if obj.available:
-                    return await func(obj, *args, **kwargs)
+                    result = await func(obj, *args, **kwargs)
+                    return result if propagate_status else ucapi.StatusCodes.OK
                 _LOG.debug(
                     "[%s] Device is unavailable, connecting before executing command...",
                     obj._device_config.address,
@@ -214,6 +220,7 @@ def retry(
                     obj,
                     *args,
                     deferred_ttl=deferred_ttl,
+                    propagate_status=propagate_status,
                     **kwargs,
                 )
             # New bug "Received message 8:1008 is not WSMsgType.TEXT" for some commands (power_off at least)
@@ -231,6 +238,8 @@ def retry(
                         obj._name,
                         ex,
                     )
+                    if not obj.is_connected:
+                        return ucapi.StatusCodes.SERVICE_UNAVAILABLE
                     if no_error:
                         return ucapi.StatusCodes.OK
                     return ucapi.StatusCodes.BAD_REQUEST
@@ -252,6 +261,7 @@ def retry(
                         obj,
                         *args,
                         deferred_ttl=deferred_ttl,
+                        propagate_status=propagate_status,
                         **kwargs,
                     )
                 except Exception as wex:
@@ -262,6 +272,10 @@ def retry(
                         obj._name,
                         wex,
                     )
+                    if not obj.is_connected:
+                        return ucapi.StatusCodes.SERVICE_UNAVAILABLE
+                    if not obj.is_connected:
+                        return ucapi.StatusCodes.SERVICE_UNAVAILABLE
                     if no_error:
                         return ucapi.StatusCodes.OK
                     return ucapi.StatusCodes.BAD_REQUEST
@@ -548,6 +562,8 @@ class LGDevice:
                     continue
 
                 result = await cmd.callback(*cmd.args, **cmd.kwargs)
+                if isinstance(result, ucapi.StatusCodes) and result != ucapi.StatusCodes.OK:
+                    _LOG.warning("[%s] Deferred command returned %s", self.id, result)
                 if cmd.future and not cmd.future.done():
                     cmd.future.set_result(result)
             except CancelledError:
@@ -714,9 +730,7 @@ class LGDevice:
             if self._cec_task and not self._cec_task.done():
                 self._cec_task.cancel()
         if self._cec_task and not self._cec_task.done():
-            if signature == self._cec_signature and not force:
-                return self._cec_task
-            if force and signature == self._cec_signature:
+            if signature == self._cec_signature:
                 return self._cec_task
             self._cec_task.cancel()
         if not force and signature == self._cec_signature:
@@ -852,13 +866,12 @@ class LGDevice:
                 last_unique_id = cec.scalar(parent.get("lastUniqueId"))
                 if not parent_id or not last_unique_id:
                     continue
-                if parent.get("appId") != current_app_id:
-                    continue
                 active_child = next(
                     (
                         name
                         for name, selection in self._cec_selections.items()
                         if selection.parent_input_id == parent_id
+                        and selection.parent_app_id == current_app_id
                         and selection.unique_id == last_unique_id
                     ),
                     None,
@@ -2008,7 +2021,8 @@ class LGDevice:
     ) -> ucapi.StatusCodes:
         """Select a CEC child only after validating and verifying the EIM state."""
         try:
-            before = await self._tv.request(cec.CEC_EIM_STATUS, payload={})
+            async with asyncio.timeout(3):
+                before = await self._tv.request(cec.CEC_EIM_STATUS, payload={})
         except Exception as ex:  # pylint: disable=W0718
             _LOG.warning(
                 "[%s] Unable to validate HDMI-CEC source %s: %s",
@@ -2028,13 +2042,17 @@ class LGDevice:
             return ucapi.StatusCodes.BAD_REQUEST
 
         try:
-            await self._tv.request(
+            response = await self._tv.request(
                 cec.CEC_LAUNCH_ENDPOINT,
                 payload={
                     "id": selection.parent_app_id,
                     "params": {"id": "uniqueId", "value": selection.unique_id},
                 },
             )
+        except TimeoutError:
+            self._schedule_cec_refresh(force=True)
+            return (ucapi.StatusCodes.OK if self.is_connected
+                    else ucapi.StatusCodes.SERVICE_UNAVAILABLE)
         except Exception as ex:  # pylint: disable=W0718
             # Do not retry a launch with an uncertain outcome.
             _LOG.warning(
@@ -2045,10 +2063,12 @@ class LGDevice:
             )
             return ucapi.StatusCodes.BAD_REQUEST
 
+        if response.get("returnValue") is False:
+            return ucapi.StatusCodes.BAD_REQUEST
         self._schedule_cec_refresh(force=True)
         return ucapi.StatusCodes.OK
 
-    @retry(bufferize=True, power_on=True)
+    @retry(bufferize=True, power_on=True, propagate_status=True)
     async def select_source(self, source: str | None) -> ucapi.StatusCodes:
         """Send input_source command to LG TV."""
         if not source:
@@ -2076,11 +2096,6 @@ class LGDevice:
                     self._sources,
                 )
                 return ucapi.StatusCodes.BAD_REQUEST
-            if source_dict.get(SOURCE_IS_CEC):
-                selection = self._cec_selections.get(source)
-                if selection is None:
-                    return ucapi.StatusCodes.BAD_REQUEST
-                return await self._select_cec_source(selection)
             if source_dict.get("title"):
                 await self._tv.launch_app(source_dict["id"])
             elif source_dict.get("label"):
