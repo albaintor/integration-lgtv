@@ -52,7 +52,7 @@ jobs:
           python -m ruff check src
       - name: Check code formatting with ruff
         run: |
-          python -m ruff format --diff src
+          python -m ruff format --check src
       - name: Type check with pyright
         run: |
           python -m pyright src
