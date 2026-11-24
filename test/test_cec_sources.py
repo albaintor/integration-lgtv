@@ -113,6 +113,55 @@ class CecDiscoveryTest(unittest.TestCase):
             {selection.unique_id for _, selection in found}, {"3", "4"}
         )
 
+    def test_duplicate_name_labels_remain_attached_when_eim_order_changes(self) -> None:
+        children = [
+            {"uniqueId": 3, "osdName": "Player", "depth": 2},
+            {"uniqueId": 4, "osdName": "Player", "depth": 2},
+        ]
+        first = cec.discover_children(
+            external_inputs(),
+            [{"id": "HDMI_1", "appId": "com.webos.app.hdmi1", "subList": children}],
+        )
+        reordered = cec.discover_children(
+            external_inputs(),
+            [
+                {
+                    "id": "HDMI_1",
+                    "appId": "com.webos.app.hdmi1",
+                    "subList": list(reversed(children)),
+                }
+            ],
+        )
+
+        self.assertEqual(dict(first), dict(reordered))
+        self.assertEqual(
+            dict(first),
+            {
+                "Player · HDMI 1 [CEC 3]": cec.CecSelection(
+                    "HDMI_1", "com.webos.app.hdmi1", "3"
+                ),
+                "Player · HDMI 1 [CEC 4]": cec.CecSelection(
+                    "HDMI_1", "com.webos.app.hdmi1", "4"
+                ),
+            },
+        )
+
+    def test_duplicate_unique_id_records_are_exposed_only_once(self) -> None:
+        rows = [
+            {
+                "id": "HDMI_1",
+                "appId": "com.webos.app.hdmi1",
+                "subList": [
+                    {"uniqueId": 7, "osdName": "Player", "depth": 2},
+                    {"uniqueId": 7, "osdName": "Renamed duplicate", "depth": 2},
+                ],
+            }
+        ]
+        found = cec.discover_children(external_inputs(), rows)
+
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0][1].unique_id, "7")
+
     def test_same_unique_id_on_different_parents_does_not_collide(self) -> None:
         rows = [
             {
