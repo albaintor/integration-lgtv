@@ -81,9 +81,7 @@ def discover_children(
         if isinstance((label := row.get("label")), str) and label.strip()
     }
     top_level_identities = {
-        value
-        for row in external_inputs
-        if (value := _identity(row)) is not None
+        value for row in external_inputs if (value := _identity(row)) is not None
     }
     discovered: list[tuple[str, CecSelection]] = []
     for parent in eim_devices:
@@ -191,9 +189,7 @@ def contains_unique_id(response: dict[str, Any], selection: CecSelection) -> boo
     )
 
 
-def last_unique_id(
-    response: dict[str, Any], selection: CecSelection
-) -> str | None:
+def last_unique_id(response: dict[str, Any], selection: CecSelection) -> str | None:
     """Read the last-selected child for the expected physical HDMI parent."""
     parent = _matching_parent(response, selection)
     return scalar(parent.get("lastUniqueId")) if parent else None
