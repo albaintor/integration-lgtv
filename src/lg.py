@@ -28,6 +28,7 @@ from typing import (
 )
 
 import aiowebostv.endpoints as ep
+import cec
 import ucapi
 from aiohttp import ClientConnectionResetError, ClientOSError
 from aiowebostv import (
@@ -82,6 +83,7 @@ PICTURE_MODE_CONFIRM_INTERVAL = 0.25
 PICTURE_MODE_CONFIRM_TIMEOUT = 2.0
 
 SOURCE_IS_APP = "isApp"
+SOURCE_IS_CEC = "isCec"
 
 LUNA_SYSTEM_COMMAND = "luna"
 LUNA_SYSTEM_ENDPOINT = "com.webos.settingsservice/setSystemSettings"
@@ -173,8 +175,7 @@ async def retry_call_command(
         func.__name__,
         obj._name,
     )
-    await func(obj, *args, **kwargs)
-    return ucapi.StatusCodes.OK
+    return await func(obj, *args, **kwargs)
 
 
 def retry(
@@ -197,8 +198,7 @@ def retry(
             retry_attempted = False
             try:
                 if obj.available:
-                    await func(obj, *args, **kwargs)
-                    return ucapi.StatusCodes.OK
+                    return await func(obj, *args, **kwargs)
                 _LOG.debug(
                     "[%s] Device is unavailable, connecting before executing command...",
                     obj._device_config.address,
@@ -324,6 +324,10 @@ class LGDevice:
         self._attr_is_volume_muted = False
         self._active_source = None
         self._sources = {}
+        self._cec_devices: list[dict[str, Any]] = []
+        self._cec_selections: dict[str, cec.CecSelection] = {}
+        self._cec_last_refresh = 0.0
+        self._cec_input_signature: tuple[str, ...] | None = None
         self._unique_id: str | None = None
         self._supported_features = LG_FEATURES
         self._paused = False
@@ -652,6 +656,8 @@ class LGDevice:
                     {LGSelects.SELECT_ASPECT_RATIO: attributes},
                 )
 
+        self._cec_last_refresh = 0.0
+        self._cec_input_signature = None
         await self._tv.register_state_update_callback(_on_state_changed)
         await self._tv.subscribe_sound_output(_on_sound_output_changed)
         try:
@@ -673,10 +679,61 @@ class LGDevice:
                 ex,
             )
 
+    async def _refresh_cec_devices(self, *, force: bool = False) -> None:
+        """Refresh the EIM child-device list without coupling it to every state event."""
+        external_inputs = list(self._tv.tv_state.inputs.values())
+        input_signature = tuple(
+            sorted(
+                "|".join(str(source.get(key, "")) for key in ("id", "appId", "label"))
+                for source in external_inputs
+            )
+        )
+        if input_signature != self._cec_input_signature:
+            force = True
+            self._cec_input_signature = input_signature
+
+        if not external_inputs:
+            return
+
+        now = time.monotonic()
+        if not force and now - self._cec_last_refresh < cec.CEC_REFRESH_INTERVAL:
+            return
+
+        # Set the timestamp before the request so overlapping state callbacks
+        # cannot trigger a burst of EIM requests.
+        self._cec_last_refresh = now
+        try:
+            response = await self._tv.request(cec.CEC_EIM_STATUS, payload={})
+            devices = response.get("devices")
+            if not isinstance(devices, list):
+                raise ValueError("EIM response does not contain a devices list")
+            self._cec_devices = [
+                device for device in devices if isinstance(device, dict)
+            ]
+            _LOG.debug(
+                "[%s] Discovered %d HDMI-CEC child devices",
+                self._device_config.address,
+                sum(
+                    len(parent.get("subList", []))
+                    for parent in self._cec_devices
+                    if isinstance(parent.get("subList"), list)
+                ),
+            )
+        except Exception as ex:  # pylint: disable=W0718
+            # EIM is optional. Keep normal apps and HDMI inputs available, and
+            # retain the last good CEC snapshot during a transient failure.
+            _LOG.debug(
+                "[%s] HDMI-CEC discovery unavailable; keeping standard sources: %s",
+                self._device_config.address,
+                ex,
+            )
+
     def _update_sources(self, updated_data: dict[str, Any]) -> None:
-        """Update list of sources from current source, apps, inputs and configured list."""
+        """Update list of sources from current source, apps, inputs and CEC children."""
         current_source_list = self._sources
+        current_cec_selections = self._cec_selections
         self._sources = {}
+        self._cec_selections = {}
         active_source = None
         found_live_tv = False
         for app in self._tv.tv_state.apps.values():
@@ -687,7 +744,8 @@ class LGDevice:
             self._sources[app["title"]] = app
             self._sources[app["title"]][SOURCE_IS_APP] = True
 
-        for source in self._tv.tv_state.inputs.values():
+        external_inputs = list(self._tv.tv_state.inputs.values())
+        for source in external_inputs:
             if source["appId"] == LIVE_TV_APP_ID:
                 found_live_tv = True
             if source["appId"] == self._tv.tv_state.current_app_id:
@@ -695,26 +753,67 @@ class LGDevice:
             self._sources[source["id"]] = source
             self._sources[source["id"]][SOURCE_IS_APP] = False
 
-        # empty list, TV may be off, keep previous list
+        # An empty TV state can occur during standby/reconnect. Preserve the last
+        # known source list and its CEC selection metadata until inputs return.
         if not self._sources and current_source_list:
             self._sources = current_source_list
-        # special handling of live tv since this might
-        # not appear in the app or input lists in some cases
-        elif not found_live_tv:
+            self._cec_selections = current_cec_selections
+        else:
+            for source_name, selection in cec.discover_children(
+                external_inputs, self._cec_devices, set(self._sources)
+            ):
+                self._sources[source_name] = {
+                    "id": source_name,
+                    "label": source_name,
+                    SOURCE_IS_APP: False,
+                    SOURCE_IS_CEC: True,
+                }
+                self._cec_selections[source_name] = selection
+
+            # EIM reports the selected child on its HDMI parent. Reflect that
+            # child as the active source when the parent HDMI app is foreground.
+            current_app_id = self._tv.tv_state.current_app_id
+            for parent in self._cec_devices:
+                parent_id = cec.row_input_id(parent)
+                last_unique_id = cec.scalar(parent.get("lastUniqueId"))
+                if not parent_id or not last_unique_id:
+                    continue
+                if parent.get("appId") != current_app_id:
+                    continue
+                active_child = next(
+                    (
+                        name
+                        for name, selection in self._cec_selections.items()
+                        if selection.parent_input_id == parent_id
+                        and selection.unique_id == last_unique_id
+                    ),
+                    None,
+                )
+                if active_child:
+                    active_source = active_child
+                    break
+
+        # Special handling of Live TV since it may not appear in the app or input lists.
+        if self._sources and not found_live_tv and "Live TV" not in self._sources:
             app = {"id": LIVE_TV_APP_ID, "title": "Live TV"}
             if self._tv.tv_state.current_app_id == LIVE_TV_APP_ID:
                 active_source = app["title"]
             self._sources["Live TV"] = app
             self._sources[app["title"]][SOURCE_IS_APP] = True
 
-        # Always update SOURCE_LIST when sources change
+        # Always update SOURCE_LIST when source names or ordering change.
         if self._sources:
             new_source_list = self.source_list
-            # Compare with previous source list (convert dict keys to sorted list for comparison)
-            old_source_list = (
-                sorted(current_source_list.keys()) if current_source_list else []
+            old_source_list = sorted(
+                name
+                for name, source in current_source_list.items()
+                if source.get(SOURCE_IS_APP) is False
+            ) + sorted(
+                name
+                for name, source in current_source_list.items()
+                if source.get(SOURCE_IS_APP) is True
             )
-            if len(new_source_list) != len(old_source_list):
+            if new_source_list != old_source_list:
                 _LOG.debug(
                     "[%s] Source list updated: %s",
                     self._device_config.address,
@@ -791,6 +890,7 @@ class LGDevice:
                 )
                 self._picture_mode_retries -= 1
 
+        await self._refresh_cec_devices()
         previous_source = self._active_source
         self._update_sources(updated_data)
         source_changed = previous_source != self._active_source
@@ -1826,6 +1926,77 @@ class LGDevice:
                 current_source = sources[0]["id"]
         return await self.select_source(current_source)
 
+    async def _select_cec_source(
+        self, selection: cec.CecSelection
+    ) -> ucapi.StatusCodes:
+        """Select a CEC child only after validating and verifying the EIM state."""
+        try:
+            before = await self._tv.request(cec.CEC_EIM_STATUS, payload={})
+        except Exception as ex:  # pylint: disable=W0718
+            _LOG.warning(
+                "[%s] Unable to validate HDMI-CEC source %s: %s",
+                self._device_config.address,
+                selection.unique_id,
+                ex,
+            )
+            return ucapi.StatusCodes.BAD_REQUEST
+
+        if not cec.contains_unique_id(before, selection):
+            _LOG.warning(
+                "[%s] HDMI-CEC source %s is no longer present on %s",
+                self._device_config.address,
+                selection.unique_id,
+                selection.parent_input_id,
+            )
+            return ucapi.StatusCodes.BAD_REQUEST
+
+        try:
+            await self._tv.request(
+                cec.CEC_LAUNCH_ENDPOINT,
+                payload={
+                    "id": selection.parent_app_id,
+                    "params": {"id": "uniqueId", "value": selection.unique_id},
+                },
+            )
+        except Exception as ex:  # pylint: disable=W0718
+            # Do not retry a launch with an uncertain outcome.
+            _LOG.warning(
+                "[%s] HDMI-CEC launch request failed for %s: %s",
+                self._device_config.address,
+                selection.unique_id,
+                ex,
+            )
+            return ucapi.StatusCodes.BAD_REQUEST
+
+        await asyncio.sleep(cec.CEC_LAUNCH_SETTLE)
+        try:
+            after = await self._tv.request(cec.CEC_EIM_STATUS, payload={})
+        except Exception as ex:  # pylint: disable=W0718
+            _LOG.warning(
+                "[%s] Unable to verify HDMI-CEC source %s after launch: %s",
+                self._device_config.address,
+                selection.unique_id,
+                ex,
+            )
+            return ucapi.StatusCodes.BAD_REQUEST
+
+        if cec.last_unique_id(after, selection) != selection.unique_id:
+            _LOG.warning(
+                "[%s] HDMI-CEC source %s selection was not confirmed on %s",
+                self._device_config.address,
+                selection.unique_id,
+                selection.parent_input_id,
+            )
+            return ucapi.StatusCodes.BAD_REQUEST
+
+        _LOG.debug(
+            "[%s] HDMI-CEC source %s selected on %s",
+            self._device_config.address,
+            selection.unique_id,
+            selection.parent_input_id,
+        )
+        return ucapi.StatusCodes.OK
+
     @retry(bufferize=True, power_on=True)
     async def select_source(self, source: str | None) -> ucapi.StatusCodes:
         """Send input_source command to LG TV."""
@@ -1846,6 +2017,11 @@ class LGDevice:
                     self._sources,
                 )
                 return ucapi.StatusCodes.BAD_REQUEST
+            if source_dict.get(SOURCE_IS_CEC):
+                selection = self._cec_selections.get(source)
+                if selection is None:
+                    return ucapi.StatusCodes.BAD_REQUEST
+                return await self._select_cec_source(selection)
             if source_dict.get("title"):
                 await self._tv.launch_app(source_dict["id"])
             elif source_dict.get("label"):
