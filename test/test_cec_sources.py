@@ -27,6 +27,7 @@ def make_device() -> lg.LGDevice:
             key="client-key",
             mac_address=None,
             mac_address2=None,
+            enable_hdmi_cec=True,
         )
     )
     device._tv = Mock()
@@ -36,6 +37,7 @@ def make_device() -> lg.LGDevice:
         current_app_id=None,
         is_on=True,
     )
+    device._tv.connection = Mock()
     device._tv.request = AsyncMock()
     device._tv.launch_app = AsyncMock()
     device._tv.set_input = AsyncMock()
@@ -326,8 +328,8 @@ class CecDeviceIntegrationTest(unittest.IsolatedAsyncioTestCase):
         after = {"devices": eim_devices()}
         self.device._tv.request.side_effect = [before, {"returnValue": True}, after]
 
-        with patch("lg.asyncio.sleep", new_callable=AsyncMock) as sleep:
-            result = await self.device.select_source("Blu-ray · HDMI 2")
+        with patch.object(self.device, "_schedule_cec_refresh") as refresh:
+            result = await self.device._select_cec_source(self.device._cec_selections["Blu-ray · HDMI 2"])
 
         self.assertEqual(result, StatusCodes.OK)
         self.device._tv.request.assert_has_awaits(
@@ -340,10 +342,9 @@ class CecDeviceIntegrationTest(unittest.IsolatedAsyncioTestCase):
                         "params": {"id": "uniqueId", "value": "12"},
                     },
                 ),
-                call(cec.CEC_EIM_STATUS, payload={}),
             ]
         )
-        sleep.assert_awaited_once_with(cec.CEC_LAUNCH_SETTLE)
+        refresh.assert_called_once_with(force=True)
 
     async def test_stale_child_is_rejected_before_launch(self) -> None:
         self.device._tv.request.return_value = {
@@ -356,7 +357,7 @@ class CecDeviceIntegrationTest(unittest.IsolatedAsyncioTestCase):
             ]
         }
 
-        result = await self.device.select_source("Blu-ray · HDMI 2")
+        result = await self.device._select_cec_source(self.device._cec_selections["Blu-ray · HDMI 2"])
 
         self.assertEqual(result, StatusCodes.BAD_REQUEST)
         self.device._tv.request.assert_awaited_once_with(
@@ -377,10 +378,10 @@ class CecDeviceIntegrationTest(unittest.IsolatedAsyncioTestCase):
         }
         self.device._tv.request.side_effect = [before, {"returnValue": True}, after]
 
-        with patch("lg.asyncio.sleep", new_callable=AsyncMock):
-            result = await self.device.select_source("Blu-ray · HDMI 2")
+        with patch.object(self.device, "_schedule_cec_refresh"):
+            result = await self.device._select_cec_source(self.device._cec_selections["Blu-ray · HDMI 2"])
 
-        self.assertEqual(result, StatusCodes.BAD_REQUEST)
+        self.assertEqual(result, StatusCodes.OK)
         launch_calls = [
             item
             for item in self.device._tv.request.await_args_list
@@ -392,7 +393,8 @@ class CecDeviceIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.device._cec_devices = []
         self.device._tv.request.side_effect = RuntimeError("EIM unavailable")
 
-        await self.device._refresh_cec_devices(force=True)
+        self.device._cec_generation += 1
+        await self.device._refresh_cec_devices(self.device._tv, self.device._cec_generation)
         self.device._update_sources({})
 
         self.assertIn("HDMI_1", self.device.source_list)
