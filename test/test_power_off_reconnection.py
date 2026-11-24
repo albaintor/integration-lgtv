@@ -70,7 +70,7 @@ class PowerOffReconnectTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(self.device._attr_state, States.OFF)
         self.assertTrue(command.future.done())
-        self.assertIsNone(command.future.result())
+        self.assertEqual(command.future.result(), StatusCodes.OK)
 
     async def test_early_power_off_uses_registered_main_socket(self) -> None:
         """No need to wait for TLS on the pointer WebSocket."""
