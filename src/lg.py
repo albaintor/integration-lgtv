@@ -67,6 +67,9 @@ _LOG = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 5
 BUFFER_LIFETIME = 30
+# Keep power-off pending through transient pointer WebSocket/TLS stalls, but
+# expire it before a much later, unrelated TV session.
+POWER_OFF_DEFERRED_LIFETIME = 60
 CONNECTION_RETRIES = 20
 CONNECT_LOCK_TIMEOUT = 20
 # INIT_APPS_LAUNCH_DELAY = 10
@@ -133,6 +136,7 @@ async def retry_call_command(
     func: Callable[..., Awaitable[ucapi.StatusCodes]],
     obj: "LGDevice",
     *args: Any,
+    deferred_ttl: float = BUFFER_LIFETIME,
     **kwargs: Any,
 ) -> ucapi.StatusCodes:
     """Retry call command when failed."""
@@ -146,7 +150,7 @@ async def retry_call_command(
         _LOG.debug(
             "[%s] Bufferize command %s %s", obj._device_config.address, func, args
         )
-        await obj.defer_command(func, obj, *args, **kwargs)
+        await obj.defer_command(func, obj, *args, ttl=deferred_ttl, **kwargs)
         return ucapi.StatusCodes.OK
     try:
         # Else (no bufferize) wait (not more than "timeout" seconds) for the connection to complete
@@ -174,7 +178,12 @@ async def retry_call_command(
 
 
 def retry(
-    *, timeout: float = 5, bufferize=False, no_error=False, power_on=False
+    *,
+    timeout: float = 5,
+    bufferize=False,
+    no_error=False,
+    power_on=False,
+    deferred_ttl: float = BUFFER_LIFETIME,
 ) -> Callable[[_RetryCallable], _RetryCallable]:
     """Retry command."""
 
@@ -198,7 +207,7 @@ def retry(
                 if power_on:
                     await obj.power_on()
                 return await retry_call_command(
-                    timeout, bufferize, func, obj, *args, **kwargs
+                    timeout, bufferize, func, obj, *args, deferred_ttl=deferred_ttl, **kwargs
                 )
             # New bug "Received message 8:1008 is not WSMsgType.TEXT" for some commands (power_off at least)
             # pylint: disable = W0718
@@ -230,7 +239,7 @@ def retry(
                     if power_on:
                         await obj.power_on()
                     return await retry_call_command(
-                        timeout, bufferize, func, obj, *args, **kwargs
+                        timeout, bufferize, func, obj, *args, deferred_ttl=deferred_ttl, **kwargs
                     )
                 except Exception as wex:
                     log_function(
@@ -457,6 +466,21 @@ class LGDevice:
                 f"Deferred command queue is full ({MAX_DEFERRED_COMMANDS})"
             )
         future: Future[Any] = self.event_loop.create_future()
+
+        def _report_deferred_failure(result: Future[Any]) -> None:
+            # Callers that buffer commands return OK without awaiting the Future.
+            # Consume errors so no unhandled Future exception is emitted.
+            if not result.cancelled():
+                error = result.exception()
+                if error is not None:
+                    _LOG.warning(
+                        "[%s] Deferred command %s failed: %s",
+                        self._device_config.address,
+                        getattr(callback, "__name__", callback),
+                        error,
+                    )
+
+        future.add_done_callback(_report_deferred_failure)
         await self._deferred_commands.put(
             DeferredCommand(
                 callback=callback, args=args, kwargs=kwargs, ttl=ttl, future=future
@@ -1606,36 +1630,18 @@ class LGDevice:
         # return ucapi.StatusCodes.BAD_REQUEST
         return ucapi.StatusCodes.OK
 
-    async def power_off_deferred(self):
-        """Power off deferred."""
-        if not await self._wait_until_connected(timeout=5):
-            raise asyncio.TimeoutError(
-                "TV not connected in time for deferred power off"
-            )
+    async def power_off(self) -> ucapi.StatusCodes:
+        """Send power off immediately or buffer it through a reconnection."""
+        # Do not send additional Wake-on-LAN packets after a power-off request.
+        self._retry_wakeonlan = False
+        return await self._send_power_off()
+
+    @retry(bufferize=True, deferred_ttl=POWER_OFF_DEFERRED_LIFETIME)
+    async def _send_power_off(self) -> ucapi.StatusCodes:
+        """Power off via the main SSAP socket (no pointer or state query)."""
+        _LOG.debug("[%s] Power off", self._device_config.address)
         await self._tv.command("request", ep.POWER_OFF)
         self._attr_state = States.OFF
-
-    @retry()
-    async def power_off(self) -> ucapi.StatusCodes:
-        """Send power-off command to LG TV."""
-        _LOG.debug("[%s] Power off", self._device_config.address)
-        self._retry_wakeonlan = False
-        lg_state = await self.check_connect()
-        if lg_state == LGState.ON:
-            _LOG.debug(
-                "[%s] TV is ON, powering off [%s]",
-                self._device_config.address,
-                lg_state,
-            )
-            await self._tv.command("request", ep.POWER_OFF)
-            self._attr_state = States.OFF
-        else:
-            _LOG.debug(
-                "[%s] Power off command : TV seems to be off, adding power_off call to deferred commands if "
-                "connection is reestablished",
-                self._device_config.address,
-            )
-            await self.defer_command(LGDevice.power_off_deferred, self)
         return ucapi.StatusCodes.OK
 
     @retry()
