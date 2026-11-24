@@ -1,4 +1,4 @@
-"""Helpers for discovering and safely selecting HDMI-CEC children on LG webOS."""
+"""Discover, validate, and select HDMI-CEC child devices on LG webOS."""
 
 from dataclasses import dataclass
 from typing import Any
