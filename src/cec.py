@@ -181,6 +181,7 @@ def discover_children(
                 return discovered
     return discovered
 
+
 def _matching_parent(
     response: dict[str, Any], selection: CecSelection
 ) -> dict[str, Any] | None:
