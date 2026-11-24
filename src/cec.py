@@ -73,7 +73,12 @@ def discover_children(
     eim_devices: list[dict[str, Any]],
     existing_names: set[str] | None = None,
 ) -> list[tuple[str, CecSelection]]:
-    """Build collision-safe child labels and their parent-scoped selections."""
+    """Build stable, collision-safe labels and parent-scoped child selections.
+
+    When sibling devices share an OSD name, every sibling receives its CEC ID
+    suffix. This keeps labels attached to the same unique ID if EIM changes
+    the order of its child records between refreshes.
+    """
     existing = set(existing_names or ())
     top_level_names = {
         label.strip().casefold()
@@ -107,12 +112,14 @@ def discover_children(
 
         parent_label = parent.get("label") or external_parent.get("label")
         context = _parent_context(parent_id, parent_label)
+        candidates: list[tuple[str, str, dict[str, Any]]] = []
+        seen_unique_ids: set[str] = set()
         seen_identities: set[tuple[str, str]] = set()
         for child in children:
             if not isinstance(child, dict):
                 continue
             unique_id = scalar(child.get("uniqueId"))
-            if not unique_id:
+            if not unique_id or unique_id in seen_unique_ids:
                 continue
             depth = child.get("depth")
             if depth is not None and (
@@ -132,10 +139,24 @@ def discover_children(
                 if child_identity in top_level_identities:
                     continue
 
+            seen_unique_ids.add(unique_id)
+            candidates.append((unique_id, name, child))
+
+        # Count the final base labels before assigning any names. If siblings
+        # share an OSD name, suffix all of them rather than letting response
+        # ordering decide which device gets the unsuffixed label.
+        base_counts: dict[str, int] = {}
+        for _, name, _ in candidates:
+            base = f"{name} · {context}"
+            if len(base) > MAX_SOURCE_NAME_LENGTH:
+                base = f"{_} · {context}"
+            base_counts[base] = base_counts.get(base, 0) + 1
+
+        for unique_id, name, _child in candidates:
             display_name = f"{name} · {context}"
             if len(display_name) > MAX_SOURCE_NAME_LENGTH:
                 display_name = f"{unique_id} · {context}"
-            if display_name in existing:
+            if base_counts.get(display_name, 0) > 1 or display_name in existing:
                 display_name = f"{display_name} [CEC {unique_id}]"
             suffix = 2
             base_name = display_name
@@ -159,7 +180,6 @@ def discover_children(
             if len(discovered) >= MAX_CEC_CHILDREN:
                 return discovered
     return discovered
-
 
 def _matching_parent(
     response: dict[str, Any], selection: CecSelection
