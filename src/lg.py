@@ -207,7 +207,13 @@ def retry(
                 if power_on:
                     await obj.power_on()
                 return await retry_call_command(
-                    timeout, bufferize, func, obj, *args, deferred_ttl=deferred_ttl, **kwargs
+                    timeout,
+                    bufferize,
+                    func,
+                    obj,
+                    *args,
+                    deferred_ttl=deferred_ttl,
+                    **kwargs,
                 )
             # New bug "Received message 8:1008 is not WSMsgType.TEXT" for some commands (power_off at least)
             # pylint: disable = W0718
@@ -239,7 +245,13 @@ def retry(
                     if power_on:
                         await obj.power_on()
                     return await retry_call_command(
-                        timeout, bufferize, func, obj, *args, deferred_ttl=deferred_ttl, **kwargs
+                        timeout,
+                        bufferize,
+                        func,
+                        obj,
+                        *args,
+                        deferred_ttl=deferred_ttl,
+                        **kwargs,
                     )
                 except Exception as wex:
                     log_function(
