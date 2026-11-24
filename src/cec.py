@@ -81,7 +81,9 @@ def discover_children(
         if isinstance((label := row.get("label")), str) and label.strip()
     }
     top_level_identities = {
-        identity(row) for row in external_inputs if _identity(row) is not None
+        value
+        for row in external_inputs
+        if (value := _identity(row)) is not None
     }
     discovered: list[tuple[str, CecSelection]] = []
     for parent in eim_devices:
