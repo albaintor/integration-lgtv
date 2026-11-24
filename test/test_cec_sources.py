@@ -312,7 +312,7 @@ class CecDeviceIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Blu-ray · HDMI 2", self.device.source_list)
         self.assertEqual(self.device.source, "Blu-ray · HDMI 2")
 
-    async def test_source_list_updates_when_names_change_without_count_change(self) -> None:
+    async def test_source_names_remain_stable_when_osd_name_changes(self) -> None:
         old_count = len(self.device.source_list)
         self.device._cec_devices[0]["subList"][0]["osdName"] = "New Player"
         updated = {}
@@ -320,8 +320,8 @@ class CecDeviceIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.device._update_sources(updated)
 
         self.assertEqual(len(self.device.source_list), old_count)
-        self.assertIn(MediaAttr.SOURCE_LIST, updated)
-        self.assertIn("New Player · HDMI 1", updated[MediaAttr.SOURCE_LIST])
+        self.assertNotIn(MediaAttr.SOURCE_LIST, updated)
+        self.assertIn("SHIELD · HDMI 1", self.device.source_list)
 
     async def test_cec_launch_uses_parent_app_and_unique_id_then_verifies(self) -> None:
         before = {"devices": eim_devices()}
