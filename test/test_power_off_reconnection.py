@@ -21,7 +21,7 @@ from lg import LGDevice, POWER_OFF_DEFERRED_LIFETIME  # noqa: E402
 class PowerOffReconnectTest(unittest.IsolatedAsyncioTestCase):
     """Power-off intent must survive an input WebSocket TLS timeout."""
 
-    def setUp(self) -> None:
+    async def asyncSetUp(self) -> None:
         self.device = object.__new__(LGDevice)
         self.device._device_config = SimpleNamespace(address="test-tv")
         self.device._name = "Test TV"
