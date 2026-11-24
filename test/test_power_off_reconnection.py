@@ -1,0 +1,101 @@
+"""Regression tests for LG power-off during Remote standby recovery."""
+
+# pylint: disable=protected-access,wrong-import-position
+
+import asyncio
+import sys
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+
+sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
+
+import aiowebostv.endpoints as ep  # noqa: E402
+from ucapi import StatusCodes  # noqa: E402
+from ucapi.media_player import States  # noqa: E402
+
+from lg import LGDevice, POWER_OFF_DEFERRED_LIFETIME  # noqa: E402
+
+
+class PowerOffReconnectTest(unittest.IsolatedAsyncioTestCase):
+    """Power-off intent must survive an input WebSocket TLS timeout."""
+
+    def setUp(self) -> None:
+        self.device = object.__new__(LGDevice)
+        self.device._device_config = SimpleNamespace(address="test-tv")
+        self.device._name = "Test TV"
+        self.device._available = False
+        self.device._attr_state = States.ON
+        self.device._retry_wakeonlan = True
+        self.device._reconnect_retry = 0
+        self.device._deferred_commands = asyncio.Queue()
+        self.device.event_loop = asyncio.get_running_loop()
+        self.device._tv = SimpleNamespace(
+            connection=None,
+            command=AsyncMock(),
+            get_power_state=AsyncMock(),
+        )
+
+    async def _queue_power_off(self):
+        reconnect = asyncio.create_task(asyncio.sleep(0))
+        with patch.object(
+            LGDevice, "_ensure_connect_task", return_value=reconnect
+        ) as ensure_connect:
+            result = await self.device.power_off()
+        await reconnect
+
+        self.assertEqual(result, StatusCodes.OK)
+        self.assertEqual(self.device._deferred_commands.qsize(), 1)
+        self.assertFalse(self.device._retry_wakeonlan)
+        ensure_connect.assert_called_once()
+        self.device._tv.command.assert_not_awaited()
+        self.device._tv.get_power_state.assert_not_awaited()
+        return self.device._deferred_commands._queue[0]
+
+    async def test_unavailable_power_off_is_buffered_immediately(self) -> None:
+        command = await self._queue_power_off()
+        self.assertEqual(command.ttl, POWER_OFF_DEFERRED_LIFETIME)
+
+    async def test_power_off_survives_the_old_30_second_timeout(self) -> None:
+        command = await self._queue_power_off()
+        command.created_at -= 35
+        self.device._available = True
+        self.device._tv.connection = object()
+
+        await self.device._drain_deferred_commands()
+        self.device._tv.command.assert_awaited_once_with(
+            "request", ep.POWER_OFF
+        )
+        self.assertEqual(self.device._attr_state, States.OFF)
+        self.assertTrue(command.future.done())
+        self.assertIsNone(command.future.result())
+
+    async def test_power_off_expires_after_bounded_lifetime(self) -> None:
+        command = await self._queue_power_off()
+        command.created_at -= POWER_OFF_DEFERRED_LIFETIME + 1
+        self.device._available = True
+        self.device._tv.connection = object()
+
+        with self.assertLogs("lg", level="WARNING"):
+            await self.device._drain_deferred_commands()
+            await asyncio.sleep(0)
+
+        self.device._tv.command.assert_not_awaited()
+        self.assertIsInstance(command.future.exception(), asyncio.TimeoutError)
+
+    async def test_connected_power_off_does_not_query_tv_state(self) -> None:
+        self.device._available = True
+        self.device._tv.connection = object()
+        result = await self.device.power_off()
+
+        self.assertEqual(result, StatusCodes.OK)
+        self.device._tv.command.assert_awaited_once_with(
+            "request", ep.POWER_OFF
+        )
+        self.device._tv.get_power_state.assert_not_awaited()
+        self.assertEqual(self.device._attr_state, States.OFF)
+
+
+if __name__ == "__main__":
+    unittest.main()
