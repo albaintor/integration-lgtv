@@ -171,8 +171,7 @@ async def retry_call_command(
         func.__name__,
         obj._name,
     )
-    await func(obj, *args, **kwargs)
-    return ucapi.StatusCodes.OK
+    return await func(obj, *args, **kwargs)
 
 
 def retry(
@@ -190,8 +189,7 @@ def retry(
             retry_attempted = False
             try:
                 if obj.available:
-                    await func(obj, *args, **kwargs)
-                    return ucapi.StatusCodes.OK
+                    return await func(obj, *args, **kwargs)
                 _LOG.debug(
                     "[%s] Device is unavailable, connecting before executing command...",
                     obj._device_config.address,
