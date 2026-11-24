@@ -646,10 +646,7 @@ class LGDevice:
         external_inputs = list(self._tv.tv_state.inputs.values())
         input_signature = tuple(
             sorted(
-                "|".join(
-                    str(source.get(key, ""))
-                    for key in ("id", "appId", "label")
-                )
+                "|".join(str(source.get(key, "")) for key in ("id", "appId", "label"))
                 for source in external_inputs
             )
         )
