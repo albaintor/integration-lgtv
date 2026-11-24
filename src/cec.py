@@ -5,8 +5,6 @@ from typing import Any
 
 CEC_EIM_STATUS = "com.webos.service.eim/getAllInputStatus"
 CEC_LAUNCH_ENDPOINT = "com.webos.applicationManager/launch"
-CEC_REFRESH_INTERVAL = 30.0
-CEC_LAUNCH_SETTLE = 2.5
 MAX_CEC_CHILDREN = 128
 MAX_SOURCE_NAME_LENGTH = 256
 
@@ -89,6 +87,8 @@ def discover_children(
         value for row in external_inputs if (value := _identity(row)) is not None
     }
     discovered: list[tuple[str, CecSelection]] = []
+    seen_children: set[tuple[str, str]] = set()
+    seen_parent_identities: set[tuple[str, str, str]] = set()
     for parent in eim_devices:
         if not isinstance(parent, dict):
             continue
@@ -119,7 +119,8 @@ def discover_children(
             if not isinstance(child, dict):
                 continue
             unique_id = scalar(child.get("uniqueId"))
-            if not unique_id or unique_id in seen_unique_ids:
+            if (not unique_id or unique_id in seen_unique_ids
+                or (parent_id, unique_id) in seen_children):
                 continue
             depth = child.get("depth")
             if depth is not None and (
@@ -133,13 +134,17 @@ def discover_children(
 
             child_identity = _identity(child)
             if child_identity is not None:
-                if child_identity in seen_identities:
+                if (child_identity in seen_identities
+                    or (parent_id, *child_identity) in seen_parent_identities):
                     continue
                 seen_identities.add(child_identity)
                 if child_identity in top_level_identities:
                     continue
 
             seen_unique_ids.add(unique_id)
+            seen_children.add((parent_id, unique_id))
+            if child_identity is not None:
+                seen_parent_identities.add((parent_id, *child_identity))
             candidates.append((unique_id, name, child))
 
         # Count the final base labels before assigning any names. If siblings
