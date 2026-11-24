@@ -332,6 +332,8 @@ class LGDevice:
         self._media_image_url = ""
         self._attr_state = States.OFF
         self._connect_task: Task[None] | None = None
+        # Client whose main SSAP socket may already be ready while pointer stalls.
+        self._connecting_tv: WebOsClient | None = None
         self._background_tasks: set[Task[Any]] = set()
         self._deferred_commands: asyncio.Queue[DeferredCommand] = asyncio.Queue()
         self._connect_lock = Lock()
@@ -1088,6 +1090,7 @@ class LGDevice:
                 tv = WebOsClient(
                     host=self._device_config.address, client_key=self._device_config.key
                 )
+                self._connecting_tv = tv
                 try:
                     result = await tv.connect()
                 except CancelledError:
@@ -1106,6 +1109,7 @@ class LGDevice:
                             host=self._device_config.address,
                             client_key=self._device_config.key,
                         )
+                        self._connecting_tv = tv
                         try:
                             result = await tv.connect()
                         except CancelledError:
@@ -1174,6 +1178,7 @@ class LGDevice:
             # Always emit connected event even if the device is unreachable (off)
             self.events.emit(Events.CONNECTED, self.id)
             self._connecting = False
+            self._connecting_tv = None
             _LOG.debug("[%s] Connection task ends", self._device_config.address)
 
     async def reconnect(self):
@@ -1643,9 +1648,33 @@ class LGDevice:
         return ucapi.StatusCodes.OK
 
     async def power_off(self) -> ucapi.StatusCodes:
-        """Send power off immediately or buffer it through a reconnection."""
+        """Send power off over an available main SSAP socket or buffer it."""
         # Do not send additional Wake-on-LAN packets after a power-off request.
         self._retry_wakeonlan = False
+        if not self.is_connected:
+            connecting_tv = self._connecting_tv
+            # aiowebostv sets connection after SSAP registration, BEFORE opening
+            # the optional input/pointer socket. POWER_OFF only needs main SSAP.
+            if (
+                connecting_tv is not None
+                and connecting_tv.connection is not None
+                and not connecting_tv.connection.closed
+            ):
+                try:
+                    _LOG.debug(
+                        "[%s] Sending POWER_OFF via registered main SSAP socket "
+                        "while pointer connection is pending",
+                        self._device_config.address,
+                    )
+                    await connecting_tv.command("request", ep.POWER_OFF)
+                    self._attr_state = States.OFF
+                    return ucapi.StatusCodes.OK
+                except Exception as ex:  # pylint: disable=broad-exception-caught
+                    _LOG.warning(
+                        "[%s] Early POWER_OFF on main SSAP failed, buffering: %s",
+                        self._device_config.address,
+                        ex,
+                    )
         return await self._send_power_off()
 
     @retry(bufferize=True, deferred_ttl=POWER_OFF_DEFERRED_LIFETIME)
