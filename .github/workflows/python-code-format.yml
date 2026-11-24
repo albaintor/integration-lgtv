@@ -47,6 +47,10 @@ jobs:
         run: |
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f test-requirements.txt ]; then pip install -r test-requirements.txt; fi
+      - name: Test LG standby power-off recovery
+        run: |
+          python -m unittest discover -s test -p 'test_power_off_reconnection.py'
+
       - name: Lint with ruff
         run: |
           python -m ruff check src
