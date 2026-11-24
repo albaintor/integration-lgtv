@@ -146,10 +146,10 @@ def discover_children(
         # share an OSD name, suffix all of them rather than letting response
         # ordering decide which device gets the unsuffixed label.
         base_counts: dict[str, int] = {}
-        for _, name, _ in candidates:
+        for unique_id, name, _child in candidates:
             base = f"{name} · {context}"
             if len(base) > MAX_SOURCE_NAME_LENGTH:
-                base = f"{_} · {context}"
+                base = f"{unique_id} · {context}"
             base_counts[base] = base_counts.get(base, 0) + 1
 
         for unique_id, name, _child in candidates:
