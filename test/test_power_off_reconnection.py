@@ -28,6 +28,7 @@ class PowerOffReconnectTest(unittest.IsolatedAsyncioTestCase):
         self.device._available = False
         self.device._attr_state = States.ON
         self.device._retry_wakeonlan = True
+        self.device._connecting_tv = None
         self.device._reconnect_retry = 0
         self.device._deferred_commands = asyncio.Queue()
         self.device.event_loop = asyncio.get_running_loop()
@@ -70,6 +71,44 @@ class PowerOffReconnectTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.device._attr_state, States.OFF)
         self.assertTrue(command.future.done())
         self.assertIsNone(command.future.result())
+
+    async def test_early_power_off_uses_registered_main_socket(self) -> None:
+        """No need to wait for TLS on the pointer WebSocket."""
+        provisional = SimpleNamespace(
+            connection=SimpleNamespace(closed=False),
+            command=AsyncMock(),
+        )
+        self.device._connecting_tv = provisional
+
+        with patch.object(LGDevice, "_ensure_connect_task") as reconnect:
+            result = await self.device.power_off()
+
+        self.assertEqual(result, StatusCodes.OK)
+        provisional.command.assert_awaited_once_with("request", ep.POWER_OFF)
+        reconnect.assert_not_called()
+        self.assertEqual(self.device._deferred_commands.qsize(), 0)
+        self.device._tv.command.assert_not_awaited()
+        self.assertEqual(self.device._attr_state, States.OFF)
+
+    async def test_early_power_off_failure_falls_back_to_queue(self) -> None:
+        provisional = SimpleNamespace(
+            connection=SimpleNamespace(closed=False),
+            command=AsyncMock(side_effect=OSError("connection lost")),
+        )
+        self.device._connecting_tv = provisional
+        reconnect_task = asyncio.create_task(asyncio.sleep(0))
+
+        with (
+            patch.object(
+                LGDevice, "_ensure_connect_task", return_value=reconnect_task
+            ),
+            self.assertLogs("lg", level="WARNING"),
+        ):
+            result = await self.device.power_off()
+        await reconnect_task
+
+        self.assertEqual(result, StatusCodes.OK)
+        self.assertEqual(self.device._deferred_commands.qsize(), 1)
 
     async def test_power_off_expires_after_bounded_lifetime(self) -> None:
         command = await self._queue_power_off()
