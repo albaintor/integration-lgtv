@@ -151,6 +151,12 @@ async def retry_call_command(
     await asyncio.sleep(0)
     # If the command should be bufferized (and retried later) add it to the list and returns OK
     if bufferize:
+        if (
+            func.__name__ == "_send_power_off"
+            and args
+            and args[0] != obj._power_off_generation
+        ):
+            return ucapi.StatusCodes.OK
         _LOG.debug(
             "[%s] Bufferize command %s %s", obj._device_config.address, func, args
         )
@@ -212,7 +218,7 @@ def retry(
                 )
                 retry_attempted = True
                 if power_on:
-                    await obj.power_on()
+                    await obj._wake_for_command()
                 return await retry_call_command(
                     timeout,
                     bufferize,
@@ -253,7 +259,7 @@ def retry(
                     )
                 try:
                     if power_on:
-                        await obj.power_on()
+                        await obj._wake_for_command()
                     return await retry_call_command(
                         timeout,
                         bufferize,
@@ -355,6 +361,7 @@ class LGDevice:
         self._connecting_tv: WebOsClient | None = None
         self._background_tasks: set[Task[Any]] = set()
         self._deferred_commands: asyncio.Queue[DeferredCommand] = asyncio.Queue()
+        self._power_off_generation = 0
         self._connect_lock = Lock()
         self._connect_lock_time: float = 0
         self._reconnect_retry = 0
@@ -533,6 +540,25 @@ class LGDevice:
             )
         )
         return future
+
+    def _cancel_deferred_power_off(self) -> None:
+        """Discard older OFF intents without disturbing other queued commands."""
+        self._power_off_generation += 1
+        queue = self._deferred_commands
+        retained: list[DeferredCommand] = []
+        # No await: queue filtering is atomic on the driver's event loop.
+        for _ in range(queue.qsize()):
+            command = queue.get_nowait()
+            if getattr(command.callback, "__name__", None) == "_send_power_off":
+                if command.future is not None and not command.future.done():
+                    command.future.cancel()
+                _LOG.debug("[%s] Cancelled superseded deferred POWER_OFF", self._name)
+                queue.task_done()
+            else:
+                retained.append(command)
+        for command in retained:
+            queue.put_nowait(command)
+            queue.task_done()
 
     async def _drain_deferred_commands(self) -> None:
         """Execute queued deferred commands in FIFO order."""
@@ -1799,6 +1825,11 @@ class LGDevice:
 
     async def power_on(self) -> ucapi.StatusCodes:
         """Send power-on command to LG TV."""
+        self._cancel_deferred_power_off()
+        return await self._wake_for_command()
+
+    async def _wake_for_command(self) -> ucapi.StatusCodes:
+        """Wake the TV without invalidating a newer explicit OFF intent."""
         # pylint: disable = W0718
         _LOG.debug("[%s] Power on", self._device_config.address)
         try:
@@ -1843,6 +1874,7 @@ class LGDevice:
         """Send power off over an available main SSAP socket or buffer it."""
         # Do not send additional Wake-on-LAN packets after a power-off request.
         self._retry_wakeonlan = False
+        generation = self._power_off_generation
         if not self.is_connected:
             connecting_tv = self._connecting_tv
             # aiowebostv sets connection after SSAP registration, BEFORE opening
@@ -1867,11 +1899,15 @@ class LGDevice:
                         self._device_config.address,
                         ex,
                     )
-        return await self._send_power_off()
+        if generation != self._power_off_generation:
+            return ucapi.StatusCodes.OK
+        return await self._send_power_off(generation)
 
     @retry(bufferize=True, deferred_ttl=POWER_OFF_DEFERRED_LIFETIME)
-    async def _send_power_off(self) -> ucapi.StatusCodes:
+    async def _send_power_off(self, generation: int) -> ucapi.StatusCodes:
         """Power off via the main SSAP socket (no pointer or state query)."""
+        if generation != self._power_off_generation:
+            return ucapi.StatusCodes.OK
         _LOG.debug("[%s] Power off", self._device_config.address)
         await self._tv.command("request", ep.POWER_OFF)
         self._attr_state = States.OFF
@@ -2083,8 +2119,15 @@ class LGDevice:
         self._schedule_cec_refresh(force=True)
         return ucapi.StatusCodes.OK
 
-    @retry(bufferize=True, power_on=True, propagate_status=True)
     async def select_source(self, source: str | None) -> ucapi.StatusCodes:
+        """Accept a new source intent before any reconnect or deferred execution."""
+        if not source:
+            return ucapi.StatusCodes.BAD_REQUEST
+        self._cancel_deferred_power_off()
+        return await self._select_source(source)
+
+    @retry(bufferize=True, power_on=True, propagate_status=True)
+    async def _select_source(self, source: str | None) -> ucapi.StatusCodes:
         """Send input_source command to LG TV."""
         if not source:
             return ucapi.StatusCodes.BAD_REQUEST
