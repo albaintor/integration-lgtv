@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.17.7 - 2026-11-25
+
+### Fixed
+- Cancel pending power-off commands when a newer power-on or input source selection is received, preventing the TV from switching off after reconnecting. Preserve unrelated queued commands and subsequent power-off requests. Cancelled deferred commands remain silent on the Remote (#33).
+
 ## v1.17.6 - 2026-11-24
 
 ### Added

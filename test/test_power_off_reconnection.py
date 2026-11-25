@@ -31,6 +31,7 @@ class PowerOffReconnectTest(unittest.IsolatedAsyncioTestCase):
         self.device._connecting_tv = None
         self.device._reconnect_retry = 0
         self.device._deferred_commands = asyncio.Queue()
+        self.device._power_off_generation = 0
         self.device.event_loop = asyncio.get_running_loop()
         self.device._tv = SimpleNamespace(
             connection=None,
@@ -134,6 +135,50 @@ class PowerOffReconnectTest(unittest.IsolatedAsyncioTestCase):
         )
         self.device._tv.get_power_state.assert_not_awaited()
         self.assertEqual(self.device._attr_state, States.OFF)
+
+    async def test_power_on_cancels_only_older_off_commands(self) -> None:
+        off = await self._queue_power_off()
+        other = AsyncMock(return_value=StatusCodes.OK)
+        other_future = await self.device.defer_command(other)
+        with patch.object(LGDevice, "_wake_for_command", new_callable=AsyncMock):
+            await self.device.power_on()
+        self.assertTrue(off.future.cancelled())
+        self.assertEqual(self.device._deferred_commands.qsize(), 1)
+        await self.device._drain_deferred_commands()
+        other.assert_awaited_once()
+        self.assertEqual(other_future.result(), StatusCodes.OK)
+        self.device._tv.command.assert_not_awaited()
+
+    async def test_source_selection_cancels_off_before_reconnection(self) -> None:
+        off = await self._queue_power_off()
+        with patch.object(LGDevice, "_select_source", new_callable=AsyncMock) as select:
+            await self.device.select_source("HDMI_1")
+        select.assert_awaited_once_with("HDMI_1")
+        self.assertTrue(off.future.cancelled())
+        self.assertTrue(self.device._deferred_commands.empty())
+
+    async def test_new_off_after_power_on_is_not_cancelled(self) -> None:
+        old = await self._queue_power_off()
+        with patch.object(LGDevice, "_wake_for_command", new_callable=AsyncMock):
+            await self.device.power_on()
+        new = await self._queue_power_off()
+        self.assertTrue(old.future.cancelled())
+        self.assertFalse(new.future.cancelled())
+        await self.device._drain_deferred_commands()
+        self.device._tv.command.assert_awaited_once_with("request", ep.POWER_OFF)
+
+    async def test_off_superseded_during_early_send_failure(self) -> None:
+        async def fail_after_on(*args):
+            with patch.object(LGDevice, "_wake_for_command", new_callable=AsyncMock):
+                await self.device.power_on()
+            raise OSError("connection lost")
+
+        self.device._connecting_tv = SimpleNamespace(
+            connection=SimpleNamespace(closed=False),
+            command=AsyncMock(side_effect=fail_after_on),
+        )
+        self.assertEqual(await self.device.power_off(), StatusCodes.OK)
+        self.assertTrue(self.device._deferred_commands.empty())
 
 
 if __name__ == "__main__":
