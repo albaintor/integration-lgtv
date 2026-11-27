@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "integration-lgtv"
-version = "0.2.4"
+version = "1.17.8"
 authors = [{ name = "Albaintor", email = "albaintor@github.com" }]
 license = { text = "MPL-2.0" }
 description = "Remote Two/3 integration for LG WebOS"
@@ -23,7 +23,7 @@ classifiers = [
 requires-python = ">=3.11"
 dependencies = [
     "pyee~=13.0.1",
-    "aiowebostv~=0.9.2",
+    "aiowebostv @ https://github.com/albaintor/aiowebostv/archive/58c0dd7cb3d8495e1c39633f41dd03ca9bb5b469.zip",
     "ucapi~=0.7.0",
     "httpx~=0.28.1",
     "defusedxml~=0.7.1",

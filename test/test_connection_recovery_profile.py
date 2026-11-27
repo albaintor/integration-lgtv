@@ -15,6 +15,7 @@ import aiohttp
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
+from aiowebostv import WebOsTvConnectionError  # noqa: E402
 from aiowebostv.webos_client import MAIN_WS_MAX_MSG_SIZE  # noqa: E402
 from connection_recovery import (  # noqa: E402
     LG_CONNECT_TIMEOUT,
@@ -68,7 +69,9 @@ class ConnectionProfileTest(unittest.IsolatedAsyncioTestCase):
         expected_ws = object()
         refused = aiohttp.ClientConnectionError("rejected")
         refused.os_error = OSError(errno.ECONNREFUSED, "Connection refused")
-        client._ws_connect = AsyncMock(side_effect=[refused, expected_ws])
+        error = WebOsTvConnectionError("refused")
+        error.__cause__ = refused
+        client._ws_connect = AsyncMock(side_effect=[error, expected_ws])
 
         result = await client._create_main_ws()
 
@@ -83,9 +86,11 @@ class ConnectionProfileTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_secure_timeout_does_not_fall_back_to_legacy_port(self) -> None:
         client = GracefulWebOsClient("test-tv")
-        client._ws_connect = AsyncMock(side_effect=asyncio.TimeoutError())
+        error = WebOsTvConnectionError("timeout")
+        error.__cause__ = asyncio.TimeoutError()
+        client._ws_connect = AsyncMock(side_effect=error)
 
-        with self.assertRaises(asyncio.TimeoutError):
+        with self.assertRaises(WebOsTvConnectionError):
             await client._create_main_ws()
 
         client._ws_connect.assert_awaited_once_with(
@@ -96,9 +101,11 @@ class ConnectionProfileTest(unittest.IsolatedAsyncioTestCase):
         client = GracefulWebOsClient("test-tv")
         unreachable = aiohttp.ClientConnectionError("unreachable")
         unreachable.os_error = OSError(errno.EHOSTUNREACH, "No route to host")
-        client._ws_connect = AsyncMock(side_effect=unreachable)
+        error = WebOsTvConnectionError("unreachable")
+        error.__cause__ = unreachable
+        client._ws_connect = AsyncMock(side_effect=error)
 
-        with self.assertRaises(aiohttp.ClientConnectionError):
+        with self.assertRaises(WebOsTvConnectionError):
             await client._create_main_ws()
 
         client._ws_connect.assert_awaited_once_with(

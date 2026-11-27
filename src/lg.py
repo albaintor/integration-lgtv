@@ -35,6 +35,7 @@ from aiohttp import ClientConnectionResetError, ClientOSError
 from aiowebostv import (
     WebOsClient,
     WebOsTvCommandError,
+    WebOsTvConnectionError,
     WebOsTvState,
 )
 from aiowebostv.exceptions import WebOsTvResponseTypeError
@@ -1287,17 +1288,7 @@ class LGDevice:
         # pylint: disable = R1702, R0915
         if self._connect_lock.locked():
             _LOG.debug("[%s] Connect already in progress", self._device_config.address)
-            if time.monotonic() - self._connect_lock_time > CONNECT_LOCK_TIMEOUT:
-                _LOG.warning(
-                    "[%s] Connect lock timeout reached, skipping duplicate connect",
-                    self._device_config.address,
-                )
-                try:
-                    self._connect_lock.release()
-                except RuntimeError:
-                    pass
-            else:
-                return
+            return
         try:
             async with self._connect_lock:
                 self._connect_lock_time = time.monotonic()
@@ -1308,13 +1299,15 @@ class LGDevice:
                     host=self._device_config.address, client_key=self._device_config.key
                 )
                 self._connecting_tv = tv
+                if old_tv.client_key == tv.client_key:
+                    tv.signed_manifest = old_tv.signed_manifest
                 try:
                     result = await tv.connect()
                 except CancelledError:
                     await self._cleanup_tv_client(tv, "cancelled connection")
                     raise
                 except WEBOSTV_EXCEPTIONS as ex:
-                    if isinstance(ex, (ClientConnectionResetError, ClientOSError)):
+                    if isinstance(ex.__cause__ if isinstance(ex, WebOsTvConnectionError) else ex, (ClientConnectionResetError, ClientOSError)):
                         _LOG.warning(
                             "[%s] Connection error, waiting %ss and retry connection",
                             self._device_config.address,
@@ -1327,6 +1320,8 @@ class LGDevice:
                             client_key=self._device_config.key,
                         )
                         self._connecting_tv = tv
+                        if old_tv.client_key == tv.client_key:
+                            tv.signed_manifest = old_tv.signed_manifest
                         try:
                             result = await tv.connect()
                         except CancelledError:
@@ -1353,6 +1348,13 @@ class LGDevice:
 
                 _LOG.debug("[%s] Connection succeeded", self._device_config.address)
                 self._tv = tv
+                if tv.client_key and tv.client_key != self._device_config.key:
+                    self._device_config.key = tv.client_key
+                    if config.devices is not None:
+                        stored = config.devices.get(self.id)
+                        if stored is not None:
+                            stored.key = tv.client_key
+                            config.devices.update(stored)
                 try:
                     await self._update_states(None)
                     if not self._device_config.mac_address:
