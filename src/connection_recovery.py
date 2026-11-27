@@ -8,13 +8,13 @@ import ssl
 import time
 from asyncio import CancelledError, Task
 from contextlib import suppress
-from typing import Any, Awaitable, cast
+from typing import Any, cast
 
 import aiohttp
 import aiowebostv
 import ucapi
 from aiohttp import ClientSession, ClientWebSocketResponse, TraceConfig
-from aiowebostv import WebOsClient
+from aiowebostv import WebOsClient, WebOsTvConnectionError
 from aiowebostv.webos_client import MAIN_WS_MAX_MSG_SIZE, WS_PORT, WSS_PORT
 from ucapi.media_player import States
 
@@ -52,7 +52,7 @@ WIFI_UNAVAILABLE_STATES = {"DISCONNECTED", "OUT_OF_RANGE"}
 class GracefulWebOsClient(WebOsClient):
     """webOS client tuned for Remote standby/network transitions.
 
-    Differences from aiowebostv 0.9.2:
+    Remote-specific settings on top of aiowebostv 2.0.0:
     - use a 6 second connection timeout instead of 2 seconds;
     - use a 30 second heartbeat instead of 5 seconds;
     - try the modern secure webOS endpoint (WSS/3001) before legacy WS/3000,
@@ -61,8 +61,7 @@ class GracefulWebOsClient(WebOsClient):
       avoiding TLS session state reuse across Remote standby/resume cycles;
     - fall back to legacy WS/3000 only on explicit refusal/handshake rejection;
     - emit detailed TCP/TLS/HTTP/SSAP diagnostics for reconnect analysis;
-    - close INPUT and MAIN WebSockets before cancelling receive tasks so a
-      normal CLOSE/CLOSE handshake can complete.
+    - use upstream bounded graceful WebSocket cleanup.
 
     The graceful close fixes abnormal local cleanup, but is intentionally not
     treated as the root cause of the long reconnect timeout under investigation.
@@ -240,6 +239,8 @@ class GracefulWebOsClient(WebOsClient):
                 type(ex).__name__,
                 ex,
             )
+            if isinstance(ex, (TimeoutError, aiohttp.ClientError)):
+                raise WebOsTvConnectionError(f"Failed to connect to {uri}: {ex!r}") from ex
             raise
 
         _LOG.debug(
@@ -258,23 +259,16 @@ class GracefulWebOsClient(WebOsClient):
         secure_uri = f"wss://{self.host}:{WSS_PORT}"
         try:
             return await self._ws_connect(secure_uri, MAIN_WS_MAX_MSG_SIZE)
-        except aiohttp.WSServerHandshakeError as ex:
-            _LOG.debug(
-                "[%s] WSS/3001 websocket handshake rejected (%r), trying legacy WS/%s",
-                self.host,
-                ex,
-                WS_PORT,
+        except WebOsTvConnectionError as ex:
+            cause = ex.__cause__
+            refused = (
+                isinstance(cause, aiohttp.ClientConnectionError)
+                and getattr(getattr(cause, "os_error", None), "errno", None)
+                == errno.ECONNREFUSED
             )
-        except aiohttp.ClientConnectionError as ex:
-            os_error = getattr(ex, "os_error", None)
-            error_number = getattr(os_error, "errno", None)
-            if error_number != errno.ECONNREFUSED:
+            if not refused and not isinstance(cause, aiohttp.WSServerHandshakeError):
                 raise
-            _LOG.debug(
-                "[%s] WSS/3001 explicitly refused (ECONNREFUSED), trying legacy WS/%s",
-                self.host,
-                WS_PORT,
-            )
+            _LOG.debug("[%s] Secure endpoint rejected, trying legacy WS/%s", self.host, WS_PORT)
 
         legacy_uri = f"ws://{self.host}:{WS_PORT}"
         return await self._ws_connect(legacy_uri, MAIN_WS_MAX_MSG_SIZE)
@@ -339,70 +333,7 @@ class GracefulWebOsClient(WebOsClient):
             time.monotonic() - started,
         )
 
-    @staticmethod
-    async def _finish_cleanup(awaitable: Awaitable[Any]) -> Any:
-        """Finish one cleanup operation even while connect_handler is cancelled."""
-        task = asyncio.ensure_future(awaitable)
-        while not task.done():
-            try:
-                await asyncio.shield(task)
-            except CancelledError:
-                # disconnect() cancels connect_handler to enter its finally
-                # block. The websocket closing handshake itself must finish.
-                continue
-        return task.result()
-
-    async def _closeout_tasks(
-        self,
-        main_ws: ClientWebSocketResponse | None,
-        input_ws: ClientWebSocketResponse | None,
-    ) -> None:
-        """Close websocket handshakes before cancelling receive tasks."""
-        # The input websocket depends on the main SSAP session, close it first.
-        if input_ws is not None and not input_ws.closed:
-            await self._finish_cleanup(input_ws.close())
-        if main_ws is not None and not main_ws.closed:
-            await self._finish_cleanup(main_ws.close())
-
-        _LOG.debug(
-            "[%s] Graceful websocket close completed: main=%s input=%s",
-            self.host,
-            main_ws.close_code if main_ws is not None else None,
-            input_ws.close_code if input_ws is not None else None,
-        )
-
-        # Mirror aiowebostv cleanup, but only after both WebSocket CLOSE
-        # handshakes have completed.
-        closeout: set[asyncio.Task[Any]] = set()
-        self._cancel_tasks()
-
-        if callback_tasks := set(self.callback_tasks.values()):
-            closeout.update(callback_tasks)
-
-        closeout.update(self._rx_tasks)
-
-        if self.created_client_session:
-            closeout.add(asyncio.create_task(self.close_client_session()))
-
-        self.connection = None
-        self.input_connection = None
-        self.do_state_update = False
-        self.tv_state.clear()
-
-        for callback in self.state_update_callbacks:
-            closeout.add(asyncio.create_task(callback(self.tv_state)))
-
-        if not closeout:
-            return
-
-        closeout_task = asyncio.create_task(asyncio.wait(closeout))
-        while not closeout_task.done():
-            with suppress(CancelledError):
-                await asyncio.shield(closeout_task)
-
-
-# Temporary compatibility patch until the connection-profile and graceful-close
-# changes are available in a released aiowebostv version. lg.py imports
+# Apply the Remote-specific connection profile. lg.py imports
 # WebOsClient at module load time, while setup_flow imports it later, so patch
 # both references.
 setattr(aiowebostv, "WebOsClient", GracefulWebOsClient)

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.17.8 - 2026-11-27
+
+### Changed
+- Upgrade to aiowebostv 2.0.0 using a Python 3.11-compatible fork pinned to an immutable GitHub archive for Unfolded Circle builds.
+- Use upstream bounded graceful WebSocket cleanup and retain the Remote-specific TCP/TLS diagnostics, heartbeat and restricted fallback policy.
+
+### Fixed
+- Preserve refreshed pairing keys and prevent overlapping registration attempts while waiting for a TV pairing prompt. Include upstream signed/unsigned manifest fallback, improved registration response handling and extended pairing timeout. Repeated prompts on webOS 26 require confirmation on affected hardware.
+
 ## v1.17.7 - 2026-11-25
 
 ### Fixed
