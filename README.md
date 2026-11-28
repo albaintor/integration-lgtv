@@ -337,6 +337,7 @@ uv python install 3.14
 uv venv --managed-python --python 3.14 .venv
 uv pip install --python .venv/bin/python -r requirements.txt -r build-requirements.txt
 .venv/bin/python -m PyInstaller --clean --onedir --name driver src/driver.py
+bash scripts/install_compatible_runtime.sh dist/driver/_internal
 .venv/bin/python scripts/check_linux_bundle.py dist/driver --max-glibc 2.31
 dist/driver/driver --self-test
 mkdir -p artifacts/bin
@@ -346,7 +347,9 @@ printf 'v%s\n' "$(jq -r .version driver.json)" > artifacts/version.txt
 tar czf uc-intg-lgtv-aarch64.tar.gz -C artifacts .
 ```
 
-The compatibility check rejects ELF binaries requiring glibc newer than
+On Ubuntu ARM64, the compatibility script obtains the GCC and C++ runtime
+libraries from signed Debian Bullseye repositories instead of bundling the
+newer host versions. The compatibility check rejects ELF binaries requiring glibc newer than
 2.31 (the Debian Bullseye baseline of the previous builder). Actual
 installation and operation still need to be verified on the Remote.
 A native Linux ARM64 environment is required; PyInstaller does not cross-compile.

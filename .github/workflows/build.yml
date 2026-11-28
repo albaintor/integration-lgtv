@@ -61,6 +61,9 @@ jobs:
         run: |
           .venv/bin/python -m PyInstaller --clean --onedir --name driver src/driver.py
 
+      - name: Install Bullseye-compatible C/C++ runtime libraries
+        run: bash scripts/install_compatible_runtime.sh dist/driver/_internal
+
       - name: Verify binary compatibility
         run: |
           .venv/bin/python scripts/check_linux_bundle.py dist/driver --max-glibc 2.31

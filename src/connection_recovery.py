@@ -240,7 +240,9 @@ class GracefulWebOsClient(WebOsClient):
                 ex,
             )
             if isinstance(ex, (TimeoutError, aiohttp.ClientError)):
-                raise WebOsTvConnectionError(f"Failed to connect to {uri}: {ex!r}") from ex
+                raise WebOsTvConnectionError(
+                    f"Failed to connect to {uri}: {ex!r}"
+                ) from ex
             raise
 
         _LOG.debug(
@@ -268,7 +270,9 @@ class GracefulWebOsClient(WebOsClient):
             )
             if not refused and not isinstance(cause, aiohttp.WSServerHandshakeError):
                 raise
-            _LOG.debug("[%s] Secure endpoint rejected, trying legacy WS/%s", self.host, WS_PORT)
+            _LOG.debug(
+                "[%s] Secure endpoint rejected, trying legacy WS/%s", self.host, WS_PORT
+            )
 
         legacy_uri = f"ws://{self.host}:{WS_PORT}"
         return await self._ws_connect(legacy_uri, MAIN_WS_MAX_MSG_SIZE)
@@ -332,6 +336,7 @@ class GracefulWebOsClient(WebOsClient):
             self.host,
             time.monotonic() - started,
         )
+
 
 # Apply the Remote-specific connection profile. lg.py imports
 # WebOsClient at module load time, while setup_flow imports it later, so patch

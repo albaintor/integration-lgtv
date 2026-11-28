@@ -1307,7 +1307,12 @@ class LGDevice:
                     await self._cleanup_tv_client(tv, "cancelled connection")
                     raise
                 except WEBOSTV_EXCEPTIONS as ex:
-                    if isinstance(ex.__cause__ if isinstance(ex, WebOsTvConnectionError) else ex, (ClientConnectionResetError, ClientOSError)):
+                    cause = (
+                        ex.__cause__
+                        if isinstance(ex, WebOsTvConnectionError)
+                        else ex
+                    )
+                    if isinstance(cause, (ClientConnectionResetError, ClientOSError)):
                         _LOG.warning(
                             "[%s] Connection error, waiting %ss and retry connection",
                             self._device_config.address,
