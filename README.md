@@ -293,7 +293,7 @@ This functionnality can also be used to clone a configuration from one remote to
 
 ### Setup as external integration
 
-- Requires Python 3.11
+- Requires Python 3.12 or newer (Python 3.14 is used for CI and bundled releases)
 - Under a virtual environment : the driver has to be run in host mode and not bridge mode, otherwise the turn on function won't work (a magic packet has to be sent through network and it won't reach it under bridge mode)
 - Enable always on on your LG TV to be able to power on lan (see https://www.home-assistant.io/integrations/webostv/)
 - When using this integration as external (docker...), set this environment variable to avoid errors : `UC_EXTERNAL`
@@ -326,46 +326,30 @@ directory.
 
 ## Build self-contained binary for Remote Two/3
 
-After some tests, turns out python stuff on embedded is a nightmare. So we're better off creating a single binary file
-that has everything in it.
+GitHub Actions builds the Linux aarch64 bundle natively on an ARM64 runner
+using Python 3.14 from uv's managed portable Python distributions. The
+Unfolded Circle r2-pyinstaller image is no longer required.
 
-To do that, we need to compile it on the target architecture as `pyinstaller` does not support cross compilation.
-
-### x86-64 Linux
-
-On x86-64 Linux we need Qemu to emulate the aarch64 target platform:
+To reproduce on a Linux ARM64 host with uv and binutils installed:
 
 ```bash
-sudo apt install qemu binfmt-support qemu-user-static
-docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+uv python install 3.14
+uv venv --managed-python --python 3.14 .venv
+uv pip install --python .venv/bin/python -r requirements.txt -r build-requirements.txt
+.venv/bin/python -m PyInstaller --clean --onedir --name driver src/driver.py
+.venv/bin/python scripts/check_linux_bundle.py dist/driver --max-glibc 2.31
+dist/driver/driver --self-test
+mkdir -p artifacts/bin
+cp -r dist/driver/* artifacts/bin/
+cp driver.json webOS.png artifacts/
+printf 'v%s\n' "$(jq -r .version driver.json)" > artifacts/version.txt
+tar czf uc-intg-lgtv-aarch64.tar.gz -C artifacts .
 ```
 
-Run pyinstaller:
-
-```shell
-docker run --rm --name builder \
-    --platform=aarch64 \
-    --user=$(id -u):$(id -g) \
-    -v "$PWD":/workspace \
-    docker.io/unfoldedcircle/r2-pyinstaller:3.11.6  \
-    bash -c \
-      "python -m pip install -r requirements.txt && \
-      pyinstaller --clean --onedir --name driver src/driver.py"
-```
-
-### aarch64 Linux / Mac
-
-On an aarch64 host platform, the build image can be run directly (and much faster):
-
-```shell
-docker run --rm --name builder \
-    --user=$(id -u):$(id -g) \
-    -v "$PWD":/workspace \
-    docker.io/unfoldedcircle/r2-pyinstaller:3.11.6  \
-    bash -c \
-      "python -m pip install -r requirements.txt && \
-      pyinstaller --clean --onedir --name driver src/driver.py"
-```
+The compatibility check rejects ELF binaries requiring glibc newer than
+2.31 (the Debian Bullseye baseline of the previous builder). Actual
+installation and operation still need to be verified on the Remote.
+A native Linux ARM64 environment is required; PyInstaller does not cross-compile.
 
 ## Versioning
 

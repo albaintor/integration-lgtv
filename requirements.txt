@@ -1,5 +1,5 @@
 pyee~=13.0.1
-aiowebostv @ https://github.com/albaintor/aiowebostv/archive/58c0dd7cb3d8495e1c39633f41dd03ca9bb5b469.zip
+aiowebostv==2.0.0
 ucapi~=0.7.0
 httpx~=0.28.1
 defusedxml~=0.7.1

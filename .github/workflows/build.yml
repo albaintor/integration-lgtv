@@ -1,4 +1,4 @@
-# GitHub Action to build a self-contained binary of the Android TV Python driver
+# GitHub Action to build a self-contained binary of the LG TV Python driver
 ---
 name: "Build & Release"
 
@@ -14,8 +14,7 @@ on:
 env:
   INTG_NAME: lgtv
   HASH_FILENAME: uc-intg-lgtv.hash
-  # Python version to use in the builder image. See https://hub.docker.com/r/unfoldedcircle/r2-pyinstaller for possible versions.
-  PYTHON_VER: 3.11.13-0.7.0
+  PYTHON_VER: "3.14"
 
 jobs:
   build:
@@ -42,18 +41,30 @@ jobs:
             exit 1
           fi
 
-      - name: Pyinstaller
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            requirements.txt
+            build-requirements.txt
+
+      - name: Install portable Python and build dependencies
         run: |
-          echo "Starting pyinstaller build"
-          docker run --rm --name builder \
-            --platform=linux/arm64/v8 \
-            --user=$(id -u):$(id -g) \
-            -v ${GITHUB_WORKSPACE}:/workspace \
-            docker.io/unfoldedcircle/r2-pyinstaller:${PYTHON_VER} \
-            bash -c \
-            "cd /workspace && \
-              python -m pip install -r requirements.txt && \
-              pyinstaller --clean --onedir --name driver src/driver.py"
+          test "$(uname -m)" = aarch64
+          uv python install "$PYTHON_VER"
+          uv venv --managed-python --python "$PYTHON_VER" .venv
+          uv pip install --python .venv/bin/python -r requirements.txt -r build-requirements.txt
+          .venv/bin/python -VV
+
+      - name: Build with native ARM64 PyInstaller
+        run: |
+          .venv/bin/python -m PyInstaller --clean --onedir --name driver src/driver.py
+
+      - name: Verify binary compatibility
+        run: |
+          .venv/bin/python scripts/check_linux_bundle.py dist/driver --max-glibc 2.31
+          dist/driver/driver --self-test
 
       - name: Add version
         run: |

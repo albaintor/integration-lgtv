@@ -760,5 +760,9 @@ async def main():
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--self-test"]:
+        _LOOP.close()
+        print(f"LG TV driver imports OK (Python {sys.version.split()[0]})")
+        sys.exit(0)
     _LOOP.run_until_complete(main())
     _LOOP.run_forever()

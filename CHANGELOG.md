@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## v1.17.9 - 2026-11-28
+
+### Changed
+- Build self-contained ARM64 packages natively on GitHub Actions with Python 3.14 and PyInstaller, without the Unfolded Circle Docker builder.
+- Use official aiowebostv 2.0.0 from PyPI instead of the Python 3.11 compatibility fork; retain the 1.17.8 pairing and connection changes.
+- Run CI tests with Python 3.14 and validate ELF architecture, glibc baseline and frozen driver imports before publishing.
+
 ## v1.17.8 - 2026-11-27
 
 ### Changed
